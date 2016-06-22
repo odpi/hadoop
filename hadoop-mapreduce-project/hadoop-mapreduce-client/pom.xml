@@ -20,12 +20,12 @@
   <parent>
     <groupId>org.apache.hadoop</groupId>
     <artifactId>hadoop-project</artifactId>
-    <version>2.7.1-odpi</version>
+    <version>2.7.1-arenadata</version>
     <relativePath>../../hadoop-project</relativePath>
   </parent>
   <groupId>org.apache.hadoop</groupId>
   <artifactId>hadoop-mapreduce-client</artifactId>
-  <version>2.7.1-odpi</version>
+  <version>2.7.1-arenadata</version>
   <name>hadoop-mapreduce-client</name>
   <packaging>pom</packaging>
 
@@ -151,7 +151,7 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
- 
+
   <build>
     <plugins>
        <plugin>
@@ -178,7 +178,7 @@
      </plugin>
     </plugins>
   </build>
- 
+
   <modules>
     <module>hadoop-mapreduce-client-core</module>
     <module>hadoop-mapreduce-client-common</module>

@@ -19,7 +19,7 @@
   <parent>
     <groupId>org.apache.hadoop</groupId>
     <artifactId>hadoop-project</artifactId>
-    <version>2.7.1-odpi</version>
+    <version>2.7.1-arenadata</version>
     <relativePath>../../hadoop-project</relativePath>
   </parent>
   <artifactId>hadoop-azure</artifactId>
@@ -58,16 +58,16 @@
           <dependencyLocationsEnabled>false</dependencyLocationsEnabled>
         </configuration>
       </plugin>
-      
+
       <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-checkstyle-plugin</artifactId>
           <configuration>
-            <!-- To run with the default Sun ruleset, 
+            <!-- To run with the default Sun ruleset,
                  comment out the configLocation line -->
             <configLocation>src/config/checkstyle.xml</configLocation>
           </configuration>
-          
+
       </plugin>
 
       <plugin>
@@ -84,7 +84,7 @@
 
     </plugins>
 
-    
+
     <!--
        The following is to suppress a m2e warning in eclipse
        (m2e doesn't know how to handle maven-enforcer:enforce, so we have to tell m2e to ignore it)
@@ -134,27 +134,27 @@
       <artifactId>jackson-core</artifactId>
       <scope>compile</scope>
     </dependency>
-    
+
     <dependency>
       <groupId>org.apache.httpcomponents</groupId>
       <artifactId>httpclient</artifactId>
       <scope>compile</scope>
     </dependency>
-    
+
     <dependency>
       <groupId>com.microsoft.azure</groupId>
       <artifactId>azure-storage</artifactId>
       <scope>compile</scope>
     </dependency>
-    
+
 
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
       <scope>compile</scope>
     </dependency>
-    
-    
+
+
     <!-- dependencies use for test only -->
     <dependency>
       <groupId>commons-io</groupId>
@@ -174,12 +174,12 @@
       <scope>test</scope>
       <type>test-jar</type>
     </dependency>
-    
+
     <dependency>
       <groupId>org.mockito</groupId>
       <artifactId>mockito-all</artifactId>
       <scope>test</scope>
     </dependency>
-    
+
   </dependencies>
 </project>

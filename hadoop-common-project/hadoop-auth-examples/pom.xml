@@ -20,12 +20,12 @@
   <parent>
     <groupId>org.apache.hadoop</groupId>
     <artifactId>hadoop-project</artifactId>
-    <version>2.7.1-odpi</version>
+    <version>2.7.1-arenadata</version>
     <relativePath>../../hadoop-project</relativePath>
   </parent>
   <groupId>org.apache.hadoop</groupId>
   <artifactId>hadoop-auth-examples</artifactId>
-  <version>2.7.1-odpi</version>
+  <version>2.7.1-arenadata</version>
   <packaging>war</packaging>
 
   <name>Apache Hadoop Auth Examples</name>
