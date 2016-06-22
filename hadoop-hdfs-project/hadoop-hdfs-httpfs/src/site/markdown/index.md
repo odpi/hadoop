@@ -48,5 +48,3 @@ User and Developer Documentation
 * [HttpFS Server Setup](./ServerSetup.html)
 
 * [Using HTTP Tools](./UsingHttpTools.html)
-
-

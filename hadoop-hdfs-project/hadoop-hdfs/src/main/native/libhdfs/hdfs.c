@@ -2511,7 +2511,7 @@ static int translateZCRException(JNIEnv *env, jthrowable exc)
         ret = EPROTONOSUPPORT;
         goto done;
     }
-    ret = printExceptionAndFree(env, jthr, PRINT_EXC_ALL,
+    ret = printExceptionAndFree(env, exc, PRINT_EXC_ALL,
             "hadoopZeroCopyRead: ZeroCopyCursor#read failed");
 done:
     free(className);
@@ -3257,7 +3257,6 @@ done:
         return NULL;
     }
     *numEntries = jPathListSize;
-    errno = 0;
     return pathList;
 }
 

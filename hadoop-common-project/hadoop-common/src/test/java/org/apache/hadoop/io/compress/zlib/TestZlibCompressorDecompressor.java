@@ -38,7 +38,6 @@ import org.apache.hadoop.io.compress.CompressDecompressTester.CompressionTestStr
 import org.apache.hadoop.io.compress.zlib.ZlibCompressor.CompressionLevel;
 import org.apache.hadoop.io.compress.zlib.ZlibCompressor.CompressionStrategy;
 import org.apache.hadoop.io.compress.zlib.ZlibDecompressor.ZlibDirectDecompressor;
-import org.apache.hadoop.test.MultithreadedTestUtil;
 import org.apache.hadoop.util.NativeCodeLoader;
 import org.junit.Before;
 import org.junit.Test;
@@ -100,6 +99,7 @@ public class TestZlibCompressorDecompressor {
   @Test
   public void testZlibCompressorDecompressorWithConfiguration() {
     Configuration conf = new Configuration();
+    conf.setBoolean(CommonConfigurationKeys.IO_NATIVE_LIB_AVAILABLE_KEY, true);
     if (ZlibFactory.isNativeZlibLoaded(conf)) {
       byte[] rawData;
       int tryNumber = 5;
@@ -213,6 +213,7 @@ public class TestZlibCompressorDecompressor {
   @Test
   public void testZlibCompressorDecompressorSetDictionary() {
     Configuration conf = new Configuration();
+    conf.setBoolean(CommonConfigurationKeys.IO_NATIVE_LIB_AVAILABLE_KEY, true);
     if (ZlibFactory.isNativeZlibLoaded(conf)) {
       Compressor zlibCompressor = ZlibFactory.getZlibCompressor(conf);
       Decompressor zlibDecompressor = ZlibFactory.getZlibDecompressor(conf);
@@ -417,21 +418,5 @@ public class TestZlibCompressorDecompressor {
     for (int i = 0; i < size; i++)
       data[i] = (byte)random.nextInt(16);
     return data;
-  }
-
-  @Test
-  public void testZlibCompressDecompressInMultiThreads() throws Exception {
-    MultithreadedTestUtil.TestContext ctx = new MultithreadedTestUtil.TestContext();
-    for(int i=0;i<10;i++) {
-      ctx.addThread( new MultithreadedTestUtil.TestingThread(ctx) {
-        @Override
-        public void doWork() throws Exception {
-          testZlibCompressDecompress();
-        }
-      });
-    }
-    ctx.startThreads();
-
-    ctx.waitFor(60000);
   }
 }

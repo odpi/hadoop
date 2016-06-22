@@ -71,6 +71,7 @@ public class TestFSMainOperationsWebHdfs extends FSMainOperationsBaseTest {
   @BeforeClass
   public static void setupCluster() {
     final Configuration conf = new Configuration();
+    conf.setBoolean(DFSConfigKeys.DFS_WEBHDFS_ENABLED_KEY, true);
     conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, 1024);
     try {
       cluster = new MiniDFSCluster.Builder(conf).numDataNodes(2).build();
@@ -80,7 +81,7 @@ public class TestFSMainOperationsWebHdfs extends FSMainOperationsBaseTest {
       cluster.getFileSystem().setPermission(
           new Path("/"), new FsPermission((short)0777));
 
-      final String uri = WebHdfsConstants.WEBHDFS_SCHEME + "://"
+      final String uri = WebHdfsFileSystem.SCHEME  + "://"
           + conf.get(DFSConfigKeys.DFS_NAMENODE_HTTP_ADDRESS_KEY);
 
       //get file system as a non-superuser
@@ -241,5 +242,4 @@ public class TestFSMainOperationsWebHdfs extends FSMainOperationsBaseTest {
       // also okay for HDFS.
     }    
   }
-
 }

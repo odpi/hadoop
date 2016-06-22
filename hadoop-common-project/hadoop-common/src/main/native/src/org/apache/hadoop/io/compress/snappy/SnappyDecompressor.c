@@ -31,6 +31,7 @@
 
 #include "org_apache_hadoop_io_compress_snappy_SnappyDecompressor.h"
 
+static jfieldID SnappyDecompressor_clazz;
 static jfieldID SnappyDecompressor_compressedDirectBuf;
 static jfieldID SnappyDecompressor_compressedDirectBufLen;
 static jfieldID SnappyDecompressor_uncompressedDirectBuf;
@@ -78,6 +79,8 @@ JNIEXPORT void JNICALL Java_org_apache_hadoop_io_compress_snappy_SnappyDecompres
   LOAD_DYNAMIC_SYMBOL(__dlsym_snappy_uncompress, dlsym_snappy_uncompress, env, libsnappy, "snappy_uncompress");
 #endif
 
+  SnappyDecompressor_clazz = (*env)->GetStaticFieldID(env, clazz, "clazz",
+                                                   "Ljava/lang/Class;");
   SnappyDecompressor_compressedDirectBuf = (*env)->GetFieldID(env,clazz,
                                                            "compressedDirectBuf",
                                                            "Ljava/nio/Buffer;");
@@ -96,20 +99,25 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_io_compress_snappy_SnappyDecompres
   char* uncompressed_bytes = NULL;
   snappy_status ret;
   // Get members of SnappyDecompressor
+  jobject clazz = (*env)->GetStaticObjectField(env,thisj, SnappyDecompressor_clazz);
   jobject compressed_direct_buf = (*env)->GetObjectField(env,thisj, SnappyDecompressor_compressedDirectBuf);
   jint compressed_direct_buf_len = (*env)->GetIntField(env,thisj, SnappyDecompressor_compressedDirectBufLen);
   jobject uncompressed_direct_buf = (*env)->GetObjectField(env,thisj, SnappyDecompressor_uncompressedDirectBuf);
   size_t uncompressed_direct_buf_len = (*env)->GetIntField(env, thisj, SnappyDecompressor_directBufferSize);
 
   // Get the input direct buffer
+  LOCK_CLASS(env, clazz, "SnappyDecompressor");
   compressed_bytes = (const char*)(*env)->GetDirectBufferAddress(env, compressed_direct_buf);
+  UNLOCK_CLASS(env, clazz, "SnappyDecompressor");
 
   if (compressed_bytes == 0) {
     return (jint)0;
   }
 
   // Get the output direct buffer
+  LOCK_CLASS(env, clazz, "SnappyDecompressor");
   uncompressed_bytes = (char *)(*env)->GetDirectBufferAddress(env, uncompressed_direct_buf);
+  UNLOCK_CLASS(env, clazz, "SnappyDecompressor");
 
   if (uncompressed_bytes == 0) {
     return (jint)0;
@@ -118,11 +126,11 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_io_compress_snappy_SnappyDecompres
   ret = dlsym_snappy_uncompress(compressed_bytes, compressed_direct_buf_len,
         uncompressed_bytes, &uncompressed_direct_buf_len);
   if (ret == SNAPPY_BUFFER_TOO_SMALL){
-    THROW(env, "java/lang/InternalError", "Could not decompress data. Buffer length is too small.");
+    THROW(env, "Ljava/lang/InternalError", "Could not decompress data. Buffer length is too small.");
   } else if (ret == SNAPPY_INVALID_INPUT){
-    THROW(env, "java/lang/InternalError", "Could not decompress data. Input is invalid.");
+    THROW(env, "Ljava/lang/InternalError", "Could not decompress data. Input is invalid.");
   } else if (ret != SNAPPY_OK){
-    THROW(env, "java/lang/InternalError", "Could not decompress data.");
+    THROW(env, "Ljava/lang/InternalError", "Could not decompress data.");
   }
 
   (*env)->SetIntField(env, thisj, SnappyDecompressor_compressedDirectBufLen, 0);

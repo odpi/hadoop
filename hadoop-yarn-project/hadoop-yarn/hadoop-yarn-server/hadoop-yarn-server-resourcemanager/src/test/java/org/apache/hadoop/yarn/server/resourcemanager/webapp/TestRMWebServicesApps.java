@@ -1290,7 +1290,6 @@ public class TestRMWebServicesApps extends JerseyTestBase {
           WebServicesTestUtils.getXmlString(element, "name"),
           WebServicesTestUtils.getXmlString(element, "applicationType"),
           WebServicesTestUtils.getXmlString(element, "queue"),
-          WebServicesTestUtils.getXmlInt(element, "priority"),
           WebServicesTestUtils.getXmlString(element, "state"),
           WebServicesTestUtils.getXmlString(element, "finalStatus"),
           WebServicesTestUtils.getXmlFloat(element, "progress"),
@@ -1308,63 +1307,39 @@ public class TestRMWebServicesApps extends JerseyTestBase {
           WebServicesTestUtils.getXmlInt(element, "preemptedResourceMB"),
           WebServicesTestUtils.getXmlInt(element, "preemptedResourceVCores"),
           WebServicesTestUtils.getXmlInt(element, "numNonAMContainerPreempted"),
-          WebServicesTestUtils.getXmlInt(element, "numAMContainerPreempted"),
-          WebServicesTestUtils.getXmlString(element, "logAggregationStatus"),
-          WebServicesTestUtils.getXmlBoolean(element, "unmanagedApplication"),
-          WebServicesTestUtils.getXmlString(element, "appNodeLabelExpression"),
-          WebServicesTestUtils.getXmlString(element, "amNodeLabelExpression"));
+          WebServicesTestUtils.getXmlInt(element, "numAMContainerPreempted"));
     }
   }
 
   public void verifyAppInfo(JSONObject info, RMApp app) throws JSONException,
       Exception {
 
-    int expectedNumberOfElements = 30;
-    String appNodeLabelExpression = null;
-    String amNodeLabelExpression = null;
-    if (app.getApplicationSubmissionContext()
-        .getNodeLabelExpression() != null) {
-      expectedNumberOfElements++;
-      appNodeLabelExpression = info.getString("appNodeLabelExpression");
-    }
-    if (app.getAMResourceRequest().getNodeLabelExpression() != null) {
-      expectedNumberOfElements++;
-      amNodeLabelExpression = info.getString("amNodeLabelExpression");
-    }
-    assertEquals("incorrect number of elements", expectedNumberOfElements,
-        info.length());
+    assertEquals("incorrect number of elements", 27, info.length());
 
     verifyAppInfoGeneric(app, info.getString("id"), info.getString("user"),
         info.getString("name"), info.getString("applicationType"),
-        info.getString("queue"), info.getInt("priority"),
-        info.getString("state"), info.getString("finalStatus"),
-        (float) info.getDouble("progress"), info.getString("trackingUI"),
-        info.getString("diagnostics"), info.getLong("clusterId"),
-        info.getLong("startedTime"), info.getLong("finishedTime"),
-        info.getLong("elapsedTime"), info.getString("amHostHttpAddress"),
-        info.getString("amContainerLogs"), info.getInt("allocatedMB"),
-        info.getInt("allocatedVCores"), info.getInt("runningContainers"),
+        info.getString("queue"), info.getString("state"),
+        info.getString("finalStatus"), (float) info.getDouble("progress"),
+        info.getString("trackingUI"), info.getString("diagnostics"),
+        info.getLong("clusterId"), info.getLong("startedTime"),
+        info.getLong("finishedTime"), info.getLong("elapsedTime"),
+        info.getString("amHostHttpAddress"), info.getString("amContainerLogs"),
+        info.getInt("allocatedMB"), info.getInt("allocatedVCores"),
+        info.getInt("runningContainers"), 
         info.getInt("preemptedResourceMB"),
         info.getInt("preemptedResourceVCores"),
         info.getInt("numNonAMContainerPreempted"),
-        info.getInt("numAMContainerPreempted"),
-        info.getString("logAggregationStatus"),
-        info.getBoolean("unmanagedApplication"),
-        appNodeLabelExpression,
-        amNodeLabelExpression);
+        info.getInt("numAMContainerPreempted"));
   }
 
   public void verifyAppInfoGeneric(RMApp app, String id, String user,
-      String name, String applicationType, String queue, int prioirty,
-      String state, String finalStatus, float progress, String trackingUI,
+      String name, String applicationType, String queue, String state,
+      String finalStatus, float progress, String trackingUI,
       String diagnostics, long clusterId, long startedTime, long finishedTime,
       long elapsedTime, String amHostHttpAddress, String amContainerLogs,
       int allocatedMB, int allocatedVCores, int numContainers,
       int preemptedResourceMB, int preemptedResourceVCores,
-      int numNonAMContainerPreempted, int numAMContainerPreempted,
-      String logAggregationStatus, boolean unmanagedApplication,
-      String appNodeLabelExpression, String amNodeLabelExpression)
-      throws JSONException,
+      int numNonAMContainerPreempted, int numAMContainerPreempted) throws JSONException,
       Exception {
 
     WebServicesTestUtils.checkStringMatch("id", app.getApplicationId()
@@ -1374,7 +1349,6 @@ public class TestRMWebServicesApps extends JerseyTestBase {
     WebServicesTestUtils.checkStringMatch("applicationType",
       app.getApplicationType(), applicationType);
     WebServicesTestUtils.checkStringMatch("queue", app.getQueue(), queue);
-    assertEquals("priority doesn't match", 0, prioirty);
     WebServicesTestUtils.checkStringMatch("state", app.getState().toString(),
         state);
     WebServicesTestUtils.checkStringMatch("finalStatus", app
@@ -1412,18 +1386,6 @@ public class TestRMWebServicesApps extends JerseyTestBase {
     assertEquals("numAMContainerPreempted doesn't match", app
         .getRMAppMetrics().getNumAMContainersPreempted(),
         numAMContainerPreempted);
-    assertEquals("Log aggregation Status doesn't match", app
-        .getLogAggregationStatusForAppReport().toString(),
-        logAggregationStatus);
-    assertEquals("unmanagedApplication doesn't match", app
-        .getApplicationSubmissionContext().getUnmanagedAM(),
-        unmanagedApplication);
-    assertEquals("unmanagedApplication doesn't match",
-        app.getApplicationSubmissionContext().getNodeLabelExpression(),
-        appNodeLabelExpression);
-    assertEquals("unmanagedApplication doesn't match",
-        app.getAMResourceRequest().getNodeLabelExpression(),
-        amNodeLabelExpression);
   }
 
   @Test
@@ -1636,7 +1598,7 @@ public class TestRMWebServicesApps extends JerseyTestBase {
       String user)
       throws JSONException, Exception {
 
-    assertEquals("incorrect number of elements", 7, info.length());
+    assertEquals("incorrect number of elements", 6, info.length());
 
     verifyAppAttemptInfoGeneric(appAttempt, info.getInt("id"),
         info.getLong("startTime"), info.getString("containerId"),
@@ -1659,7 +1621,7 @@ public class TestRMWebServicesApps extends JerseyTestBase {
         .getMasterContainer().getNodeHttpAddress(), nodeHttpAddress);
     WebServicesTestUtils.checkStringMatch("nodeId", appAttempt
         .getMasterContainer().getNodeId().toString(), nodeId);
-    assertTrue("logsLink doesn't match ", logsLink.startsWith("http://"));
+    assertTrue("logsLink doesn't match", logsLink.startsWith("//"));
     assertTrue(
         "logsLink doesn't contain user info", logsLink.endsWith("/"
         + user));

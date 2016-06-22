@@ -82,7 +82,7 @@ class MoveCommands {
     }
   }
 
-  /** move/rename paths on the same filesystem */
+  /** move/rename paths on the same fileystem */
   public static class Rename extends CommandWithDestination {
     public static final String NAME = "mv";
     public static final String USAGE = "<src> ... <dst>";

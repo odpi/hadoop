@@ -67,8 +67,6 @@ import org.apache.hadoop.yarn.api.protocolrecords.GetContainersRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.GetContainersResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.GetLabelsToNodesRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.GetLabelsToNodesResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.GetNodesToLabelsRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.GetNodesToLabelsResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.KillApplicationRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.KillApplicationResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ReservationDeleteRequest;
@@ -89,7 +87,6 @@ import org.apache.hadoop.yarn.api.records.ContainerReport;
 import org.apache.hadoop.yarn.api.records.ContainerState;
 import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
 import org.apache.hadoop.yarn.api.records.NodeId;
-import org.apache.hadoop.yarn.api.records.NodeLabel;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.ReservationDefinition;
 import org.apache.hadoop.yarn.api.records.ReservationId;
@@ -461,9 +458,9 @@ public class TestYarnClient {
     client.start();
 
     // Get labels to nodes mapping
-    Map<NodeLabel, Set<NodeId>> expectedLabelsToNodes =
+    Map<String, Set<NodeId>> expectedLabelsToNodes =
         ((MockYarnClient)client).getLabelsToNodesMap();
-    Map<NodeLabel, Set<NodeId>> labelsToNodes = client.getLabelsToNodes();
+    Map<String, Set<NodeId>> labelsToNodes = client.getLabelsToNodes();
     Assert.assertEquals(labelsToNodes, expectedLabelsToNodes);
     Assert.assertEquals(labelsToNodes.size(), 3);
 
@@ -479,32 +476,7 @@ public class TestYarnClient {
     client.close();
   }
 
-  @Test (timeout = 10000)
-  public void testGetNodesToLabels() throws YarnException, IOException {
-    Configuration conf = new Configuration();
-    final YarnClient client = new MockYarnClient();
-    client.init(conf);
-    client.start();
-
-    // Get labels to nodes mapping
-    Map<NodeId, Set<NodeLabel>> expectedNodesToLabels = ((MockYarnClient) client)
-        .getNodeToLabelsMap();
-    Map<NodeId, Set<NodeLabel>> nodesToLabels = client.getNodeToLabels();
-    Assert.assertEquals(nodesToLabels, expectedNodesToLabels);
-    Assert.assertEquals(nodesToLabels.size(), 1);
-
-    // Verify exclusivity
-    Set<NodeLabel> labels = nodesToLabels.get(NodeId.newInstance("host", 0));
-    for (NodeLabel label : labels) {
-      Assert.assertFalse(label.isExclusive());
-    }
-
-    client.stop();
-    client.close();
-  }
-
   private static class MockYarnClient extends YarnClientImpl {
-
     private ApplicationReport mockReport;
     private List<ApplicationReport> reports;
     private HashMap<ApplicationId, List<ApplicationAttemptReport>> attempts = 
@@ -526,8 +498,6 @@ public class TestYarnClient {
       mock(GetContainerReportResponse.class);
     GetLabelsToNodesResponse mockLabelsToNodesResponse =
       mock(GetLabelsToNodesResponse.class);
-    GetNodesToLabelsResponse mockNodeToLabelsResponse =
-        mock(GetNodesToLabelsResponse.class);
 
     public MockYarnClient() {
       super();
@@ -567,9 +537,6 @@ public class TestYarnClient {
         when(rmClient.getLabelsToNodes(any(GetLabelsToNodesRequest.class)))
             .thenReturn(mockLabelsToNodesResponse);
         
-        when(rmClient.getNodeToLabels(any(GetNodesToLabelsRequest.class)))
-            .thenReturn(mockNodeToLabelsResponse);
-
         historyClient = mock(AHSClient.class);
         
       } catch (YarnException e) {
@@ -626,8 +593,7 @@ public class TestYarnClient {
           "diagnostics",
           YarnApplicationAttemptState.FINISHED,
           ContainerId.newContainerId(
-                  newApplicationReport.getCurrentApplicationAttemptId(), 1), 0,
-              0);
+              newApplicationReport.getCurrentApplicationAttemptId(), 1));
       appAttempts.add(attempt);
       ApplicationAttemptReport attempt1 = ApplicationAttemptReport.newInstance(
           ApplicationAttemptId.newInstance(applicationId, 2),
@@ -737,7 +703,7 @@ public class TestYarnClient {
     }
 
     @Override
-    public Map<NodeLabel, Set<NodeId>> getLabelsToNodes()
+    public Map<String, Set<NodeId>> getLabelsToNodes()
         throws YarnException, IOException {
       when(mockLabelsToNodesResponse.getLabelsToNodes()).thenReturn(
           getLabelsToNodesMap());
@@ -745,49 +711,32 @@ public class TestYarnClient {
     }
 
     @Override
-    public Map<NodeLabel, Set<NodeId>> getLabelsToNodes(Set<String> labels)
+    public Map<String, Set<NodeId>> getLabelsToNodes(Set<String> labels)
         throws YarnException, IOException {
       when(mockLabelsToNodesResponse.getLabelsToNodes()).thenReturn(
           getLabelsToNodesMap(labels));
       return super.getLabelsToNodes(labels);
     }
 
-    public Map<NodeLabel, Set<NodeId>> getLabelsToNodesMap() {
-      Map<NodeLabel, Set<NodeId>> map = new HashMap<NodeLabel, Set<NodeId>>();
+    public Map<String, Set<NodeId>> getLabelsToNodesMap() {
+      Map<String, Set<NodeId>> map = new HashMap<String, Set<NodeId>>();
       Set<NodeId> setNodeIds =
           new HashSet<NodeId>(Arrays.asList(
           NodeId.newInstance("host1", 0), NodeId.newInstance("host2", 0)));
-      map.put(NodeLabel.newInstance("x"), setNodeIds);
-      map.put(NodeLabel.newInstance("y"), setNodeIds);
-      map.put(NodeLabel.newInstance("z"), setNodeIds);
+      map.put("x", setNodeIds);
+      map.put("y", setNodeIds);
+      map.put("z", setNodeIds);
       return map;
     }
 
-    public Map<NodeLabel, Set<NodeId>> getLabelsToNodesMap(Set<String> labels) {
-      Map<NodeLabel, Set<NodeId>> map = new HashMap<NodeLabel, Set<NodeId>>();
+    public Map<String, Set<NodeId>> getLabelsToNodesMap(Set<String> labels) {
+      Map<String, Set<NodeId>> map = new HashMap<String, Set<NodeId>>();
       Set<NodeId> setNodeIds =
           new HashSet<NodeId>(Arrays.asList(
           NodeId.newInstance("host1", 0), NodeId.newInstance("host2", 0)));
       for(String label : labels) {
-        map.put(NodeLabel.newInstance(label), setNodeIds);
+        map.put(label, setNodeIds);
       }
-      return map;
-    }
-
-    @Override
-    public Map<NodeId, Set<NodeLabel>> getNodeToLabels() throws YarnException,
-        IOException {
-      when(mockNodeToLabelsResponse.getNodeToLabels()).thenReturn(
-          getNodeToLabelsMap());
-      return super.getNodeToLabels();
-    }
-
-    public Map<NodeId, Set<NodeLabel>> getNodeToLabelsMap() {
-      Map<NodeId, Set<NodeLabel>> map = new HashMap<NodeId, Set<NodeLabel>>();
-      Set<NodeLabel> setNodeLabels = new HashSet<NodeLabel>(Arrays.asList(
-          NodeLabel.newInstance("x", false),
-          NodeLabel.newInstance("y", false)));
-      map.put(NodeId.newInstance("host", 0), setNodeLabels);
       return map;
     }
 
@@ -895,12 +844,12 @@ public class TestYarnClient {
       rmClient.start();
 
       ApplicationId appId = createApp(rmClient, false);
-      waitTillAccepted(rmClient, appId, false);
+      waitTillAccepted(rmClient, appId);
       //managed AMs don't return AMRM token
       Assert.assertNull(rmClient.getAMRMToken(appId));
 
       appId = createApp(rmClient, true);
-      waitTillAccepted(rmClient, appId, true);
+      waitTillAccepted(rmClient, appId);
       long start = System.currentTimeMillis();
       while (rmClient.getAMRMToken(appId) == null) {
         if (System.currentTimeMillis() - start > 20 * 1000) {
@@ -921,7 +870,7 @@ public class TestYarnClient {
             rmClient.init(yarnConf);
             rmClient.start();
             ApplicationId appId = createApp(rmClient, true);
-          waitTillAccepted(rmClient, appId, true);
+            waitTillAccepted(rmClient, appId);
             long start = System.currentTimeMillis();
             while (rmClient.getAMRMToken(appId) == null) {
               if (System.currentTimeMillis() - start > 20 * 1000) {
@@ -981,8 +930,7 @@ public class TestYarnClient {
     return appId;
   }
   
-  private void waitTillAccepted(YarnClient rmClient, ApplicationId appId,
-      boolean unmanagedApplication)
+  private void waitTillAccepted(YarnClient rmClient, ApplicationId appId)
     throws Exception {
     try {
       long start = System.currentTimeMillis();
@@ -995,7 +943,6 @@ public class TestYarnClient {
         Thread.sleep(200);
         report = rmClient.getApplicationReport(appId);
       }
-      Assert.assertEquals(unmanagedApplication, report.isUnmanagedApp());
     } catch (Exception ex) {
       throw new Exception(ex);
     }

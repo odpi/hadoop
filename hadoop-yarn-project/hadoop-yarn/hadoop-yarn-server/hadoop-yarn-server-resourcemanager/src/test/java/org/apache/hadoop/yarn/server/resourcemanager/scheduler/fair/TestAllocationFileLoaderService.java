@@ -31,7 +31,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.reservation.ReservationSche
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.QueuePlacementRule.NestedUserQueue;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.policies.DominantResourceFairnessPolicy;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.policies.FairSharePolicy;
-import org.apache.hadoop.yarn.util.ControlledClock;
+import org.apache.hadoop.yarn.util.Clock;
 import org.apache.hadoop.yarn.util.resource.Resources;
 import org.junit.Test;
 
@@ -42,6 +42,18 @@ public class TestAllocationFileLoaderService {
 
   final static String ALLOC_FILE = new File(TEST_DIR,
       "test-queues").getAbsolutePath();
+  
+  private class MockClock implements Clock {
+    private long time = 0;
+    @Override
+    public long getTime() {
+      return time;
+    }
+
+    public void tick(long ms) {
+      time += ms;
+    }
+  }
   
   @Test
   public void testGetAllocationFileFromClasspath() {
@@ -69,8 +81,7 @@ public class TestAllocationFileLoaderService {
     out.println("</allocations>");
     out.close();
     
-    ControlledClock clock = new ControlledClock();
-    clock.setTime(0);
+    MockClock clock = new MockClock();
     Configuration conf = new Configuration();
     conf.set(FairSchedulerConfiguration.ALLOCATION_FILE, ALLOC_FILE);
 
@@ -115,7 +126,7 @@ public class TestAllocationFileLoaderService {
     out.println("</allocations>");
     out.close();
     
-    clock.tickMsec(System.currentTimeMillis()
+    clock.tick(System.currentTimeMillis()
         + AllocationFileLoaderService.ALLOC_RELOAD_WAIT_MS + 10000);
     allocLoader.start();
     
@@ -539,30 +550,7 @@ public class TestAllocationFileLoaderService {
     allocLoader.setReloadListener(confHolder);
     allocLoader.reloadAllocations();
   }
-
-  /**
-   * Verify that you can't have the queue name with whitespace only in the
-   * allocations file.
-   */
-  @Test (expected = AllocationConfigurationException.class)
-  public void testQueueNameContainingOnlyWhitespace() throws Exception {
-    Configuration conf = new Configuration();
-    conf.set(FairSchedulerConfiguration.ALLOCATION_FILE, ALLOC_FILE);
-
-    PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE));
-    out.println("<?xml version=\"1.0\"?>");
-    out.println("<allocations>");
-    out.println("<queue name=\"      \">");
-    out.println("</queue>");
-    out.println("</allocations>");
-    out.close();
-
-    AllocationFileLoaderService allocLoader = new AllocationFileLoaderService();
-    allocLoader.init(conf);
-    ReloadListener confHolder = new ReloadListener();
-    allocLoader.setReloadListener(confHolder);
-    allocLoader.reloadAllocations();
-  }
+  
 
   @Test
   public void testReservableQueue() throws Exception {

@@ -36,7 +36,4 @@ public class NodesInfo {
     node.add(nodeinfo);
   }
 
-  public ArrayList<NodeInfo> getNodes() {
-    return node;
-  }
 }

@@ -169,7 +169,7 @@ public abstract class BlockPlacementPolicy {
     replicator.initialize(conf, stats, clusterMap, host2datanodeMap);
     return replicator;
   }
-  
+
   /**
    * Adjust rackmap, moreThanOne, and exactlyOne after removing replica on cur.
    *

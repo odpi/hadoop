@@ -27,8 +27,7 @@ import org.apache.hadoop.io.compress.DirectDecompressor;
 import org.apache.hadoop.io.compress.zlib.ZlibCompressor.CompressionLevel;
 import org.apache.hadoop.io.compress.zlib.ZlibCompressor.CompressionStrategy;
 import org.apache.hadoop.util.NativeCodeLoader;
-
-import com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 
 /**
  * A collection of factories to create the right 
@@ -42,15 +41,6 @@ public class ZlibFactory {
   private static boolean nativeZlibLoaded = false;
   
   static {
-    loadNativeZLib();
-  }
-
-  /**
-   * Load native library and set the flag whether to use native library. The
-   * method is also used for reset the flag modified by setNativeZlibLoaded
-   */
-  @VisibleForTesting
-  public static void loadNativeZLib() {
     if (NativeCodeLoader.isNativeCodeLoaded()) {
       nativeZlibLoaded = ZlibCompressor.isNativeZlibLoaded() &&
         ZlibDecompressor.isNativeZlibLoaded();
@@ -64,15 +54,6 @@ public class ZlibFactory {
   }
   
   /**
-   * Set the flag whether to use native library. Used for testing non-native
-   * libraries
-   *
-   */
-  @VisibleForTesting
-  public static void setNativeZlibLoaded(final boolean isLoaded) {
-    ZlibFactory.nativeZlibLoaded = isLoaded;
-  }
-  /**
    * Check if native-zlib code is loaded & initialized correctly and 
    * can be loaded for this job.
    * 
@@ -81,7 +62,9 @@ public class ZlibFactory {
    *         and can be loaded for this job, else <code>false</code>
    */
   public static boolean isNativeZlibLoaded(Configuration conf) {
-    return nativeZlibLoaded;
+    return nativeZlibLoaded && conf.getBoolean(
+                          CommonConfigurationKeys.IO_NATIVE_LIB_AVAILABLE_KEY, 
+                          CommonConfigurationKeys.IO_NATIVE_LIB_AVAILABLE_DEFAULT);
   }
 
   public static String getLibraryName() {

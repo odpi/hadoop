@@ -17,23 +17,20 @@
  */
 package org.apache.hadoop.hdfs.server.namenode.metrics;
 
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_AUDIT_LOGGERS_KEY;
 import static org.apache.hadoop.test.MetricsAsserts.assertCounter;
 import static org.apache.hadoop.test.MetricsAsserts.assertGauge;
 import static org.apache.hadoop.test.MetricsAsserts.assertQuantileGauges;
 import static org.apache.hadoop.test.MetricsAsserts.getMetrics;
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.Random;
-import com.google.common.collect.ImmutableList;
 
-import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.commons.logging.impl.Log4JLogger;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Options.Rename;
 import org.apache.hadoop.fs.Path;
@@ -42,7 +39,6 @@ import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
-import org.apache.hadoop.hdfs.MiniDFSNNTopology;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.SafeModeAction;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockManager;
@@ -51,13 +47,13 @@ import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeDescriptor;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.datanode.DataNodeTestUtils;
 import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
-import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.namenode.NameNodeAdapter;
-import org.apache.hadoop.hdfs.server.namenode.ha.HATestUtil;
+import org.apache.hadoop.hdfs.server.namenode.top.TopAuditLogger;
 import org.apache.hadoop.metrics2.MetricsRecordBuilder;
 import org.apache.hadoop.metrics2.MetricsSource;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.test.MetricsAsserts;
+import org.apache.hadoop.util.Time;
 import org.apache.log4j.Level;
 import org.junit.After;
 import org.junit.Before;
@@ -73,7 +69,6 @@ public class TestNameNodeMetrics {
     new Path("/testNameNodeMetrics");
   private static final String NN_METRICS = "NameNodeActivity";
   private static final String NS_METRICS = "FSNamesystem";
-  public static final Log LOG = LogFactory.getLog(TestNameNodeMetrics.class);
   
   // Number of datanodes in the cluster
   private static final int DATANODE_COUNT = 3; 
@@ -130,6 +125,12 @@ public class TestNameNodeMetrics {
   /** create a file with a length of <code>fileLen</code> */
   private void createFile(Path file, long fileLen, short replicas) throws IOException {
     DFSTestUtil.createFile(fs, file, fileLen, replicas, rand.nextLong());
+  }
+
+  private void updateMetrics() throws Exception {
+    // Wait for metrics update (corresponds to dfs.namenode.replication.interval
+    // for some block related metrics to get updated)
+    Thread.sleep(1000);
   }
 
   private void readFile(FileSystem fileSys,Path name) throws IOException {
@@ -202,6 +203,7 @@ public class TestNameNodeMetrics {
     createFile(file, 3200, (short)3);
     final long blockCount = 32;
     int blockCapacity = namesystem.getBlockCapacity();
+    updateMetrics();
     assertGauge("BlockCapacity", blockCapacity, getMetrics(NS_METRICS));
 
     MetricsRecordBuilder rb = getMetrics(NN_METRICS);
@@ -210,6 +212,7 @@ public class TestNameNodeMetrics {
     assertCounter("CreateFileOps", 1L, rb);
     assertCounter("FilesCreated", (long)file.depth(), rb);
 
+    updateMetrics();
     long filesTotal = file.depth() + 1; // Add 1 for root
     rb = getMetrics(NS_METRICS);
     assertGauge("FilesTotal", filesTotal, rb);
@@ -234,12 +237,6 @@ public class TestNameNodeMetrics {
     final Path file = getTestPath("testCorruptBlock");
     createFile(file, 100, (short)2);
     
-    // Disable the heartbeats, so that no corrupted replica
-    // can be fixed
-    for (DataNode dn : cluster.getDataNodes()) {
-      DataNodeTestUtils.setHeartbeatsDisabledForTests(dn, true);
-    }
-    
     // Corrupt first replica of the block
     LocatedBlock block = NameNodeAdapter.getBlockLocations(
         cluster.getNameNode(), file.toString(), 0, 1).get(0);
@@ -250,21 +247,12 @@ public class TestNameNodeMetrics {
     } finally {
       cluster.getNamesystem().writeUnlock();
     }
-    BlockManagerTestUtil.getComputedDatanodeWork(bm);
+    updateMetrics();
     MetricsRecordBuilder rb = getMetrics(NS_METRICS);
     assertGauge("CorruptBlocks", 1L, rb);
     assertGauge("PendingReplicationBlocks", 1L, rb);
-    
+    assertGauge("ScheduledReplicationBlocks", 1L, rb);
     fs.delete(file, true);
-    // During the file deletion, both BlockManager#corruptReplicas and
-    // BlockManager#pendingReplications will be updated, i.e., the records
-    // for the blocks of the deleted file will be removed from both
-    // corruptReplicas and pendingReplications. The corresponding
-    // metrics (CorruptBlocks and PendingReplicationBlocks) will only be updated
-    // when BlockManager#computeDatanodeWork is run where the
-    // BlockManager#updateState is called. And in
-    // BlockManager#computeDatanodeWork the metric ScheduledReplicationBlocks
-    // will also be updated.
     rb = waitForDnMetricValue(NS_METRICS, "CorruptBlocks", 0L);
     assertGauge("PendingReplicationBlocks", 0L, rb);
     assertGauge("ScheduledReplicationBlocks", 0L, rb);
@@ -277,16 +265,12 @@ public class TestNameNodeMetrics {
   public void testExcessBlocks() throws Exception {
     Path file = getTestPath("testExcessBlocks");
     createFile(file, 100, (short)2);
+    long totalBlocks = 1;
     NameNodeAdapter.setReplication(namesystem, file.toString(), (short)1);
+    updateMetrics();
     MetricsRecordBuilder rb = getMetrics(NS_METRICS);
-    assertGauge("ExcessBlocks", 1L, rb);
-
-    // verify ExcessBlocks metric is decremented and
-    // excessReplicateMap is cleared after deleting a file
+    assertGauge("ExcessBlocks", totalBlocks, rb);
     fs.delete(file, true);
-    rb = getMetrics(NS_METRICS);
-    assertGauge("ExcessBlocks", 0L, rb);
-    assertTrue(bm.excessReplicateMap.isEmpty());
   }
   
   /** Test to ensure metrics reflects missing blocks */
@@ -306,7 +290,7 @@ public class TestNameNodeMetrics {
     } finally {
       cluster.getNamesystem().writeUnlock();
     }
-    Thread.sleep(1000); // Wait for block to be marked corrupt
+    updateMetrics();
     MetricsRecordBuilder rb = getMetrics(NS_METRICS);
     assertGauge("UnderReplicatedBlocks", 1L, rb);
     assertGauge("MissingBlocks", 1L, rb);
@@ -365,6 +349,7 @@ public class TestNameNodeMetrics {
     Path target = getTestPath("target");
     createFile(target, 100, (short)1);
     fs.rename(src, target, Rename.OVERWRITE);
+    updateMetrics();
     MetricsRecordBuilder rb = getMetrics(NN_METRICS);
     assertCounter("FilesRenamed", 1L, rb);
     assertCounter("FilesDeleted", 1L, rb);
@@ -392,6 +377,7 @@ public class TestNameNodeMetrics {
 
     //Perform create file operation
     createFile(file1_Path,100,(short)2);
+    updateMetrics();
   
     //Create file does not change numGetBlockLocations metric
     //expect numGetBlockLocations = 0 for previous and current interval 
@@ -400,91 +386,17 @@ public class TestNameNodeMetrics {
     // Open and read file operation increments GetBlockLocations
     // Perform read file operation on earlier created file
     readFile(fs, file1_Path);
+    updateMetrics();
     // Verify read file operation has incremented numGetBlockLocations by 1
     assertCounter("GetBlockLocations", 1L, getMetrics(NN_METRICS));
 
     // opening and reading file  twice will increment numGetBlockLocations by 2
     readFile(fs, file1_Path);
     readFile(fs, file1_Path);
+    updateMetrics();
     assertCounter("GetBlockLocations", 3L, getMetrics(NN_METRICS));
   }
   
-  /**
-   * Testing TransactionsSinceLastCheckpoint. Need a new cluster as
-   * the other tests in here don't use HA. See HDFS-7501.
-   */
-  @Test(timeout = 300000)
-  public void testTransactionSinceLastCheckpointMetrics() throws Exception {
-    Random random = new Random();
-    int retryCount = 0;
-    while (retryCount < 5) {
-      try {
-        int basePort = 10060 + random.nextInt(100) * 2;
-        MiniDFSNNTopology topology = new MiniDFSNNTopology()
-            .addNameservice(new MiniDFSNNTopology.NSConf("ns1")
-            .addNN(new MiniDFSNNTopology.NNConf("nn1").setHttpPort(basePort))
-            .addNN(new MiniDFSNNTopology.NNConf("nn2").setHttpPort(basePort + 1)));
-
-        HdfsConfiguration conf2 = new HdfsConfiguration();
-        // Lower the checkpoint condition for purpose of testing.
-        conf2.setInt(
-            DFSConfigKeys.DFS_NAMENODE_CHECKPOINT_TXNS_KEY,
-            100);
-        // Check for checkpoint condition very often, for purpose of testing.
-        conf2.setInt(
-            DFSConfigKeys.DFS_NAMENODE_CHECKPOINT_CHECK_PERIOD_KEY,
-            1);
-        // Poll and follow ANN txns very often, for purpose of testing.
-        conf2.setInt(DFSConfigKeys.DFS_HA_TAILEDITS_PERIOD_KEY, 1);
-        MiniDFSCluster cluster2 = new MiniDFSCluster.Builder(conf2)
-            .nnTopology(topology).numDataNodes(1).build();
-        cluster2.waitActive();
-        DistributedFileSystem fs2 = cluster2.getFileSystem(0);
-        NameNode nn0 = cluster2.getNameNode(0);
-        NameNode nn1 = cluster2.getNameNode(1);
-        cluster2.transitionToActive(0);
-        fs2.mkdirs(new Path("/tmp-t1"));
-        fs2.mkdirs(new Path("/tmp-t2"));
-        HATestUtil.waitForStandbyToCatchUp(nn0, nn1);
-        // Test to ensure tracking works before the first-ever
-        // checkpoint.
-        assertEquals("SBN failed to track 2 transactions pre-checkpoint.",
-            4L, // 2 txns added further when catch-up is called.
-            cluster2.getNameNode(1).getNamesystem()
-              .getTransactionsSinceLastCheckpoint());
-        // Complete up to the boundary required for
-        // an auto-checkpoint. Using 94 to expect fsimage
-        // rounded at 100, as 4 + 94 + 2 (catch-up call) = 100.
-        for (int i = 1; i <= 94; i++) {
-          fs2.mkdirs(new Path("/tmp-" + i));
-        }
-        HATestUtil.waitForStandbyToCatchUp(nn0, nn1);
-        // Assert 100 transactions in checkpoint.
-        HATestUtil.waitForCheckpoint(cluster2, 1, ImmutableList.of(100));
-        // Test to ensure number tracks the right state of
-        // uncheckpointed edits, and does not go negative
-        // (as fixed in HDFS-7501).
-        assertEquals("Should be zero right after the checkpoint.",
-            0L,
-            cluster2.getNameNode(1).getNamesystem()
-              .getTransactionsSinceLastCheckpoint());
-        fs2.mkdirs(new Path("/tmp-t3"));
-        fs2.mkdirs(new Path("/tmp-t4"));
-        HATestUtil.waitForStandbyToCatchUp(nn0, nn1);
-        // Test to ensure we track the right numbers after
-        // the checkpoint resets it to zero again.
-        assertEquals("SBN failed to track 2 added txns after the ckpt.",
-            4L,
-            cluster2.getNameNode(1).getNamesystem()
-              .getTransactionsSinceLastCheckpoint());
-        cluster2.shutdown();
-        break;
-      } catch (Exception e) {
-        LOG.warn("Unable to set up HA cluster, exception thrown: " + e);
-        retryCount++;
-      }
-    }
-  }
   /**
    * Test NN checkpoint and transaction-related metrics.
    */
@@ -499,6 +411,7 @@ public class TestNameNodeMetrics {
     assertGauge("TransactionsSinceLastLogRoll", 1L, getMetrics(NS_METRICS));
     
     fs.mkdirs(new Path(TEST_ROOT_DIR_PATH, "/tmp"));
+    updateMetrics();
     
     assertGauge("LastCheckpointTime", lastCkptTime, getMetrics(NS_METRICS));
     assertGauge("LastWrittenTransactionId", 2L, getMetrics(NS_METRICS));
@@ -506,6 +419,7 @@ public class TestNameNodeMetrics {
     assertGauge("TransactionsSinceLastLogRoll", 2L, getMetrics(NS_METRICS));
     
     cluster.getNameNodeRpc().rollEditLog();
+    updateMetrics();
     
     assertGauge("LastCheckpointTime", lastCkptTime, getMetrics(NS_METRICS));
     assertGauge("LastWrittenTransactionId", 4L, getMetrics(NS_METRICS));
@@ -513,8 +427,9 @@ public class TestNameNodeMetrics {
     assertGauge("TransactionsSinceLastLogRoll", 1L, getMetrics(NS_METRICS));
     
     cluster.getNameNodeRpc().setSafeMode(SafeModeAction.SAFEMODE_ENTER, false);
-    cluster.getNameNodeRpc().saveNamespace(0, 0);
+    cluster.getNameNodeRpc().saveNamespace();
     cluster.getNameNodeRpc().setSafeMode(SafeModeAction.SAFEMODE_LEAVE, false);
+    updateMetrics();
     
     long newLastCkptTime = MetricsAsserts.getLongGauge("LastCheckpointTime",
         getMetrics(NS_METRICS));
@@ -563,59 +478,5 @@ public class TestNameNodeMetrics {
     MetricsRecordBuilder rbNew = getMetrics(NN_METRICS);
     assertTrue(MetricsAsserts.getLongCounter("TransactionsNumOps", rbNew) >
         startWriteCounter);
-  }
-
-  /**
-   * Test metrics indicating the number of active clients and the files under
-   * construction
-   */
-  @Test(timeout = 60000)
-  public void testNumActiveClientsAndFilesUnderConstructionMetrics()
-      throws Exception {
-    final Path file1 = getTestPath("testFileAdd1");
-    createFile(file1, 100, (short) 3);
-    assertGauge("NumActiveClients", 0L, getMetrics(NS_METRICS));
-    assertGauge("NumFilesUnderConstruction", 0L, getMetrics(NS_METRICS));
-
-    Path file2 = new Path("/testFileAdd2");
-    FSDataOutputStream output2 = fs.create(file2);
-    output2.writeBytes("Some test data");
-    assertGauge("NumActiveClients", 1L, getMetrics(NS_METRICS));
-    assertGauge("NumFilesUnderConstruction", 1L, getMetrics(NS_METRICS));
-
-    Path file3 = new Path("/testFileAdd3");
-    FSDataOutputStream output3 = fs.create(file3);
-    output3.writeBytes("Some test data");
-    assertGauge("NumActiveClients", 1L, getMetrics(NS_METRICS));
-    assertGauge("NumFilesUnderConstruction", 2L, getMetrics(NS_METRICS));
-
-    // create another DistributedFileSystem client
-    DistributedFileSystem fs1 = (DistributedFileSystem) cluster
-        .getNewFileSystemInstance(0);
-    try {
-      Path file4 = new Path("/testFileAdd4");
-      FSDataOutputStream output4 = fs1.create(file4);
-      output4.writeBytes("Some test data");
-      assertGauge("NumActiveClients", 2L, getMetrics(NS_METRICS));
-      assertGauge("NumFilesUnderConstruction", 3L, getMetrics(NS_METRICS));
-
-      Path file5 = new Path("/testFileAdd35");
-      FSDataOutputStream output5 = fs1.create(file5);
-      output5.writeBytes("Some test data");
-      assertGauge("NumActiveClients", 2L, getMetrics(NS_METRICS));
-      assertGauge("NumFilesUnderConstruction", 4L, getMetrics(NS_METRICS));
-
-      output2.close();
-      output3.close();
-      assertGauge("NumActiveClients", 1L, getMetrics(NS_METRICS));
-      assertGauge("NumFilesUnderConstruction", 2L, getMetrics(NS_METRICS));
-
-      output4.close();
-      output5.close();
-      assertGauge("NumActiveClients", 0L, getMetrics(NS_METRICS));
-      assertGauge("NumFilesUnderConstruction", 0L, getMetrics(NS_METRICS));
-    } finally {
-      fs1.close();
-    }
   }
 }

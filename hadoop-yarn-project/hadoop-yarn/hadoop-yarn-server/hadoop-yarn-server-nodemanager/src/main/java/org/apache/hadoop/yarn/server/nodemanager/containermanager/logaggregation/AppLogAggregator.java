@@ -18,15 +18,14 @@
 
 package org.apache.hadoop.yarn.server.nodemanager.containermanager.logaggregation;
 
-import org.apache.hadoop.yarn.server.api.ContainerLogContext;
+import org.apache.hadoop.yarn.api.records.ContainerId;
 
 public interface AppLogAggregator extends Runnable {
 
-  void startContainerLogAggregation(ContainerLogContext logContext);
+  void startContainerLogAggregation(ContainerId containerId,
+      boolean wasContainerSuccessful);
 
   void abortLogAggregation();
 
   void finishLogAggregation();
-
-  void disableLogAggregation();
 }

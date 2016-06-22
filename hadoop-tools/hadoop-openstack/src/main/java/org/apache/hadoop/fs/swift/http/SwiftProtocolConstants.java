@@ -66,7 +66,7 @@ public class SwiftProtocolConstants {
    */
   public static final String SERVICE_CATALOG_SWIFT = "swift";
   /**
-   *  section in the JSON catalog provided after auth listing the cloud files;
+   *  section in the JSON catalog provided after auth listing the cloudfiles;
    * this is an alternate catalog entry name
    *  {@value}
    */
@@ -185,7 +185,7 @@ public class SwiftProtocolConstants {
     FS_SWIFT + ".requestsize";
 
   /**
-   * The default request size for reads: {@value}
+   * The default reqeuest size for reads: {@value}
    */
   public static final int DEFAULT_SWIFT_REQUEST_SIZE = 64;
 

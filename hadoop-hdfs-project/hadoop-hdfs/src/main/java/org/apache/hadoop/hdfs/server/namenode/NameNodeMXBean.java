@@ -81,10 +81,9 @@ public interface NameNodeMXBean {
   public boolean isUpgradeFinalized();
 
   /**
-   * Gets the RollingUpgrade information.
+   * Gets the RollingUpgrade information
    *
-   * @return Rolling upgrade information if an upgrade is in progress. Else
-   * (e.g. if there is no upgrade or the upgrade is finalized), returns null.
+   * @return Rolling upgrade information
    */
   public RollingUpgradeInfo.Bean getRollingUpgradeStatus();
 
@@ -237,12 +236,6 @@ public interface NameNodeMXBean {
    * @return the NN start time
    */
   public String getNNStarted();
-
-  /**
-   * Gets the NN start time in milliseconds.
-   * @return the NN start time in msec
-   */
-  long getNNStartedTimeInMillis();
 
   /**
    * Get the compilation information which contains date, user and branch

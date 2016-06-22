@@ -54,8 +54,9 @@ public class SchedulingMonitor extends AbstractService {
     return scheduleEditPolicy;
   }
 
+  @SuppressWarnings("unchecked")
   public void serviceInit(Configuration conf) throws Exception {
-    scheduleEditPolicy.init(conf, rmContext,
+    scheduleEditPolicy.init(conf, rmContext.getDispatcher().getEventHandler(),
         (PreemptableResourceScheduler) rmContext.getScheduler());
     this.monitorInterval = scheduleEditPolicy.getMonitoringInterval();
     super.serviceInit(conf);

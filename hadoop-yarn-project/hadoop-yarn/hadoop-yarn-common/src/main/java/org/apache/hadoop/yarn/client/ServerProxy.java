@@ -53,23 +53,19 @@ public class ServerProxy {
     long maxWaitTime = conf.getLong(maxWaitTimeStr, defMaxWaitTime);
     long retryIntervalMS =
         conf.getLong(connectRetryIntervalStr, defRetryInterval);
+    if (maxWaitTime == -1) {
+      // wait forever.
+      return RetryPolicies.RETRY_FOREVER;
+    }
 
-    Preconditions.checkArgument((maxWaitTime == -1 || maxWaitTime > 0),
-        "Invalid Configuration. " + maxWaitTimeStr + " should be either"
-            + " positive value or -1.");
+    Preconditions.checkArgument(maxWaitTime > 0, "Invalid Configuration. "
+        + maxWaitTimeStr + " should be a positive value.");
     Preconditions.checkArgument(retryIntervalMS > 0, "Invalid Configuration. "
         + connectRetryIntervalStr + "should be a positive value.");
 
-    RetryPolicy retryPolicy = null;
-    if (maxWaitTime == -1) {
-      // wait forever.
-      retryPolicy = RetryPolicies.retryForeverWithFixedSleep(retryIntervalMS,
-          TimeUnit.MILLISECONDS);
-    } else {
-      retryPolicy =
-          RetryPolicies.retryUpToMaximumTimeWithFixedSleep(maxWaitTime,
-              retryIntervalMS, TimeUnit.MILLISECONDS);
-    }
+    RetryPolicy retryPolicy =
+        RetryPolicies.retryUpToMaximumTimeWithFixedSleep(maxWaitTime,
+          retryIntervalMS, TimeUnit.MILLISECONDS);
 
     Map<Class<? extends Exception>, RetryPolicy> exceptionToPolicyMap =
         new HashMap<Class<? extends Exception>, RetryPolicy>();

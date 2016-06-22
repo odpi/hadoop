@@ -70,8 +70,7 @@ class Mkdir extends FsCommand {
   protected void processNonexistentPath(PathData item) throws IOException {
     // check if parent exists. this is complicated because getParent(a/b/c/) returns a/b/c, but
     // we want a/b
-    if (!createParents &&
-        !item.fs.exists(new Path(item.path.toString()).getParent())) {
+    if (!item.fs.exists(new Path(item.path.toString()).getParent()) && !createParents) {
       throw new PathNotFoundException(item.toString());
     }
     if (!item.fs.mkdirs(item.path)) {

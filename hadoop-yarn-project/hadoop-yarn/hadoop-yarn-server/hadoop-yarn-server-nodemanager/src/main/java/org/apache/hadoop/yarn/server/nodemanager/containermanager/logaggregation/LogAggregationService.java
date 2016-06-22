@@ -48,9 +48,8 @@ import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.Dispatcher;
 import org.apache.hadoop.yarn.exceptions.YarnRuntimeException;
+import org.apache.hadoop.yarn.logaggregation.ContainerLogsRetentionPolicy;
 import org.apache.hadoop.yarn.logaggregation.LogAggregationUtils;
-import org.apache.hadoop.yarn.server.api.ContainerLogContext;
-import org.apache.hadoop.yarn.server.api.ContainerType;
 import org.apache.hadoop.yarn.server.nodemanager.Context;
 import org.apache.hadoop.yarn.server.nodemanager.DeletionService;
 import org.apache.hadoop.yarn.server.nodemanager.LocalDirsHandlerService;
@@ -146,13 +145,10 @@ public class LogAggregationService extends AbstractService implements
    
   private void stopAggregators() {
     threadPool.shutdown();
-    boolean supervised = getConfig().getBoolean(
-        YarnConfiguration.NM_RECOVERY_SUPERVISED,
-        YarnConfiguration.DEFAULT_NM_RECOVERY_SUPERVISED);
     // if recovery on restart is supported then leave outstanding aggregations
     // to the next restart
     boolean shouldAbort = context.getNMStateStore().canRecover()
-        && !context.getDecommissioned() && supervised;
+        && !context.getDecommissioned();
     // politely ask to finish
     for (AppLogAggregator aggregator : appLogAggregators.values()) {
       if (shouldAbort) {
@@ -180,7 +176,7 @@ public class LogAggregationService extends AbstractService implements
   }
 
   protected FileSystem getFileSystem(Configuration conf) throws IOException {
-    return this.remoteRootLogDir.getFileSystem(conf);
+    return FileSystem.get(conf);
   }
 
   void verifyAndCreateRemoteLogDir(Configuration conf) {
@@ -315,12 +311,13 @@ public class LogAggregationService extends AbstractService implements
 
   @SuppressWarnings("unchecked")
   private void initApp(final ApplicationId appId, String user,
-      Credentials credentials, Map<ApplicationAccessType, String> appAcls,
+      Credentials credentials, ContainerLogsRetentionPolicy logRetentionPolicy,
+      Map<ApplicationAccessType, String> appAcls,
       LogAggregationContext logAggregationContext) {
     ApplicationEvent eventResponse;
     try {
       verifyAndCreateRemoteLogDir(getConfig());
-      initAppAggregator(appId, user, credentials, appAcls,
+      initAppAggregator(appId, user, credentials, logRetentionPolicy, appAcls,
           logAggregationContext);
       eventResponse = new ApplicationEvent(appId,
           ApplicationEventType.APPLICATION_LOG_HANDLING_INITED);
@@ -342,7 +339,8 @@ public class LogAggregationService extends AbstractService implements
 
 
   protected void initAppAggregator(final ApplicationId appId, String user,
-      Credentials credentials, Map<ApplicationAccessType, String> appAcls,
+      Credentials credentials, ContainerLogsRetentionPolicy logRetentionPolicy,
+      Map<ApplicationAccessType, String> appAcls,
       LogAggregationContext logAggregationContext) {
 
     // Get user's FileSystem credentials
@@ -356,25 +354,25 @@ public class LogAggregationService extends AbstractService implements
     final AppLogAggregator appLogAggregator =
         new AppLogAggregatorImpl(this.dispatcher, this.deletionService,
             getConfig(), appId, userUgi, this.nodeId, dirsHandler,
-            getRemoteNodeLogFileForApp(appId, user),
+            getRemoteNodeLogFileForApp(appId, user), logRetentionPolicy,
             appAcls, logAggregationContext, this.context,
             getLocalFileContext(getConfig()));
     if (this.appLogAggregators.putIfAbsent(appId, appLogAggregator) != null) {
       throw new YarnRuntimeException("Duplicate initApp for " + appId);
     }
     // wait until check for existing aggregator to create dirs
-    YarnRuntimeException appDirException = null;
     try {
       // Create the app dir
       createAppDir(user, appId, userUgi);
     } catch (Exception e) {
-      appLogAggregator.disableLogAggregation();
+      appLogAggregators.remove(appId);
+      closeFileSystems(userUgi);
       if (!(e instanceof YarnRuntimeException)) {
-        appDirException = new YarnRuntimeException(e);
-      } else {
-        appDirException = (YarnRuntimeException)e;
+        e = new YarnRuntimeException(e);
       }
+      throw (YarnRuntimeException)e;
     }
+
 
     // TODO Get the user configuration for the list of containers that need log
     // aggregation.
@@ -391,10 +389,6 @@ public class LogAggregationService extends AbstractService implements
       }
     };
     this.threadPool.execute(aggregatorWrapper);
-
-    if (appDirException != null) {
-      throw appDirException;
-    }
   }
 
   protected void closeFileSystems(final UserGroupInformation userUgi) {
@@ -423,10 +417,7 @@ public class LogAggregationService extends AbstractService implements
           + ", did it fail to start?");
       return;
     }
-    ContainerType containerType = context.getContainers().get(
-        containerId).getContainerTokenIdentifier().getContainerType();
-    aggregator.startContainerLogAggregation(
-        new ContainerLogContext(containerId, containerType, exitCode));
+    aggregator.startContainerLogAggregation(containerId, exitCode == 0);
   }
 
   private void stopApp(ApplicationId appId) {
@@ -451,6 +442,7 @@ public class LogAggregationService extends AbstractService implements
             (LogHandlerAppStartedEvent) event;
         initApp(appStartEvent.getApplicationId(), appStartEvent.getUser(),
             appStartEvent.getCredentials(),
+            appStartEvent.getLogRetentionPolicy(),
             appStartEvent.getApplicationAcls(),
             appStartEvent.getLogAggregationContext());
         break;

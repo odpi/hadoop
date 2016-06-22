@@ -24,12 +24,13 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.hadoop.fs.contract.ContractTestUtils.cleanup;
 import static org.apache.hadoop.fs.contract.ContractTestUtils.createFile;
 import static org.apache.hadoop.fs.contract.ContractTestUtils.dataset;
 import static org.apache.hadoop.fs.contract.ContractTestUtils.touch;
 
 /**
- * Test append -if supported
+ * Test concat -if supported
  */
 public abstract class AbstractContractAppendTest extends AbstractFSContractTestBase {
   private static final Logger LOG =
@@ -111,7 +112,6 @@ public abstract class AbstractContractAppendTest extends AbstractFSContractTestB
     FSDataOutputStream outputStream = getFileSystem().append(target);
     outputStream.write(dataset);
     Path renamed = new Path(testPath, "renamed");
-    rename(target, renamed);
     outputStream.close();
     String listing = ls(testPath);
 

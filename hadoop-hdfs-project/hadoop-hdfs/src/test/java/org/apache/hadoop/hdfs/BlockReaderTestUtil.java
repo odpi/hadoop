@@ -32,13 +32,14 @@ import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.net.Peer;
+import org.apache.hadoop.hdfs.net.TcpPeerServer;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
-import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.security.token.block.BlockTokenIdentifier;
 import org.apache.hadoop.hdfs.server.blockmanagement.CacheReplicationMonitor;
+import org.apache.hadoop.hdfs.server.common.HdfsServerConstants;
 import org.apache.hadoop.hdfs.server.datanode.CachingStrategy;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.datanode.ShortCircuitRegistry;
@@ -201,9 +202,9 @@ public class BlockReaderTestUtil {
           Socket sock = NetUtils.
               getDefaultSocketFactory(fs.getConf()).createSocket();
           try {
-            sock.connect(addr, HdfsConstants.READ_TIMEOUT);
-            sock.setSoTimeout(HdfsConstants.READ_TIMEOUT);
-            peer = DFSUtilClient.peerFromSocket(sock);
+            sock.connect(addr, HdfsServerConstants.READ_TIMEOUT);
+            sock.setSoTimeout(HdfsServerConstants.READ_TIMEOUT);
+            peer = TcpPeerServer.peerFromSocket(sock);
           } finally {
             if (peer == null) {
               IOUtils.closeQuietly(sock);

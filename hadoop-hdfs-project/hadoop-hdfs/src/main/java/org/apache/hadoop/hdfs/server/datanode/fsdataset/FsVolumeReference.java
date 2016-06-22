@@ -21,7 +21,7 @@ import java.io.Closeable;
 import java.io.IOException;
 
 /**
- * This holds volume reference count as AutoClosable resource.
+ * This is the interface for holding reference count as AutoClosable resource.
  * It increases the reference count by one in the constructor, and decreases
  * the reference count by one in {@link #close()}.
  *
@@ -37,15 +37,12 @@ import java.io.IOException;
  */
 public interface FsVolumeReference extends Closeable {
   /**
-   * Decrease the reference count of the volume.
+   * Descrese the reference count of the volume.
    * @throws IOException it never throws IOException.
    */
   @Override
-  void close() throws IOException;
+  public void close() throws IOException;
 
-  /**
-   * Returns the underlying volume object. Return null if the reference was
-   * released.
-   */
-  FsVolumeSpi getVolume();
+  /** Returns the underlying volume object */
+  public FsVolumeSpi getVolume();
 }

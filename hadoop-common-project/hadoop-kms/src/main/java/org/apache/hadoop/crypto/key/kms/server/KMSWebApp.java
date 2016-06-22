@@ -181,8 +181,8 @@ public class KMSWebApp implements ServletContextListener {
 
       keyProviderCryptoExtension = KeyProviderCryptoExtension.
           createKeyProviderCryptoExtension(keyProvider);
-      keyProviderCryptoExtension = 
-          new EagerKeyGeneratorKeyProviderCryptoExtension(kmsConf, 
+      keyProviderCryptoExtension =
+          new EagerKeyGeneratorKeyProviderCryptoExtension(kmsConf,
               keyProviderCryptoExtension);
       if (kmsConf.getBoolean(KMSConfiguration.KEY_AUTHORIZATION_ENABLE,
           KMSConfiguration.KEY_AUTHORIZATION_ENABLE_DEFAULT)) {

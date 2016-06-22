@@ -138,15 +138,4 @@ public class ApplicationACLsManager {
     }
     return false;
   }
-
-  /**
-   * Check if the given user in an admin.
-   *
-   * @param calledUGI
-   *          UserGroupInformation for the user
-   * @return true if the user is an admin, false otherwise
-   */
-  public final boolean isAdmin(final UserGroupInformation calledUGI) {
-    return this.adminAclsManager.isAdmin(calledUGI);
-  }
 }

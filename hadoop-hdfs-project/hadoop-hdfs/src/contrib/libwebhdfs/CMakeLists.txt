@@ -19,29 +19,26 @@
 find_package(CURL REQUIRED)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
-    "${CMAKE_SOURCE_DIR}/contrib/libwebhdfs/resources/")
+"${CMAKE_SOURCE_DIR}/contrib/libwebhdfs/resources/")
 
 find_package(Jansson REQUIRED)
 include_directories(${JANSSON_INCLUDE_DIR})
 
-hadoop_add_dual_library(webhdfs
+add_dual_library(webhdfs
     src/hdfs_web.c
     src/hdfs_http_client.c
     src/hdfs_http_query.c
     src/hdfs_json_parser.c
     ../../main/native/libhdfs/exception.c
     ../../main/native/libhdfs/jni_helper.c
-    ../../${OS_DIR}/mutexes.c
-    ../../${OS_DIR}/thread_local_storage.c
-    ../../main/native/libhdfs/common/htable.c
 )
-hadoop_target_link_dual_libraries(webhdfs
+target_link_dual_libraries(webhdfs
     ${JAVA_JVM_LIBRARY}
     ${CURL_LIBRARY}
     ${JANSSON_LIBRARY}
     pthread
 )
-hadoop_dual_output_directory(webhdfs target)
+dual_output_directory(webhdfs target)
 set(LIBWEBHDFS_VERSION "0.0.0")
 set_target_properties(webhdfs PROPERTIES
     SOVERSION ${LIBWEBHDFS_VERSION})

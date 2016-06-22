@@ -19,13 +19,13 @@
   <parent>
     <artifactId>hadoop-yarn-server</artifactId>
     <groupId>org.apache.hadoop</groupId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>2.7.1-odpi</version>
   </parent>
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.hadoop</groupId>
   <artifactId>hadoop-yarn-server-resourcemanager</artifactId>
-  <version>3.0.0-SNAPSHOT</version>
-  <name>Apache Hadoop YARN ResourceManager</name>
+  <version>2.7.1-odpi</version>
+  <name>hadoop-yarn-server-resourcemanager</name>
 
   <properties>
     <!-- Needed for generating FindBugs warnings using parent pom -->
@@ -175,14 +175,6 @@
       <artifactId>hadoop-yarn-server-web-proxy</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.apache.curator</groupId>
-      <artifactId>curator-client</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.curator</groupId>
-      <artifactId>curator-test</artifactId>
-    </dependency>
-    <dependency>
       <groupId>org.apache.zookeeper</groupId>
       <artifactId>zookeeper</artifactId>
     </dependency>
@@ -258,10 +250,6 @@
                   <mainClass>org.apache.hadoop.test.YarnTestDriver</mainClass>
                 </manifest>
               </archive>
-              <excludes>
-                <exclude>**/core-site.xml</exclude>
-                <exclude>**/yarn-site.xml</exclude>
-              </excludes>
             </configuration>
           </execution>
         </executions>
@@ -283,7 +271,7 @@
               <imports>
                 <param>${basedir}/../../../../hadoop-common-project/hadoop-common/src/main/proto</param>
                 <param>${basedir}/../../hadoop-yarn-api/src/main/proto</param>
-                <param>${basedir}/../../hadoop-yarn-common/src/main/proto</param>
+                <param>${basedir}/../../hadoop-yarn-common/src/main/proto/server/</param>
                 <param>${basedir}/../hadoop-yarn-server-common/src/main/proto</param>
                 <param>${basedir}/src/main/proto</param>
               </imports>

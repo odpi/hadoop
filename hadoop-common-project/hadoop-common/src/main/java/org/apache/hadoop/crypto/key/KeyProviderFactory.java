@@ -57,7 +57,7 @@ public abstract class KeyProviderFactory {
       iterServices.next();
     }
   }
-  
+
   public static List<KeyProvider> getProviders(Configuration conf
                                                ) throws IOException {
     List<KeyProvider> result = new ArrayList<KeyProvider>();

@@ -34,6 +34,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileUtil;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.qjournal.protocol.JournalNotFormattedException;
 import org.apache.hadoop.hdfs.qjournal.protocol.JournalOutOfSyncException;
 import org.apache.hadoop.hdfs.qjournal.protocol.QJournalProtocol;
@@ -43,7 +44,6 @@ import org.apache.hadoop.hdfs.qjournal.protocol.QJournalProtocolProtos.Persisted
 import org.apache.hadoop.hdfs.qjournal.protocol.QJournalProtocolProtos.PrepareRecoveryResponseProto;
 import org.apache.hadoop.hdfs.qjournal.protocol.QJournalProtocolProtos.SegmentStateProto;
 import org.apache.hadoop.hdfs.qjournal.protocol.RequestInfo;
-import org.apache.hadoop.hdfs.server.common.HdfsServerConstants;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.StartupOption;
 import org.apache.hadoop.hdfs.server.common.StorageErrorReporter;
 import org.apache.hadoop.hdfs.server.common.StorageInfo;
@@ -63,7 +63,6 @@ import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.StopWatch;
-import org.apache.hadoop.util.Time;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Charsets;
@@ -82,8 +81,8 @@ public class Journal implements Closeable {
 
   // Current writing state
   private EditLogOutputStream curSegment;
-  private long curSegmentTxId = HdfsServerConstants.INVALID_TXID;
-  private long nextTxId = HdfsServerConstants.INVALID_TXID;
+  private long curSegmentTxId = HdfsConstants.INVALID_TXID;
+  private long nextTxId = HdfsConstants.INVALID_TXID;
   private long highestWrittenTxId = 0;
   
   private final String journalId;
@@ -133,8 +132,6 @@ public class Journal implements Closeable {
 
   private final JournalMetrics metrics;
 
-  private long lastJournalTimestamp = 0;
-
   /**
    * Time threshold for sync calls, beyond which a warning should be logged to the console.
    */
@@ -154,7 +151,7 @@ public class Journal implements Closeable {
     
     EditLogFile latest = scanStorageForLatestEdits();
     if (latest != null) {
-      updateHighestWrittenTxId(latest.getLastTxId());
+      highestWrittenTxId = latest.getLastTxId();
     }
   }
 
@@ -173,7 +170,7 @@ public class Journal implements Closeable {
         new File(currentDir, LAST_WRITER_EPOCH), 0);
     this.committedTxnId = new BestEffortLongFile(
         new File(currentDir, COMMITTED_TXID_FILENAME),
-        HdfsServerConstants.INVALID_TXID);
+        HdfsConstants.INVALID_TXID);
   }
   
   /**
@@ -192,9 +189,9 @@ public class Journal implements Closeable {
     
     while (!files.isEmpty()) {
       EditLogFile latestLog = files.remove(files.size() - 1);
-      latestLog.scanLog(Long.MAX_VALUE, false);
+      latestLog.scanLog();
       LOG.info("Latest log is " + latestLog);
-      if (latestLog.getLastTxId() == HdfsServerConstants.INVALID_TXID) {
+      if (latestLog.getLastTxId() == HdfsConstants.INVALID_TXID) {
         // the log contains no transactions
         LOG.warn("Latest log " + latestLog + " has no transactions. " +
             "moving it aside and looking for previous log");
@@ -256,11 +253,7 @@ public class Journal implements Closeable {
   synchronized long getCommittedTxnIdForTests() throws IOException {
     return committedTxnId.get();
   }
-
-  synchronized long getLastJournalTimestamp() {
-    return lastJournalTimestamp;
-  }
-
+  
   synchronized long getCurrentLagTxns() throws IOException {
     long committed = committedTxnId.get();
     if (committed == 0) {
@@ -273,17 +266,7 @@ public class Journal implements Closeable {
   synchronized long getHighestWrittenTxId() {
     return highestWrittenTxId;
   }
-
-  /**
-   * Update the highest Tx ID that has been written to the journal. Also update
-   * the {@link FileJournalManager#lastReadableTxId} of the underlying fjm.
-   * @param val The new value
-   */
-  private void updateHighestWrittenTxId(long val) {
-    highestWrittenTxId = val;
-    fjm.setLastReadableTxId(val);
-  }
-
+  
   @VisibleForTesting
   JournalMetrics getMetricsForTests() {
     return metrics;
@@ -344,7 +327,7 @@ public class Journal implements Closeable {
     
     curSegment.abort();
     curSegment = null;
-    curSegmentTxId = HdfsServerConstants.INVALID_TXID;
+    curSegmentTxId = HdfsConstants.INVALID_TXID;
   }
 
   /**
@@ -416,9 +399,8 @@ public class Journal implements Closeable {
     metrics.bytesWritten.incr(records.length);
     metrics.txnsWritten.incr(numTxns);
     
-    updateHighestWrittenTxId(lastTxnId);
+    highestWrittenTxId = lastTxnId;
     nextTxId = lastTxnId + 1;
-    lastJournalTimestamp = Time.now();
   }
 
   public void heartbeat(RequestInfo reqInfo) throws IOException {
@@ -542,7 +524,7 @@ public class Journal implements Closeable {
       // If it's in-progress, it should only contain one transaction,
       // because the "startLogSegment" transaction is written alone at the
       // start of each segment. 
-      existing.scanLog(Long.MAX_VALUE, false);
+      existing.scanLog();
       if (existing.getLastTxId() != existing.getFirstTxId()) {
         throw new IllegalStateException("The log file " +
             existing + " seems to contain valid transactions");
@@ -583,7 +565,7 @@ public class Journal implements Closeable {
       if (curSegment != null) {
         curSegment.close();
         curSegment = null;
-        curSegmentTxId = HdfsServerConstants.INVALID_TXID;
+        curSegmentTxId = HdfsConstants.INVALID_TXID;
       }
       
       checkSync(nextTxId == endTxId + 1,
@@ -605,7 +587,7 @@ public class Journal implements Closeable {
       if (needsValidation) {
         LOG.info("Validating log segment " + elf.getFile() + " about to be " +
             "finalized");
-        elf.scanLog(Long.MAX_VALUE, false);
+        elf.scanLog();
   
         checkSync(elf.getLastTxId() == endTxId,
             "Trying to finalize in-progress log segment %s to end at " +
@@ -693,9 +675,9 @@ public class Journal implements Closeable {
       return null;
     }
     if (elf.isInProgress()) {
-      elf.scanLog(Long.MAX_VALUE, false);
+      elf.scanLog();
     }
-    if (elf.getLastTxId() == HdfsServerConstants.INVALID_TXID) {
+    if (elf.getLastTxId() == HdfsConstants.INVALID_TXID) {
       LOG.info("Edit log file " + elf + " appears to be empty. " +
           "Moving it aside...");
       elf.moveAsideEmptyFile();
@@ -745,7 +727,7 @@ public class Journal implements Closeable {
     }
     
     builder.setLastWriterEpoch(lastWriterEpoch.get());
-    if (committedTxnId.get() != HdfsServerConstants.INVALID_TXID) {
+    if (committedTxnId.get() != HdfsConstants.INVALID_TXID) {
       builder.setLastCommittedTxId(committedTxnId.get());
     }
     
@@ -800,8 +782,8 @@ public class Journal implements Closeable {
             ": no current segment in place");
         
         // Update the highest txid for lag metrics
-        updateHighestWrittenTxId(Math.max(segment.getEndTxId(),
-            highestWrittenTxId));
+        highestWrittenTxId = Math.max(segment.getEndTxId(),
+            highestWrittenTxId);
       } else {
         LOG.info("Synchronizing log " + TextFormat.shortDebugString(segment) +
             ": old segment " + TextFormat.shortDebugString(currentSegment) +
@@ -830,7 +812,7 @@ public class Journal implements Closeable {
         // If we're shortening the log, update our highest txid
         // used for lag metrics.
         if (txnRange(currentSegment).containsLong(highestWrittenTxId)) {
-          updateHighestWrittenTxId(segment.getEndTxId());
+          highestWrittenTxId = segment.getEndTxId();
         }
       }
       syncedFile = syncLog(reqInfo, segment, fromUrl);
@@ -1009,6 +991,12 @@ public class Journal implements Closeable {
     }
   }
 
+  synchronized void discardSegments(long startTxId) throws IOException {
+    storage.getJournalManager().discardSegments(startTxId);
+    // we delete all the segments after the startTxId. let's reset committedTxnId 
+    committedTxnId.set(startTxId - 1);
+  }
+
   public synchronized void doPreUpgrade() throws IOException {
     // Do not hold file lock on committedTxnId, because the containing
     // directory will be renamed.  It will be reopened lazily on next access.
@@ -1039,7 +1027,7 @@ public class Journal implements Closeable {
         new File(previousDir, LAST_WRITER_EPOCH), 0);
     BestEffortLongFile prevCommittedTxnId = new BestEffortLongFile(
         new File(previousDir, COMMITTED_TXID_FILENAME),
-        HdfsServerConstants.INVALID_TXID);
+        HdfsConstants.INVALID_TXID);
 
     lastPromisedEpoch = new PersistentLongFile(
         new File(currentDir, LAST_PROMISED_FILENAME), 0);
@@ -1047,7 +1035,7 @@ public class Journal implements Closeable {
         new File(currentDir, LAST_WRITER_EPOCH), 0);
     committedTxnId = new BestEffortLongFile(
         new File(currentDir, COMMITTED_TXID_FILENAME),
-        HdfsServerConstants.INVALID_TXID);
+        HdfsConstants.INVALID_TXID);
 
     try {
       lastPromisedEpoch.set(prevLastPromisedEpoch.get());
@@ -1078,12 +1066,6 @@ public class Journal implements Closeable {
     // directory will be renamed.  It will be reopened lazily on next access.
     IOUtils.cleanup(LOG, committedTxnId);
     storage.getJournalManager().doRollback();
-  }
-
-  synchronized void discardSegments(long startTxId) throws IOException {
-    storage.getJournalManager().discardSegments(startTxId);
-    // we delete all the segments after the startTxId. let's reset committedTxnId 
-    committedTxnId.set(startTxId - 1);
   }
 
   public Long getJournalCTime() throws IOException {

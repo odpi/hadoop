@@ -173,13 +173,14 @@ public class Snapshot implements Comparable<byte[]> {
     public INode getChild(byte[] name, int snapshotId) {
       return getParent().getChild(name, snapshotId);
     }
-
+    
     @Override
     public ContentSummaryComputationContext computeContentSummary(
-        int snapshotId, ContentSummaryComputationContext summary) {
+        ContentSummaryComputationContext summary) {
+      int snapshotId = getParent().getSnapshot(getLocalNameBytes()).getId();
       return computeDirectoryContentSummary(summary, snapshotId);
     }
-
+    
     @Override
     public String getFullPathName() {
       return getSnapshotPath(getParent().getFullPathName(), getLocalName());

@@ -105,12 +105,4 @@ public class RmController extends Controller {
     setTitle("Node Labels");
     render(NodeLabelsPage.class);
   }
-
-  public void errorsAndWarnings() {
-    render(RMErrorsAndWarningsPage.class);
-  }
-
-  public void logaggregationstatus() {
-    render(AppLogAggregationStatusPage.class);
-  }
 }

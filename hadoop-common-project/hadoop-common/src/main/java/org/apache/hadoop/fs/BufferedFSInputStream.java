@@ -27,7 +27,7 @@ import org.apache.hadoop.classification.InterfaceStability;
 
 
 /**
- * A class that optimizes reading from FSInputStream by buffering
+ * A class optimizes reading from FSInputStream by bufferring
  */
 
 @InterfaceAudience.Private

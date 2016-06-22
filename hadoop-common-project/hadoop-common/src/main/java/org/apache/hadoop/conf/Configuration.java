@@ -34,9 +34,7 @@ import java.io.Reader;
 import java.io.Writer;
 import java.lang.ref.WeakReference;
 import java.net.InetSocketAddress;
-import java.net.JarURLConnection;
 import java.net.URL;
-import java.net.URLConnection;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -92,7 +90,6 @@ import org.apache.hadoop.util.StringInterner;
 import org.apache.hadoop.util.StringUtils;
 import org.codehaus.jackson.JsonFactory;
 import org.codehaus.jackson.JsonGenerator;
-import org.w3c.dom.Attr;
 import org.w3c.dom.DOMException;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -148,8 +145,6 @@ import com.google.common.base.Preconditions;
  * available properties are:<ol>
  * <li>Other properties defined in this Configuration; and, if a name is
  * undefined here,</li>
- * <li>Environment variables in {@link System#getenv()} if a name starts with
- * "env.", or</li>
  * <li>Properties in {@link System#getProperties()}.</li>
  * </ol>
  *
@@ -164,25 +159,13 @@ import com.google.common.base.Preconditions;
  *  &lt;property&gt;
  *    &lt;name&gt;tempdir&lt;/name&gt;
  *    &lt;value&gt;${<i>basedir</i>}/tmp&lt;/value&gt;
- *  &lt;/property&gt;
+ *  &lt;/property&gt;</pre></tt>
  *
- *  &lt;property&gt;
- *    &lt;name&gt;otherdir&lt;/name&gt;
- *    &lt;value&gt;${<i>env.BASE_DIR</i>}/other&lt;/value&gt;
- *  &lt;/property&gt;
- *  </pre></tt>
- *
- * <p>When <tt>conf.get("tempdir")</tt> is called, then <tt>${<i>basedir</i>}</tt>
+ * When <tt>conf.get("tempdir")</tt> is called, then <tt>${<i>basedir</i>}</tt>
  * will be resolved to another property in this Configuration, while
  * <tt>${<i>user.name</i>}</tt> would then ordinarily be resolved to the value
  * of the System property with that name.
- * <p>When <tt>conf.get("otherdir")</tt> is called, then <tt>${<i>env.BASE_DIR</i>}</tt>
- * will be resolved to the value of the <tt>${<i>BASE_DIR</i>}</tt> environment variable.
- * It supports <tt>${<i>env.NAME:-default</i>}</tt> and <tt>${<i>env.NAME-default</i>}</tt> notations.
- * The former is resolved to “default” if <tt>${<i>NAME</i>}</tt> environment variable is undefined
- * or its value is empty.
- * The latter behaves the same way only if <tt>${<i>NAME</i>}</tt> is undefined.
- * <p>By default, warnings will be given to any deprecated configuration 
+ * By default, warnings will be given to any deprecated configuration 
  * parameters and these are suppressible by configuring
  * <tt>log4j.logger.org.apache.hadoop.conf.Configuration.deprecation</tt> in
  * log4j.properties file.
@@ -203,7 +186,7 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
     "testingforemptydefaultvalue";
 
   private boolean allowNullValueProperties = false;
-
+  
   private static class Resource {
     private final Object resource;
     private final String name;
@@ -449,6 +432,8 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
         CommonConfigurationKeys.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY),
       new DeprecationDelta("dfs.df.interval", 
         CommonConfigurationKeys.FS_DF_INTERVAL_KEY),
+      new DeprecationDelta("hadoop.native.lib", 
+        CommonConfigurationKeys.IO_NATIVE_LIB_AVAILABLE_KEY),
       new DeprecationDelta("fs.default.name", 
         CommonConfigurationKeys.FS_DEFAULT_NAME_KEY),
       new DeprecationDelta("dfs.umaskmode",
@@ -929,17 +914,12 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
    * Attempts to repeatedly expand the value {@code expr} by replacing the
    * left-most substring of the form "${var}" in the following precedence order
    * <ol>
-   *   <li>by the value of the environment variable "var" if defined</li>
    *   <li>by the value of the Java system property "var" if defined</li>
    *   <li>by the value of the configuration key "var" if defined</li>
    * </ol>
    *
    * If var is unbounded the current state of expansion "prefix${var}suffix" is
    * returned.
-   *
-   * If a cycle is detected: replacing var1 requires replacing var2 ... requires
-   * replacing var1, i.e., the cycle is shorter than
-   * {@link Configuration#MAX_SUBST} then the original expr is returned.
    *
    * @param expr the literal value of a config key
    * @return null if expr is null, otherwise the value resulting from expanding
@@ -952,8 +932,7 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
       return null;
     }
     String eval = expr;
-    Set<String> evalSet = null;
-    for(int s = 0; s < MAX_SUBST; s++) {
+    for (int s = 0; s < MAX_SUBST; s++) {
       final int[] varBounds = findSubVariable(eval);
       if (varBounds[SUB_START_IDX] == -1) {
         return eval;
@@ -962,31 +941,7 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
           varBounds[SUB_END_IDX]);
       String val = null;
       try {
-        if (var.startsWith("env.") && 4 < var.length()) {
-          String v = var.substring(4);
-          int i = 0;
-          for (; i < v.length(); i++) {
-            char c = v.charAt(i);
-            if (c == ':' && i < v.length() - 1 && v.charAt(i + 1) == '-') {
-              val = getenv(v.substring(0, i));
-              if (val == null || val.length() == 0) {
-                val = v.substring(i + 2);
-              }
-              break;
-            } else if (c == '-') {
-              val = getenv(v.substring(0, i));
-              if (val == null) {
-                val = v.substring(i + 1);
-              }
-              break;
-            }
-          }
-          if (i == v.length()) {
-            val = getenv(v);
-          }
-        } else {
-          val = getProperty(var);
-        }
+        val = System.getProperty(var);
       } catch(SecurityException se) {
         LOG.warn("Unexpected SecurityException in Configuration", se);
       }
@@ -996,19 +951,8 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
       if (val == null) {
         return eval; // return literal ${var}: var is unbound
       }
-
-      // prevent recursive resolution
-      //
       final int dollar = varBounds[SUB_START_IDX] - "${".length();
       final int afterRightBrace = varBounds[SUB_END_IDX] + "}".length();
-      final String refVar = eval.substring(dollar, afterRightBrace);
-      if (evalSet == null) {
-        evalSet = new HashSet<String>();
-      }
-      if (!evalSet.add(refVar)) {
-        return expr; // return original expression if there is a loop
-      }
-
       // substitute
       eval = eval.substring(0, dollar)
              + val
@@ -1018,14 +962,6 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
                                     + MAX_SUBST + " " + expr);
   }
   
-  String getenv(String name) {
-    return System.getenv(name);
-  }
-
-  String getProperty(String key) {
-    return System.getProperty(key);
-  }
-
   /**
    * Get the value of the <code>name</code> property, <code>null</code> if
    * no such property exists. If the key is deprecated, it returns the value of
@@ -1205,7 +1141,7 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
     }
     getOverlay().setProperty(name, value);
     getProps().setProperty(name, value);
-    String newSource = (source == null ? "programmatically" : source);
+    String newSource = (source == null ? "programatically" : source);
 
     if (!isDeprecated(name)) {
       updatingResource.put(name, new String[] {newSource});
@@ -1676,7 +1612,7 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
   /**
    * Gets information about why a property was set.  Typically this is the 
    * path to the resource objects (file, URL, etc.) the property came from, but
-   * it can also indicate that it was set programmatically, or because of the
+   * it can also indicate that it was set programatically, or because of the
    * command line.
    *
    * @param name - The property name to get the source of.
@@ -2225,11 +2161,9 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
    *         or <code>defaultValue</code>. 
    */
   public Class<?>[] getClasses(String name, Class<?> ... defaultValue) {
-    String valueString = getRaw(name);
-    if (null == valueString) {
-      return defaultValue;
-    }
     String[] classnames = getTrimmedStrings(name);
+    if (classnames == null)
+      return defaultValue;
     try {
       Class<?>[] classes = new Class<?>[classnames.length];
       for(int i = 0; i < classnames.length; i++) {
@@ -2526,21 +2460,12 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
   private Document parse(DocumentBuilder builder, URL url)
       throws IOException, SAXException {
     if (!quietmode) {
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("parsing URL " + url);
-      }
+      LOG.debug("parsing URL " + url);
     }
     if (url == null) {
       return null;
     }
-
-    URLConnection connection = url.openConnection();
-    if (connection instanceof JarURLConnection) {
-      // Disable caching for JarURLConnection to avoid sharing JarFile
-      // with other users.
-      connection.setUseCaches(false);
-    }
-    return parse(builder, connection.getInputStream(), url.toString());
+    return parse(builder, url.openStream(), url.toString());
   }
 
   private Document parse(DocumentBuilder builder, InputStream is,
@@ -2661,26 +2586,11 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
         }
         if (!"property".equals(prop.getTagName()))
           LOG.warn("bad conf file: element not <property>");
-
+        NodeList fields = prop.getChildNodes();
         String attr = null;
         String value = null;
         boolean finalParameter = false;
         LinkedList<String> source = new LinkedList<String>();
-
-        Attr propAttr = prop.getAttributeNode("name");
-        if (propAttr != null)
-          attr = StringInterner.weakIntern(propAttr.getValue());
-        propAttr = prop.getAttributeNode("value");
-        if (propAttr != null)
-          value = StringInterner.weakIntern(propAttr.getValue());
-        propAttr = prop.getAttributeNode("final");
-        if (propAttr != null)
-          finalParameter = "true".equals(propAttr.getValue());
-        propAttr = prop.getAttributeNode("source");
-        if (propAttr != null)
-          source.add(StringInterner.weakIntern(propAttr.getValue()));
-
-        NodeList fields = prop.getChildNodes();
         for (int j = 0; j < fields.getLength(); j++) {
           Node fieldNode = fields.item(j);
           if (!(fieldNode instanceof Element))
@@ -2744,14 +2654,14 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
       to.put(entry.getKey(), entry.getValue());
     }
   }
-
+  
   private void loadProperty(Properties properties, String name, String attr,
       String value, boolean finalParameter, String[] source) {
     if (value != null || allowNullValueProperties) {
-      if (value == null) {
-        value = DEFAULT_STRING_CHECK;
-      }
       if (!finalParameters.contains(attr)) {
+        if (value==null && allowNullValueProperties) {
+          value = DEFAULT_STRING_CHECK;
+        }
         properties.setProperty(attr, value);
         if(source != null) {
           updatingResource.put(attr, source);
@@ -3009,7 +2919,7 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
 
   /**
    * A unique class which is used as a sentinel value in the caching
-   * for getClassByName. {@link Configuration#getClassByNameOrNull(String)}
+   * for getClassByName. {@see Configuration#getClassByNameOrNull(String)}
    */
   private static abstract class NegativeCacheSentinel {}
 

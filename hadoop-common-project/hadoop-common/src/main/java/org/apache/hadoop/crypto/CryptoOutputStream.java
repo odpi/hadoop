@@ -263,6 +263,12 @@ public class CryptoOutputStream extends FilterOutputStream implements
   }
 
   @Override
+  @Deprecated
+  public void sync() throws IOException {
+    hflush();
+  }
+
+  @Override
   public void hflush() throws IOException {
     flush();
     if (out instanceof Syncable) {

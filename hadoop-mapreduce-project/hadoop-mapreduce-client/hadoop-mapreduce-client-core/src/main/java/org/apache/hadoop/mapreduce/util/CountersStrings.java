@@ -151,11 +151,24 @@ public class CountersStrings {
   public static <C extends Counter, G extends CounterGroupBase<C>,
                  T extends AbstractCounters<C, G>>
   String toEscapedCompactString(T counters) {
-    StringBuilder builder = new StringBuilder();
+    String[] groupsArray;
+    int length = 0;
     synchronized(counters) {
+      groupsArray = new String[counters.countCounters()];
+      int i = 0;
+      // First up, obtain the escaped string for each group so that we can
+      // determine the buffer length apriori.
       for (G group : counters) {
-        builder.append(toEscapedCompactString(group));
+        String escapedString = toEscapedCompactString(group);
+        groupsArray[i++] = escapedString;
+        length += escapedString.length();
       }
+    }
+
+    // Now construct the buffer
+    StringBuilder builder = new StringBuilder(length);
+    for (String group : groupsArray) {
+      builder.append(group);
     }
     return builder.toString();
   }

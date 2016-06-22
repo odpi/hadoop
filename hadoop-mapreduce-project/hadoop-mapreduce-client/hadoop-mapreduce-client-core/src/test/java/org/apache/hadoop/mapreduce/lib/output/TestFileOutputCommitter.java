@@ -309,15 +309,6 @@ public class TestFileOutputCommitter extends TestCase {
     committer.commitTask(tContext);
     committer.commitJob(jContext);
 
-    // Ensure getReaders call works and also ignores
-    // hidden filenames (_ or . prefixes)
-    try {
-      MapFileOutputFormat.getReaders(outDir, conf);
-    } catch (Exception e) {
-      fail("Fail to read from MapFileOutputFormat: " + e);
-      e.printStackTrace();
-    }
-
     // validate output
     validateMapFileOutputContent(FileSystem.get(job.getConfiguration()), outDir);
     FileUtil.fullyDelete(new File(outDir.toString()));

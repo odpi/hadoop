@@ -85,8 +85,6 @@ import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatRequest;
 import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatResponse;
 import org.apache.hadoop.yarn.server.api.protocolrecords.RegisterNodeManagerRequest;
 import org.apache.hadoop.yarn.server.api.protocolrecords.RegisterNodeManagerResponse;
-import org.apache.hadoop.yarn.server.api.protocolrecords.UnRegisterNodeManagerRequest;
-import org.apache.hadoop.yarn.server.api.protocolrecords.UnRegisterNodeManagerResponse;
 import org.apache.hadoop.yarn.server.api.protocolrecords.impl.pb.NodeHeartbeatResponsePBImpl;
 import org.apache.hadoop.yarn.server.api.records.MasterKey;
 import org.apache.hadoop.yarn.server.api.records.NodeAction;
@@ -296,13 +294,6 @@ public class TestNodeStatusUpdater {
           newNodeHeartbeatResponse(heartBeatID, null, null, null, null, null,
             1000L);
       return nhResponse;
-    }
-
-    @Override
-    public UnRegisterNodeManagerResponse unRegisterNodeManager(
-        UnRegisterNodeManagerRequest request) throws YarnException, IOException {
-      return recordFactory
-          .newRecordInstance(UnRegisterNodeManagerResponse.class);
     }
   }
 
@@ -524,13 +515,6 @@ public class TestNodeStatusUpdater {
       nhResponse.setDiagnosticsMessage(shutDownMessage);
       return nhResponse;
     }
-
-    @Override
-    public UnRegisterNodeManagerResponse unRegisterNodeManager(
-        UnRegisterNodeManagerRequest request) throws YarnException, IOException {
-      return recordFactory
-          .newRecordInstance(UnRegisterNodeManagerResponse.class);
-    }
   }
 
   private class MyResourceTracker3 implements ResourceTracker {
@@ -585,13 +569,6 @@ public class TestNodeStatusUpdater {
         nhResponse.addAllApplicationsToCleanup(Collections.singletonList(appId));
       }
       return nhResponse;
-    }
-
-    @Override
-    public UnRegisterNodeManagerResponse unRegisterNodeManager(
-        UnRegisterNodeManagerRequest request) throws YarnException, IOException {
-      return recordFactory
-          .newRecordInstance(UnRegisterNodeManagerResponse.class);
     }
   }
 
@@ -761,13 +738,6 @@ public class TestNodeStatusUpdater {
       nhResponse.setSystemCredentialsForApps(appCredentials);
       return nhResponse;
     }
-
-    @Override
-    public UnRegisterNodeManagerResponse unRegisterNodeManager(
-        UnRegisterNodeManagerRequest request) throws YarnException, IOException {
-      return recordFactory
-          .newRecordInstance(UnRegisterNodeManagerResponse.class);
-    }
   }
 
   private class MyResourceTracker5 implements ResourceTracker {
@@ -797,13 +767,6 @@ public class TestNodeStatusUpdater {
       throw new java.net.ConnectException(
           "NodeHeartbeat exception");
       }
-    }
-
-    @Override
-    public UnRegisterNodeManagerResponse unRegisterNodeManager(
-        UnRegisterNodeManagerRequest request) throws YarnException, IOException {
-      return recordFactory
-          .newRecordInstance(UnRegisterNodeManagerResponse.class);
     }
   }
 
@@ -856,13 +819,6 @@ public class TestNodeStatusUpdater {
           newNodeHeartbeatResponse(heartBeatID, NodeAction.NORMAL, null,
               null, null, null, 1000L);
       return nhResponse;
-    }
-
-    @Override
-    public UnRegisterNodeManagerResponse unRegisterNodeManager(
-        UnRegisterNodeManagerRequest request) throws YarnException, IOException {
-      return recordFactory
-          .newRecordInstance(UnRegisterNodeManagerResponse.class);
     }
   }
 
@@ -992,40 +948,6 @@ public class TestNodeStatusUpdater {
     Assert.assertFalse(containerIdSet.contains(cId));
     // running container is not removed;
     Assert.assertTrue(containerIdSet.contains(runningContainerId));
-  }
-
-  @Test(timeout = 10000)
-  public void testCompletedContainersIsRecentlyStopped() throws Exception {
-    NodeManager nm = new NodeManager();
-    nm.init(conf);
-    NodeStatusUpdaterImpl nodeStatusUpdater =
-        (NodeStatusUpdaterImpl) nm.getNodeStatusUpdater();
-    ApplicationId appId = ApplicationId.newInstance(0, 0);
-    Application completedApp = mock(Application.class);
-    when(completedApp.getApplicationState()).thenReturn(
-        ApplicationState.FINISHED);
-    ApplicationAttemptId appAttemptId =
-        ApplicationAttemptId.newInstance(appId, 0);
-    ContainerId containerId = ContainerId.newContainerId(appAttemptId, 1);
-    Token containerToken =
-        BuilderUtils.newContainerToken(containerId, "host", 1234, "user",
-            BuilderUtils.newResource(1024, 1), 0, 123,
-            "password".getBytes(), 0);
-    Container completedContainer = new ContainerImpl(conf, null,
-        null, null, null, null,
-        BuilderUtils.newContainerTokenIdentifier(containerToken)) {
-      @Override
-      public ContainerState getCurrentState() {
-        return ContainerState.COMPLETE;
-      }
-    };
-
-    nm.getNMContext().getApplications().putIfAbsent(appId, completedApp);
-    nm.getNMContext().getContainers().put(containerId, completedContainer);
-
-    Assert.assertEquals(1, nodeStatusUpdater.getContainerStatuses().size());
-    Assert.assertTrue(nodeStatusUpdater.isContainerRecentlyStopped(
-        containerId));
   }
 
   @Test
@@ -1160,7 +1082,7 @@ public class TestNodeStatusUpdater {
           ApplicationACLsManager aclsManager,
           LocalDirsHandlerService dirsHandler) {
         return new ContainerManagerImpl(context, exec, del, nodeStatusUpdater,
-            metrics, dirsHandler) {
+            metrics, aclsManager, dirsHandler) {
 
           @Override
           public void cleanUpApplicationsOnNMShutDown() {
@@ -1260,7 +1182,7 @@ public class TestNodeStatusUpdater {
       }
     };
     verifyNodeStartFailure(
-          "Recieved SHUTDOWN signal from Resourcemanager, "
+          "Recieved SHUTDOWN signal from Resourcemanager ,"
         + "Registration of NodeManager failed, "
         + "Message from ResourceManager: RM Shutting Down Node");
   }
@@ -1373,7 +1295,7 @@ public class TestNodeStatusUpdater {
           ApplicationACLsManager aclsManager,
           LocalDirsHandlerService diskhandler) {
         return new ContainerManagerImpl(context, exec, del, nodeStatusUpdater,
-          metrics, diskhandler) {
+          metrics, aclsManager, diskhandler) {
           @Override
           protected void serviceStart() {
             // Simulating failure of starting RPC server
@@ -1523,7 +1445,7 @@ public class TestNodeStatusUpdater {
           ApplicationACLsManager aclsManager,
           LocalDirsHandlerService dirsHandler) {
         return new ContainerManagerImpl(context, exec, del, nodeStatusUpdater,
-            metrics, dirsHandler) {
+            metrics, aclsManager, dirsHandler) {
 
           @Override
           public void cleanUpApplicationsOnNMShutDown() {

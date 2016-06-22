@@ -48,10 +48,6 @@ public class TestCommandFactory {
     factory.addClass(TestCommand3.class, "tc3");
     names = factory.getNames();
     assertArrayEquals(new String []{"tc1", "tc2", "tc2.1", "tc3"}, names);
-    
-    factory.addClass(TestCommand4.class, (new TestCommand4()).getName());
-    names = factory.getNames();
-    assertArrayEquals(new String[]{"tc1", "tc2", "tc2.1", "tc3", "tc4"}, names);
   }
   
   @Test
@@ -76,17 +72,8 @@ public class TestCommandFactory {
     assertNotNull(instance);
     assertEquals(TestCommand2.class, instance.getClass());    
     assertEquals("tc2.1", instance.getCommandName());
-    
-    factory.addClass(TestCommand4.class, "tc4");
-    instance = factory.getInstance("tc4");
-    assertNotNull(instance);
-    assertEquals(TestCommand4.class, instance.getClass());    
-    assertEquals("tc4", instance.getCommandName());
-    String usage = instance.getUsage();
-    assertEquals("-tc4 tc4_usage", usage);
-    assertEquals("tc4_description", instance.getDescription());
   }
-
+  
   static class TestRegistrar {
     public static void registerCommands(CommandFactory factory) {
       factory.addClass(TestCommand1.class, "tc1");
@@ -97,10 +84,4 @@ public class TestCommandFactory {
   static class TestCommand1 extends FsCommand {}
   static class TestCommand2 extends FsCommand {}
   static class TestCommand3 extends FsCommand {}
-  
-  static class TestCommand4 extends FsCommand {
-    static final String NAME = "tc4";
-    static final String USAGE = "tc4_usage";
-    static final String DESCRIPTION = "tc4_description";
-  }
 }

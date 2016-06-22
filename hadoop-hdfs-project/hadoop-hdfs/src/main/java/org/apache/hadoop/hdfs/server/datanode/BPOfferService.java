@@ -29,7 +29,6 @@ import org.apache.hadoop.ha.HAServiceProtocol.HAServiceState;
 import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
-import org.apache.hadoop.hdfs.protocol.RollingUpgradeStatus;
 import org.apache.hadoop.hdfs.protocolPB.DatanodeProtocolClientSideTranslatorPB;
 import org.apache.hadoop.hdfs.server.protocol.*;
 import org.apache.hadoop.hdfs.server.protocol.ReceivedDeletedBlockInfo.BlockStatus;
@@ -53,7 +52,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 @InterfaceAudience.Private
 class BPOfferService {
   static final Log LOG = DataNode.LOG;
-  
+
   /**
    * Information about the namespace that this service
    * is registering with. This is assigned after
@@ -351,8 +350,9 @@ class BPOfferService {
             reg.getStorageInfo().getNamespaceID(), "namespace ID");
         checkNSEquality(bpRegistration.getStorageInfo().getClusterID(),
             reg.getStorageInfo().getClusterID(), "cluster ID");
+      } else {
+        bpRegistration = reg;
       }
-      bpRegistration = reg;
 
       dn.bpRegistrationSucceeded(bpRegistration, getBlockPoolId());
       // Add the initial block token secret keys to the DN's secret manager.
@@ -410,6 +410,7 @@ class BPOfferService {
       writeUnlock();
     }
   }
+  
 
   /**
    * Called by the DN to report an error to the NNs.
@@ -470,19 +471,15 @@ class BPOfferService {
   
   /**
    * Signal the current rolling upgrade status as indicated by the NN.
-   * @param rollingUpgradeStatus rolling upgrade status
+   * @param inProgress true if a rolling upgrade is in progress
    */
-  void signalRollingUpgrade(RollingUpgradeStatus rollingUpgradeStatus)
-      throws IOException {
-    if (rollingUpgradeStatus == null) {
-      return;
-    }
+  void signalRollingUpgrade(boolean inProgress) throws IOException {
     String bpid = getBlockPoolId();
-    if (!rollingUpgradeStatus.isFinalized()) {
+    if (inProgress) {
       dn.getFSDataset().enableTrash(bpid);
       dn.getFSDataset().setRollingUpgradeMarker(bpid);
     } else {
-      dn.getFSDataset().clearTrash(bpid);
+      dn.getFSDataset().restoreTrash(bpid);
       dn.getFSDataset().clearRollingUpgradeMarker(bpid);
     }
   }
@@ -655,6 +652,7 @@ class BPOfferService {
       // Send a copy of a block to another datanode
       dn.transferBlocks(bcmd.getBlockPoolId(), bcmd.getBlocks(),
           bcmd.getTargets(), bcmd.getTargetStorageTypes());
+      dn.metrics.incrBlocksReplicated(bcmd.getBlocks().length);
       break;
     case DatanodeProtocol.DNA_INVALIDATE:
       //

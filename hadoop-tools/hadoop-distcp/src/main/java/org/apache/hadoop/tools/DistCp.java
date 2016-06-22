@@ -28,7 +28,6 @@ import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Cluster;
@@ -175,18 +174,11 @@ public class DistCp extends Configured implements Tool {
         job = createJob();
       }
       if (inputOptions.shouldUseDiff()) {
-        DistCpSync distCpSync = new DistCpSync(inputOptions, getConf());
-        if (distCpSync.sync()) {
-          createInputFileListingWithDiff(job, distCpSync);
-        } else {
+        if (!DistCpSync.sync(inputOptions, getConf())) {
           inputOptions.disableUsingDiff();
         }
       }
-
-      // Fallback to default DistCp if without "diff" option or sync failed.
-      if (!inputOptions.shouldUseDiff()) {
-        createInputFileListing(job);
-      }
+      createInputFileListing(job);
 
       job.submit();
       submitted = true;
@@ -355,7 +347,7 @@ public class DistCp extends Configured implements Tool {
       workDir = new Path(workDir, WIP_PREFIX + targetPath.getName()
                                 + rand.nextInt());
       FileSystem workFS = workDir.getFileSystem(configuration);
-      if (!FileUtil.compareFs(targetFS, workFS)) {
+      if (!DistCpUtils.compareFs(targetFS, workFS)) {
         throw new IllegalArgumentException("Work path " + workDir +
             " and target path " + targetPath + " are in different file system");
       }
@@ -392,22 +384,6 @@ public class DistCp extends Configured implements Tool {
   }
 
   /**
-   * Create input listing based on snapshot diff report.
-   * @param job - Handle to job
-   * @param distCpSync the class wraps the snapshot diff report
-   * @return Returns the path where the copy listing is created
-   * @throws IOException - If any
-   */
-  private Path createInputFileListingWithDiff(Job job, DistCpSync distCpSync)
-      throws IOException {
-    Path fileListingPath = getFileListingPath();
-    CopyListing copyListing = new SimpleCopyListing(job.getConfiguration(),
-        job.getCredentials(), distCpSync);
-    copyListing.buildListing(fileListingPath, inputOptions);
-    return fileListingPath;
-  }
-
-  /**
    * Get default name of the copy listing file. Use the meta folder
    * to create the copy listing file
    *
@@ -425,7 +401,7 @@ public class DistCp extends Configured implements Tool {
    * job staging directory
    *
    * @return Returns the working folder information
-   * @throws Exception - Exception if any
+   * @throws Exception - EXception if any
    */
   private Path createMetaFolderPath() throws Exception {
     Configuration configuration = getConf();

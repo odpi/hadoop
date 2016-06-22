@@ -18,7 +18,7 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.hadoop</groupId>
   <artifactId>hadoop-main</artifactId>
-  <version>3.0.0-SNAPSHOT</version>
+  <version>2.7.1-odpi</version>
   <description>Apache Hadoop Main</description>
   <name>Apache Hadoop Main</name>
   <packaging>pom</packaging>
@@ -102,11 +102,6 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
     <wagon-ssh.version>1.0</wagon-ssh.version>
     <maven-clover2-plugin.version>3.3.0</maven-clover2-plugin.version>
     <maven-bundle-plugin.version>2.5.0</maven-bundle-plugin.version>
-    <lifecycle-mapping.version>1.0.0</lifecycle-mapping.version>
-    <maven-checkstyle-plugin.version>2.15</maven-checkstyle-plugin.version>
-    <checkstyle.version>6.6</checkstyle.version>
-
-    <shell-executable>bash</shell-executable>
   </properties>
 
   <modules>
@@ -122,7 +117,6 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
     <module>hadoop-dist</module>
     <module>hadoop-client</module>
     <module>hadoop-minicluster</module>
-    <module>hadoop-build-tools</module>
   </modules>
 
   <build>
@@ -180,113 +174,6 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
             </dependency>
           </dependencies>
         </plugin>
-        <!--This plugin's configuration is used to store Eclipse m2e settings only.
-        It has no influence on the Maven build itself.-->
-        <plugin>
-          <groupId>org.eclipse.m2e</groupId>
-          <artifactId>lifecycle-mapping</artifactId>
-          <version>${lifecycle-mapping.version}</version>
-          <configuration>
-            <lifecycleMappingMetadata>
-              <pluginExecutions>
-                <pluginExecution>
-                  <pluginExecutionFilter>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-antrun-plugin</artifactId>
-                    <versionRange>[1.7,)</versionRange>
-                    <goals>
-                      <goal>run</goal>
-                    </goals>
-                  </pluginExecutionFilter>
-                  <action>
-                    <ignore></ignore>
-                  </action>
-                </pluginExecution>
-                <pluginExecution>
-                  <pluginExecutionFilter>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-resources-plugin</artifactId>
-                    <versionRange>[2.2,)</versionRange>
-                    <goals>
-                      <goal>testResources</goal>
-                      <goal>resources</goal>
-                    </goals>
-                  </pluginExecutionFilter>
-                  <action>
-                    <ignore></ignore>
-                  </action>
-                </pluginExecution>
-                <pluginExecution>
-                  <pluginExecutionFilter>
-                    <groupId>org.apache.avro</groupId>
-                    <artifactId>avro-maven-plugin</artifactId>
-                    <versionRange>[1.5.3,)</versionRange>
-                    <goals>
-                      <goal>schema</goal>
-                      <goal>protocol</goal>
-                    </goals>
-                  </pluginExecutionFilter>
-                  <action>
-                    <ignore></ignore>
-                  </action>
-                </pluginExecution>
-                <pluginExecution>
-                  <pluginExecutionFilter>
-                    <groupId>org.codehaus.mojo.jspc</groupId>
-                    <artifactId>jspc-maven-plugin</artifactId>
-                    <versionRange>[2.0-alpha-3,)</versionRange>
-                    <goals>
-                      <goal>compile</goal>
-                    </goals>
-                  </pluginExecutionFilter>
-                  <action>
-                    <ignore></ignore>
-                  </action>
-                </pluginExecution>
-                <pluginExecution>
-                  <pluginExecutionFilter>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-dependency-plugin</artifactId>
-                    <versionRange>[2.4,)</versionRange>
-                    <goals>
-                      <goal>copy-dependencies</goal>
-                      <goal>build-classpath</goal>
-                    </goals>
-                  </pluginExecutionFilter>
-                  <action>
-                    <ignore></ignore>
-                  </action>
-                </pluginExecution>
-                <pluginExecution>
-                  <pluginExecutionFilter>
-                    <groupId>org.codehaus.mojo</groupId>
-                    <artifactId>exec-maven-plugin</artifactId>
-                    <versionRange>[1.2,)</versionRange>
-                    <goals>
-                      <goal>exec</goal>
-                    </goals>
-                  </pluginExecutionFilter>
-                  <action>
-                    <ignore></ignore>
-                  </action>
-                </pluginExecution>
-                <pluginExecution>
-                  <pluginExecutionFilter>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-jar-plugin</artifactId>
-                    <versionRange>[2.3.1,)</versionRange>
-                    <goals>
-                      <goal>test-jar</goal>
-                    </goals>
-                  </pluginExecutionFilter>
-                  <action>
-                    <ignore></ignore>
-                  </action>
-                </pluginExecution>
-              </pluginExecutions>
-            </lifecycleMappingMetadata>
-          </configuration>
-        </plugin>
         <plugin>
           <groupId>com.atlassian.maven.plugins</groupId>
           <artifactId>maven-clover2-plugin</artifactId>
@@ -296,30 +183,6 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
           <groupId>org.apache.felix</groupId>
           <artifactId>maven-bundle-plugin</artifactId>
           <version>${maven-bundle-plugin.version}</version>
-        </plugin>
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-checkstyle-plugin</artifactId>
-          <version>${maven-checkstyle-plugin.version}</version>
-          <dependencies>
-            <dependency>
-              <groupId>org.apache.hadoop</groupId>
-              <artifactId>hadoop-build-tools</artifactId>
-              <version>${project.version}</version>
-            </dependency>
-            <dependency>
-              <groupId>com.puppycrawl.tools</groupId>
-              <artifactId>checkstyle</artifactId>
-              <version>${checkstyle.version}</version>
-            </dependency>
-          </dependencies>
-          <configuration>
-            <configLocation>checkstyle/checkstyle.xml</configLocation>
-            <failOnViolation>false</failOnViolation>
-            <format>xml</format>
-            <format>html</format>
-            <outputFile>${project.build.directory}/test/checkstyle-errors.xml</outputFile>
-          </configuration>
         </plugin>
       </plugins>
     </pluginManagement>
@@ -363,7 +226,6 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
             <exclude>.git/**</exclude>
             <exclude>.idea/**</exclude>
 	    <exclude>**/build/**</exclude>
-            <exclude>**/patchprocess/**</exclude>
          </excludes>
        </configuration>
       </plugin>
@@ -387,14 +249,9 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
         <inherited>true</inherited>
         <extensions>true</extensions>
       </plugin>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-checkstyle-plugin</artifactId>
-        <version>${maven-checkstyle-plugin.version}</version>
-      </plugin>
     </plugins>
   </build>
-
+  
   <reporting>
     <excludeDefaults>true</excludeDefaults>
     <plugins>
@@ -416,15 +273,11 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
               <reportOutputDirectory>${project.build.directory}/site</reportOutputDirectory>
               <destDir>hadoop-project/api</destDir>
               <!-- Non-public APIs -->
-              <excludePackageNames>org.apache.hadoop.authentication*,org.apache.hadoop.mapreduce.v2.proto,org.apache.hadoop.yarn.proto,org.apache.hadoop.yarn.server*,org.apache.hadoop.yarn.webapp*</excludePackageNames>
+              <excludePackageNames>org.apache.hadoop.authentication*,org.apache.hadoop.hdfs*,org.apache.hadoop.mapreduce.v2.proto,org.apache.hadoop.yarn.proto,org.apache.hadoop.yarn.server*,org.apache.hadoop.yarn.webapp*</excludePackageNames>
               <groups>
                 <group>
                   <title>Common</title>
                   <packages>org.apache.hadoop*</packages>
-                </group>
-                <group>
-                  <title>HDFS</title>
-                  <packages>org.apache.hadoop.hdfs*</packages>
                 </group>
                 <group>
                   <title>MapReduce</title>
@@ -444,15 +297,15 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
                 </docletArtifact>
               </docletArtifacts>
               <useStandardDocletOptions>true</useStandardDocletOptions>
-
+    
               <!-- switch on dependency-driven aggregation -->
               <includeDependencySources>false</includeDependencySources>
-
+    
               <dependencySourceIncludes>
                 <!-- include ONLY dependencies I control -->
                 <dependencySourceInclude>org.apache.hadoop:hadoop-annotations</dependencySourceInclude>
               </dependencySourceIncludes>
-
+    
             </configuration>
             <reports>
               <report>aggregate</report>
@@ -475,7 +328,7 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
       </plugin>
     </plugins>
   </reporting>
-
+  
   <profiles>
     <profile>
       <id>src</id>
@@ -590,12 +443,12 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
       <properties>
         <cloverLicenseLocation>${user.home}/.clover.license</cloverLicenseLocation>
         <cloverDatabase>${project.build.directory}/clover/hadoop-coverage.db</cloverDatabase>
-        <!-- NB: This additional parametrization is made in order
+        <!-- NB: This additional parametrization is made in order 
              to be able to re-define these properties with "-Dk=v" maven options.
-             By some reason the expressions declared in clover
-             docs like "${maven.clover.generateHtml}" do not work in that way.
-             However, the below properties are confirmed to work: e.g.
-             -DcloverGenHtml=false switches off the Html generation.
+             By some reason the expressions declared in clover 
+             docs like "${maven.clover.generateHtml}" do not work in that way. 
+             However, the below properties are confirmed to work: e.g. 
+             -DcloverGenHtml=false switches off the Html generation.  
              The default values provided here exactly correspond to Clover defaults, so
              the behavior is 100% backwards compatible. -->
         <cloverAlwaysReport>true</cloverAlwaysReport>

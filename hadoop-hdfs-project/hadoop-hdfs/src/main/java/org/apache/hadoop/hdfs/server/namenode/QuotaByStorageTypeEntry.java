@@ -21,7 +21,7 @@ import com.google.common.base.Objects;
 import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.util.StringUtils;
 
-public class QuotaByStorageTypeEntry {
+ public class QuotaByStorageTypeEntry {
    private StorageType type;
    private long quota;
 

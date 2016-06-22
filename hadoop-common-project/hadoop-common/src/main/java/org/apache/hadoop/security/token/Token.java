@@ -36,7 +36,7 @@ import java.util.ServiceLoader;
 /**
  * The client-side form of the token.
  */
-@InterfaceAudience.Public
+@InterfaceAudience.LimitedPrivate({"HDFS", "MapReduce"})
 @InterfaceStability.Evolving
 public class Token<T extends TokenIdentifier> implements Writable {
   public static final Log LOG = LogFactory.getLog(Token.class);
@@ -70,10 +70,10 @@ public class Token<T extends TokenIdentifier> implements Writable {
    * @param service the service for this token
    */
   public Token(byte[] identifier, byte[] password, Text kind, Text service) {
-    this.identifier = (identifier == null)? new byte[0] : identifier;
-    this.password = (password == null)? new byte[0] : password;
-    this.kind = (kind == null)? new Text() : kind;
-    this.service = (service == null)? new Text() : service;
+    this.identifier = identifier;
+    this.password = password;
+    this.kind = kind;
+    this.service = service;
   }
 
   /**
@@ -162,7 +162,7 @@ public class Token<T extends TokenIdentifier> implements Writable {
 
   /**
    * Set the token kind. This is only intended to be used by services that
-   * wrap another service's token.
+   * wrap another service's token, such as HFTP wrapping HDFS.
    * @param newKind
    */
   @InterfaceAudience.Private

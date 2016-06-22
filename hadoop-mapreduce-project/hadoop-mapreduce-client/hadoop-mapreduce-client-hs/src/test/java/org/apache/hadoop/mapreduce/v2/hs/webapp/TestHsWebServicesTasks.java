@@ -33,7 +33,6 @@ import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.mapreduce.TaskID;
 import org.apache.hadoop.mapreduce.v2.api.records.JobId;
 import org.apache.hadoop.mapreduce.v2.api.records.TaskId;
 import org.apache.hadoop.mapreduce.v2.api.records.TaskReport;
@@ -369,11 +368,9 @@ public class TestHsWebServicesTasks extends JerseyTest {
         String message = exception.getString("message");
         String type = exception.getString("exception");
         String classname = exception.getString("javaClassName");
-        WebServicesTestUtils.checkStringEqual("exception message",
+        WebServicesTestUtils.checkStringMatch("exception message",
             "java.lang.Exception: TaskId string : "
-                + "bogustaskid is not properly formed"
-                + "\nReason: java.util.regex.Matcher[pattern=" +
-                TaskID.TASK_ID_REGEX + " region=0,11 lastmatch=]", message);
+                + "bogustaskid is not properly formed", message);
         WebServicesTestUtils.checkStringMatch("exception type",
             "NotFoundException", type);
         WebServicesTestUtils.checkStringMatch("exception classname",
@@ -435,11 +432,9 @@ public class TestHsWebServicesTasks extends JerseyTest {
         String message = exception.getString("message");
         String type = exception.getString("exception");
         String classname = exception.getString("javaClassName");
-        WebServicesTestUtils.checkStringEqual("exception message",
-            "java.lang.Exception: TaskId string : "
-                + "task_0_0000_d_000000 is not properly formed" +
-                "\nReason: java.util.regex.Matcher[pattern=" +
-                TaskID.TASK_ID_REGEX + " region=0,20 lastmatch=]", message);
+        WebServicesTestUtils.checkStringMatch("exception message",
+            "java.lang.Exception: Bad TaskType identifier. TaskId string : "
+                + "task_0_0000_d_000000 is not properly formed.", message);
         WebServicesTestUtils.checkStringMatch("exception type",
             "NotFoundException", type);
         WebServicesTestUtils.checkStringMatch("exception classname",
@@ -469,11 +464,9 @@ public class TestHsWebServicesTasks extends JerseyTest {
         String message = exception.getString("message");
         String type = exception.getString("exception");
         String classname = exception.getString("javaClassName");
-        WebServicesTestUtils.checkStringEqual("exception message",
+        WebServicesTestUtils.checkStringMatch("exception message",
             "java.lang.Exception: TaskId string : "
-                + "task_0000_m_000000 is not properly formed" +
-                "\nReason: java.util.regex.Matcher[pattern=" +
-                TaskID.TASK_ID_REGEX + " region=0,18 lastmatch=]", message);
+                + "task_0000_m_000000 is not properly formed", message);
         WebServicesTestUtils.checkStringMatch("exception type",
             "NotFoundException", type);
         WebServicesTestUtils.checkStringMatch("exception classname",
@@ -503,11 +496,9 @@ public class TestHsWebServicesTasks extends JerseyTest {
         String message = exception.getString("message");
         String type = exception.getString("exception");
         String classname = exception.getString("javaClassName");
-        WebServicesTestUtils.checkStringEqual("exception message",
+        WebServicesTestUtils.checkStringMatch("exception message",
             "java.lang.Exception: TaskId string : "
-                + "task_0_0000_m is not properly formed" +
-                "\nReason: java.util.regex.Matcher[pattern=" +
-                TaskID.TASK_ID_REGEX + " region=0,13 lastmatch=]", message);
+                + "task_0_0000_m is not properly formed", message);
         WebServicesTestUtils.checkStringMatch("exception type",
             "NotFoundException", type);
         WebServicesTestUtils.checkStringMatch("exception classname",

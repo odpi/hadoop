@@ -700,7 +700,7 @@ public class TestJobHistoryParsing {
   }
 
   /**
-   * Test clean old history files. Files should be deleted after 1 week by
+   * test clean old history files. Files should be deleted after 1 week by
    * default.
    */
   @Test(timeout = 15000)
@@ -708,7 +708,6 @@ public class TestJobHistoryParsing {
     LOG.info("STARTING testDeleteFileInfo");
     try {
       Configuration conf = new Configuration();
-
       conf.setClass(
           NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY,
           MyResolver.class, DNSToSwitchMapping.class);
@@ -724,7 +723,6 @@ public class TestJobHistoryParsing {
 
       // make sure all events are flushed
       app.waitForState(Service.STATE.STOPPED);
-
       HistoryFileManager hfm = new HistoryFileManager();
       hfm.init(conf);
       HistoryFileInfo fileInfo = hfm.getFileInfo(jobId);
@@ -773,8 +771,6 @@ public class TestJobHistoryParsing {
           true);
       app.submit(configuration);
       Job job = app.getContext().getAllJobs().values().iterator().next();
-      JobId jobId = job.getID();
-      LOG.info("JOBID is " + TypeConverter.fromYarn(jobId).toString());
       app.waitForState(job, JobState.SUCCEEDED);
 
       JobHistory jobHistory = new JobHistory();
@@ -817,8 +813,7 @@ public class TestJobHistoryParsing {
     JobIndexInfo jii = new JobIndexInfo(0L, System.currentTimeMillis(), "user",
         "jobName", jobId, 3, 2, "JobStatus");
     PartialJob test = new PartialJob(jii, jobId);
-    
-    Assert.assertEquals(1.0f, test.getProgress(), 0.001f);
+    assertEquals(1.0f, test.getProgress(), 0.001);
     assertNull(test.getAllCounters());
     assertNull(test.getTasks());
     assertNull(test.getTasks(TaskType.MAP));

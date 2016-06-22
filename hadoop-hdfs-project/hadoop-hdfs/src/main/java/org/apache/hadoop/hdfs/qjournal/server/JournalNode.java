@@ -296,6 +296,11 @@ public class JournalNode implements Tool, Configurable, JournalNodeMXBean {
     System.exit(ToolRunner.run(new JournalNode(), args));
   }
 
+  public void discardSegments(String journalId, long startTxId)
+      throws IOException {
+    getOrCreateJournal(journalId).discardSegments(startTxId);
+  }
+
   public void doPreUpgrade(String journalId) throws IOException {
     getOrCreateJournal(journalId).doPreUpgrade();
   }
@@ -316,11 +321,6 @@ public class JournalNode implements Tool, Configurable, JournalNodeMXBean {
 
   public void doRollback(String journalId) throws IOException {
     getOrCreateJournal(journalId, StartupOption.ROLLBACK).doRollback();
-  }
-
-  public void discardSegments(String journalId, long startTxId)
-      throws IOException {
-    getOrCreateJournal(journalId).discardSegments(startTxId);
   }
 
   public Long getJournalCTime(String journalId) throws IOException {

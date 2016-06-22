@@ -20,15 +20,12 @@ package org.apache.hadoop.yarn.server.resourcemanager.scheduler;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.nodelabels.CommonNodeLabelsManager;
-import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMNodeLabelsManager;
 import org.apache.hadoop.yarn.util.resource.Resources;
 
 /**
@@ -58,10 +55,7 @@ public class ResourceUsage {
 
   // Usage enum here to make implement cleaner
   private enum ResourceType {
-    //CACHED_USED and CACHED_PENDING may be read by anyone, but must only
-    //be written by ordering policies
-    USED(0), PENDING(1), AMUSED(2), RESERVED(3), CACHED_USED(4),
-      CACHED_PENDING(5);
+    USED(0), PENDING(1), AMUSED(2), RESERVED(3);
 
     private int idx;
 
@@ -81,17 +75,14 @@ public class ResourceUsage {
       };
     }
     
-    public Resource getUsed() {
-      return resArr[ResourceType.USED.idx];
-    }
-
     @Override
     public String toString() {
       StringBuilder sb = new StringBuilder();
       sb.append("{used=" + resArr[0] + "%, ");
       sb.append("pending=" + resArr[1] + "%, ");
       sb.append("am_used=" + resArr[2] + "%, ");
-      sb.append("reserved=" + resArr[3] + "%}");
+      sb.append("reserved=" + resArr[3] + "%, ");
+      sb.append("headroom=" + resArr[4] + "%}");
       return sb.toString();
     }
   }
@@ -105,14 +96,6 @@ public class ResourceUsage {
 
   public Resource getUsed(String label) {
     return _get(label, ResourceType.USED);
-  }
-  
-  public Resource getCachedUsed(String label) {
-    return _get(label, ResourceType.CACHED_USED);
-  }
-  
-  public Resource getCachedPending(String label) {
-    return _get(label, ResourceType.CACHED_PENDING);
   }
 
   public void incUsed(String label, Resource res) {
@@ -134,28 +117,9 @@ public class ResourceUsage {
   public void setUsed(Resource res) {
     setUsed(NL, res);
   }
-  
-  public void copyAllUsed(ResourceUsage other) {
-    try {
-      writeLock.lock();
-      for (Entry<String, UsageByLabel> entry : other.usages.entrySet()) {
-        setUsed(entry.getKey(), Resources.clone(entry.getValue().getUsed()));
-      }
-    } finally {
-      writeLock.unlock();
-    }
-  }
 
   public void setUsed(String label, Resource res) {
     _set(label, ResourceType.USED, res);
-  }
-  
-  public void setCachedUsed(String label, Resource res) {
-    _set(label, ResourceType.CACHED_USED, res);
-  }
-  
-  public void setCachedPending(String label, Resource res) {
-    _set(label, ResourceType.CACHED_PENDING, res);
   }
 
   /*
@@ -271,10 +235,6 @@ public class ResourceUsage {
   }
 
   private Resource _get(String label, ResourceType type) {
-    if (label == null) {
-      label = RMNodeLabelsManager.NO_LABEL;
-    }
-    
     try {
       readLock.lock();
       UsageByLabel usage = usages.get(label);
@@ -286,33 +246,8 @@ public class ResourceUsage {
       readLock.unlock();
     }
   }
-  
-  private Resource _getAll(ResourceType type) {
-    try {
-      readLock.lock();
-      Resource allOfType = Resources.createResource(0);
-      for (Map.Entry<String, UsageByLabel> usageEntry : usages.entrySet()) {
-        //all usages types are initialized
-        Resources.addTo(allOfType, usageEntry.getValue().resArr[type.idx]);
-      }
-      return allOfType;
-    } finally {
-      readLock.unlock();
-    }
-  }
-  
-  public Resource getAllPending() {
-    return _getAll(ResourceType.PENDING);
-  }
-  
-  public Resource getAllUsed() {
-    return _getAll(ResourceType.USED);
-  }
 
   private UsageByLabel getAndAddIfMissing(String label) {
-    if (label == null) {
-      label = RMNodeLabelsManager.NO_LABEL;
-    }
     if (!usages.containsKey(label)) {
       UsageByLabel u = new UsageByLabel(label);
       usages.put(label, u);
@@ -351,33 +286,12 @@ public class ResourceUsage {
       writeLock.unlock();
     }
   }
-
-  public Resource getCachedDemand(String label) {
-    try {
-      readLock.lock();
-      Resource demand = Resources.createResource(0);
-      Resources.addTo(demand, getCachedUsed(label));
-      Resources.addTo(demand, getCachedPending(label));
-      return demand;
-    } finally {
-      readLock.unlock();
-    }
-  }
   
   @Override
   public String toString() {
     try {
       readLock.lock();
       return usages.toString();
-    } finally {
-      readLock.unlock();
-    }
-  }
-  
-  public Set<String> getNodePartitionsSet() {
-    try {
-      readLock.lock();
-      return usages.keySet();
     } finally {
       readLock.unlock();
     }

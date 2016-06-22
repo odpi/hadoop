@@ -265,9 +265,6 @@ public class LocalDirAllocator {
     private synchronized void confChanged(Configuration conf) 
         throws IOException {
       String newLocalDirs = conf.get(contextCfgItemName);
-      if (null == newLocalDirs) {
-        throw new IOException(contextCfgItemName + " not configured");
-      }
       if (!newLocalDirs.equals(savedLocalDirs)) {
         localDirs = StringUtils.getTrimmedStrings(newLocalDirs);
         localFS = FileSystem.getLocal(conf);

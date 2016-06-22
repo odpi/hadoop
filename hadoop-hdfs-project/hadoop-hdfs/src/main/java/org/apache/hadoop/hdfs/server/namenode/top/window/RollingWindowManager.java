@@ -187,9 +187,11 @@ public class RollingWindowManager {
    */
   public TopWindow snapshot(long time) {
     TopWindow window = new TopWindow(windowLenMs);
-    Set<String> metricNames = metricMap.keySet();
-    LOG.debug("iterating in reported metrics, size={} values={}",
-        metricNames.size(), metricNames);
+    if (LOG.isDebugEnabled()) {
+      Set<String> metricNames = metricMap.keySet();
+      LOG.debug("iterating in reported metrics, size={} values={}",
+          metricNames.size(), metricNames);
+    }
     for (Map.Entry<String, RollingWindowMap> entry : metricMap.entrySet()) {
       String metricName = entry.getKey();
       RollingWindowMap rollingWindows = entry.getValue();
@@ -243,7 +245,7 @@ public class RollingWindowManager {
           metricName, userName, windowSum);
       topN.offer(new NameValuePair(userName, windowSum));
     }
-    LOG.debug("topN users size for command {} is: {}", metricName, topN.size());
+    LOG.info("topN size for command {} is: {}", metricName, topN.size());
     return topN;
   }
 

@@ -215,11 +215,9 @@ public class JavaKeyStoreProvider extends KeyProvider {
         renameOrFail(path, new Path(path.toString() + "_CORRUPTED_"
             + System.currentTimeMillis()));
         renameOrFail(backupPath, path);
-        if (LOG.isDebugEnabled()) {
-          LOG.debug(String.format(
-              "KeyStore loaded successfully from '%s' since '%s'"
-                  + "was corrupted !!", backupPath, path));
-        }
+        LOG.debug(String.format(
+            "KeyStore loaded successfully from '%s' since '%s'"
+                + "was corrupted !!", backupPath, path));
       } else {
         throw ioe;
       }
@@ -268,10 +266,8 @@ public class JavaKeyStoreProvider extends KeyProvider {
     try {
       perm = loadFromPath(pathToLoad, password);
       renameOrFail(pathToLoad, path);
-      if (LOG.isDebugEnabled()) {
-        LOG.debug(String.format("KeyStore loaded successfully from '%s'!!",
-            pathToLoad));
-      }
+      LOG.debug(String.format("KeyStore loaded successfully from '%s'!!",
+          pathToLoad));
       if (fs.exists(pathToDelete)) {
         fs.delete(pathToDelete, true);
       }

@@ -51,12 +51,6 @@ public class TestDataNodeMXBean {
       // get attribute "Version"
       String version = (String)mbs.getAttribute(mxbeanName, "Version");
       Assert.assertEquals(datanode.getVersion(),version);
-      // get attribute "SotfwareVersion"
-      String softwareVersion =
-          (String)mbs.getAttribute(mxbeanName, "SoftwareVersion");
-      Assert.assertEquals(datanode.getSoftwareVersion(),softwareVersion);
-      Assert.assertEquals(version, softwareVersion
-          + ", r" + datanode.getRevision());
       // get attribute "RpcPort"
       String rpcPort = (String)mbs.getAttribute(mxbeanName, "RpcPort");
       Assert.assertEquals(datanode.getRpcPort(),rpcPort);

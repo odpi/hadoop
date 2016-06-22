@@ -24,6 +24,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+static int get_hdfs_open_flags_from_info(hdfsFS fs, const char *path,
+                  int flags, int *outflags, const hdfsFileInfo *info);
+
 /**
  * Given a set of FUSE flags, determine the libhdfs flags we need.
  *
@@ -44,6 +47,7 @@
  */
 static int64_t get_hdfs_open_flags(hdfsFS fs, const char *path, int flags)
 {
+  int hasContent;
   int64_t ret;
   hdfsFileInfo *info;
 

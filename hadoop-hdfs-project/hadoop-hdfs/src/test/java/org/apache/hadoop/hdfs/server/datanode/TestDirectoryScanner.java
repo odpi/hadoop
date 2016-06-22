@@ -47,13 +47,12 @@ import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.protocol.Block;
-import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+import org.apache.hadoop.hdfs.server.common.GenerationStamp;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsDatasetSpi;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeReference;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeSpi;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.FsDatasetTestUtil;
-import org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.LazyPersistTestCase;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.junit.Test;
@@ -80,8 +79,6 @@ public class TestDirectoryScanner {
     CONF.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, BLOCK_LENGTH);
     CONF.setInt(DFSConfigKeys.DFS_BYTES_PER_CHECKSUM_KEY, 1);
     CONF.setLong(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY, 1L);
-    CONF.setLong(DFSConfigKeys.DFS_DATANODE_MAX_LOCKED_MEMORY_KEY,
-                 Long.MAX_VALUE);
   }
 
   /** create a file with a length of <code>fileLen</code> */
@@ -160,37 +157,30 @@ public class TestDirectoryScanner {
   private void duplicateBlock(long blockId) throws IOException {
     synchronized (fds) {
       ReplicaInfo b = FsDatasetTestUtil.fetchReplicaInfo(fds, bpid, blockId);
-      try (FsDatasetSpi.FsVolumeReferences volumes =
-          fds.getFsVolumeReferences()) {
-        for (FsVolumeSpi v : volumes) {
-          if (v.getStorageID().equals(b.getVolume().getStorageID())) {
-            continue;
-          }
+      for (FsVolumeSpi v : fds.getVolumes()) {
+        if (v.getStorageID().equals(b.getVolume().getStorageID())) {
+          continue;
+        }
 
-          // Volume without a copy of the block. Make a copy now.
-          File sourceBlock = b.getBlockFile();
-          File sourceMeta = b.getMetaFile();
-          String sourceRoot = b.getVolume().getBasePath();
-          String destRoot = v.getBasePath();
+        // Volume without a copy of the block. Make a copy now.
+        File sourceBlock = b.getBlockFile();
+        File sourceMeta = b.getMetaFile();
+        String sourceRoot = b.getVolume().getBasePath();
+        String destRoot = v.getBasePath();
 
-          String relativeBlockPath =
-              new File(sourceRoot).toURI().relativize(sourceBlock.toURI())
-                  .getPath();
-          String relativeMetaPath =
-              new File(sourceRoot).toURI().relativize(sourceMeta.toURI())
-                  .getPath();
+        String relativeBlockPath = new File(sourceRoot).toURI().relativize(sourceBlock.toURI()).getPath();
+        String relativeMetaPath = new File(sourceRoot).toURI().relativize(sourceMeta.toURI()).getPath();
 
-          File destBlock = new File(destRoot, relativeBlockPath);
-          File destMeta = new File(destRoot, relativeMetaPath);
+        File destBlock = new File(destRoot, relativeBlockPath);
+        File destMeta = new File(destRoot, relativeMetaPath);
 
-          destBlock.getParentFile().mkdirs();
-          FileUtils.copyFile(sourceBlock, destBlock);
-          FileUtils.copyFile(sourceMeta, destMeta);
+        destBlock.getParentFile().mkdirs();
+        FileUtils.copyFile(sourceBlock, destBlock);
+        FileUtils.copyFile(sourceMeta, destMeta);
 
-          if (destBlock.exists() && destMeta.exists()) {
-            LOG.info("Copied " + sourceBlock + " ==> " + destBlock);
-            LOG.info("Copied " + sourceMeta + " ==> " + destMeta);
-          }
+        if (destBlock.exists() && destMeta.exists()) {
+          LOG.info("Copied " + sourceBlock + " ==> " + destBlock);
+          LOG.info("Copied " + sourceMeta + " ==> " + destMeta);
         }
       }
     }
@@ -219,67 +209,58 @@ public class TestDirectoryScanner {
 
   /** Create a block file in a random volume*/
   private long createBlockFile() throws IOException {
+    List<? extends FsVolumeSpi> volumes = fds.getVolumes();
+    int index = rand.nextInt(volumes.size() - 1);
     long id = getFreeBlockId();
-    try (FsDatasetSpi.FsVolumeReferences volumes = fds.getFsVolumeReferences()) {
-      int numVolumes = volumes.size();
-      int index = rand.nextInt(numVolumes - 1);
-      File finalizedDir = volumes.get(index).getFinalizedDir(bpid);
-      File file = new File(finalizedDir, getBlockFile(id));
-      if (file.createNewFile()) {
-        LOG.info("Created block file " + file.getName());
-      }
+    File finalizedDir = volumes.get(index).getFinalizedDir(bpid);
+    File file = new File(finalizedDir, getBlockFile(id));
+    if (file.createNewFile()) {
+      LOG.info("Created block file " + file.getName());
     }
     return id;
   }
 
   /** Create a metafile in a random volume*/
   private long createMetaFile() throws IOException {
+    List<? extends FsVolumeSpi> volumes = fds.getVolumes();
+    int index = rand.nextInt(volumes.size() - 1);
     long id = getFreeBlockId();
-    try (FsDatasetSpi.FsVolumeReferences refs = fds.getFsVolumeReferences()) {
-      int numVolumes = refs.size();
-      int index = rand.nextInt(numVolumes - 1);
-
-      File finalizedDir = refs.get(index).getFinalizedDir(bpid);
-      File file = new File(finalizedDir, getMetaFile(id));
-      if (file.createNewFile()) {
-        LOG.info("Created metafile " + file.getName());
-      }
+    File finalizedDir = volumes.get(index).getFinalizedDir(bpid);
+    File file = new File(finalizedDir, getMetaFile(id));
+    if (file.createNewFile()) {
+      LOG.info("Created metafile " + file.getName());
     }
     return id;
   }
 
   /** Create block file and corresponding metafile in a rondom volume */
   private long createBlockMetaFile() throws IOException {
+    List<? extends FsVolumeSpi> volumes = fds.getVolumes();
+    int index = rand.nextInt(volumes.size() - 1);
     long id = getFreeBlockId();
+    File finalizedDir = volumes.get(index).getFinalizedDir(bpid);
+    File file = new File(finalizedDir, getBlockFile(id));
+    if (file.createNewFile()) {
+      LOG.info("Created block file " + file.getName());
 
-    try (FsDatasetSpi.FsVolumeReferences refs = fds.getFsVolumeReferences()) {
-      int numVolumes = refs.size();
-      int index = rand.nextInt(numVolumes - 1);
-
-      File finalizedDir = refs.get(index).getFinalizedDir(bpid);
-      File file = new File(finalizedDir, getBlockFile(id));
+      // Create files with same prefix as block file but extension names
+      // such that during sorting, these files appear around meta file
+      // to test how DirectoryScanner handles extraneous files
+      String name1 = file.getAbsolutePath() + ".l";
+      String name2 = file.getAbsolutePath() + ".n";
+      file = new File(name1);
       if (file.createNewFile()) {
-        LOG.info("Created block file " + file.getName());
+        LOG.info("Created extraneous file " + name1);
+      }
 
-        // Create files with same prefix as block file but extension names
-        // such that during sorting, these files appear around meta file
-        // to test how DirectoryScanner handles extraneous files
-        String name1 = file.getAbsolutePath() + ".l";
-        String name2 = file.getAbsolutePath() + ".n";
-        file = new File(name1);
-        if (file.createNewFile()) {
-          LOG.info("Created extraneous file " + name1);
-        }
+      file = new File(name2);
+      if (file.createNewFile()) {
+        LOG.info("Created extraneous file " + name2);
+      }
 
-        file = new File(name2);
-        if (file.createNewFile()) {
-          LOG.info("Created extraneous file " + name2);
-        }
-
-        file = new File(finalizedDir, getMetaFile(id));
-        if (file.createNewFile()) {
-          LOG.info("Created metafile " + file.getName());
-        }
+      file = new File(finalizedDir, getMetaFile(id));
+      if (file.createNewFile()) {
+        LOG.info("Created metafile " + file.getName());
       }
     }
     return id;
@@ -311,7 +292,6 @@ public class TestDirectoryScanner {
 
   @Test (timeout=300000)
   public void testRetainBlockOnPersistentStorage() throws Exception {
-    LazyPersistTestCase.initCacheManipulator();
     cluster = new MiniDFSCluster
         .Builder(CONF)
         .storageTypes(new StorageType[] { StorageType.RAM_DISK, StorageType.DEFAULT })
@@ -353,7 +333,6 @@ public class TestDirectoryScanner {
 
   @Test (timeout=300000)
   public void testDeleteBlockOnTransientStorage() throws Exception {
-    LazyPersistTestCase.initCacheManipulator();
     cluster = new MiniDFSCluster
         .Builder(CONF)
         .storageTypes(new StorageType[] { StorageType.RAM_DISK, StorageType.DEFAULT })
@@ -426,7 +405,7 @@ public class TestDirectoryScanner {
       // Test2: block metafile is missing
       long blockId = deleteMetaFile();
       scan(totalBlocks, 1, 1, 0, 0, 1);
-      verifyGenStamp(blockId, HdfsConstants.GRANDFATHER_GENERATION_STAMP);
+      verifyGenStamp(blockId, GenerationStamp.GRANDFATHER_GENERATION_STAMP);
       scan(totalBlocks, 0, 0, 0, 0, 0);
 
       // Test3: block file is missing
@@ -441,7 +420,7 @@ public class TestDirectoryScanner {
       blockId = createBlockFile();
       totalBlocks++;
       scan(totalBlocks, 1, 1, 0, 1, 0);
-      verifyAddition(blockId, HdfsConstants.GRANDFATHER_GENERATION_STAMP, 0);
+      verifyAddition(blockId, GenerationStamp.GRANDFATHER_GENERATION_STAMP, 0);
       scan(totalBlocks, 0, 0, 0, 0, 0);
 
       // Test5: A metafile exists for which there is no block file and
@@ -607,12 +586,7 @@ public class TestDirectoryScanner {
     }
 
     @Override
-    public boolean isTransientStorage() {
-      return false;
-    }
-
-    @Override
-    public void reserveSpaceForReplica(long bytesToReserve) {
+    public void reserveSpaceForRbw(long bytesToReserve) {
     }
 
     @Override
@@ -620,7 +594,8 @@ public class TestDirectoryScanner {
     }
 
     @Override
-    public void releaseLockedMemory(long bytesToRelease) {
+    public boolean isTransientStorage() {
+      return false;
     }
 
     @Override

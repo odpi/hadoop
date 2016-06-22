@@ -19,7 +19,7 @@ package org.apache.hadoop.hdfs.protocol.datatransfer;
 
 import static org.apache.hadoop.hdfs.protocol.datatransfer.DataTransferProtoUtil.fromProto;
 import static org.apache.hadoop.hdfs.protocol.datatransfer.DataTransferProtoUtil.continueTraceSpan;
-import static org.apache.hadoop.hdfs.protocolPB.PBHelperClient.vintPrefixed;
+import static org.apache.hadoop.hdfs.protocolPB.PBHelper.vintPrefixed;
 
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -37,7 +37,7 @@ import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.OpTransferBlockP
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.OpWriteBlockProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.ReleaseShortCircuitAccessRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.ShortCircuitShmRequestProto;
-import org.apache.hadoop.hdfs.protocolPB.PBHelperClient;
+import org.apache.hadoop.hdfs.protocolPB.PBHelper;
 import org.apache.hadoop.hdfs.server.datanode.CachingStrategy;
 import org.apache.hadoop.hdfs.shortcircuit.ShortCircuitShm.SlotId;
 import org.apache.htrace.TraceScope;
@@ -113,8 +113,8 @@ public abstract class Receiver implements DataTransferProtocol {
     TraceScope traceScope = continueTraceSpan(proto.getHeader(),
         proto.getClass().getSimpleName());
     try {
-      readBlock(PBHelperClient.convert(proto.getHeader().getBaseHeader().getBlock()),
-        PBHelperClient.convert(proto.getHeader().getBaseHeader().getToken()),
+      readBlock(PBHelper.convert(proto.getHeader().getBaseHeader().getBlock()),
+        PBHelper.convert(proto.getHeader().getBaseHeader().getToken()),
         proto.getHeader().getClientName(),
         proto.getOffset(),
         proto.getLen(),
@@ -130,17 +130,17 @@ public abstract class Receiver implements DataTransferProtocol {
   /** Receive OP_WRITE_BLOCK */
   private void opWriteBlock(DataInputStream in) throws IOException {
     final OpWriteBlockProto proto = OpWriteBlockProto.parseFrom(vintPrefixed(in));
-    final DatanodeInfo[] targets = PBHelperClient.convert(proto.getTargetsList());
+    final DatanodeInfo[] targets = PBHelper.convert(proto.getTargetsList());
     TraceScope traceScope = continueTraceSpan(proto.getHeader(),
         proto.getClass().getSimpleName());
     try {
-      writeBlock(PBHelperClient.convert(proto.getHeader().getBaseHeader().getBlock()),
-          PBHelperClient.convertStorageType(proto.getStorageType()),
-          PBHelperClient.convert(proto.getHeader().getBaseHeader().getToken()),
+      writeBlock(PBHelper.convert(proto.getHeader().getBaseHeader().getBlock()),
+          PBHelper.convertStorageType(proto.getStorageType()),
+          PBHelper.convert(proto.getHeader().getBaseHeader().getToken()),
           proto.getHeader().getClientName(),
           targets,
-          PBHelperClient.convertStorageTypes(proto.getTargetStorageTypesList(), targets.length),
-          PBHelperClient.convert(proto.getSource()),
+          PBHelper.convertStorageTypes(proto.getTargetStorageTypesList(), targets.length),
+          PBHelper.convert(proto.getSource()),
           fromProto(proto.getStage()),
           proto.getPipelineSize(),
           proto.getMinBytesRcvd(), proto.getMaxBytesRcvd(),
@@ -151,7 +151,7 @@ public abstract class Receiver implements DataTransferProtocol {
             CachingStrategy.newDefaultStrategy()),
           (proto.hasAllowLazyPersist() ? proto.getAllowLazyPersist() : false),
           (proto.hasPinning() ? proto.getPinning(): false),
-          (PBHelperClient.convertBooleanList(proto.getTargetPinningsList())));
+          (PBHelper.convertBooleanList(proto.getTargetPinningsList())));
     } finally {
      if (traceScope != null) traceScope.close();
     }
@@ -161,15 +161,15 @@ public abstract class Receiver implements DataTransferProtocol {
   private void opTransferBlock(DataInputStream in) throws IOException {
     final OpTransferBlockProto proto =
       OpTransferBlockProto.parseFrom(vintPrefixed(in));
-    final DatanodeInfo[] targets = PBHelperClient.convert(proto.getTargetsList());
+    final DatanodeInfo[] targets = PBHelper.convert(proto.getTargetsList());
     TraceScope traceScope = continueTraceSpan(proto.getHeader(),
         proto.getClass().getSimpleName());
     try {
-      transferBlock(PBHelperClient.convert(proto.getHeader().getBaseHeader().getBlock()),
-          PBHelperClient.convert(proto.getHeader().getBaseHeader().getToken()),
+      transferBlock(PBHelper.convert(proto.getHeader().getBaseHeader().getBlock()),
+          PBHelper.convert(proto.getHeader().getBaseHeader().getToken()),
           proto.getHeader().getClientName(),
           targets,
-          PBHelperClient.convertStorageTypes(proto.getTargetStorageTypesList(), targets.length));
+          PBHelper.convertStorageTypes(proto.getTargetStorageTypesList(), targets.length));
     } finally {
       if (traceScope != null) traceScope.close();
     }
@@ -180,12 +180,12 @@ public abstract class Receiver implements DataTransferProtocol {
     final OpRequestShortCircuitAccessProto proto =
       OpRequestShortCircuitAccessProto.parseFrom(vintPrefixed(in));
     SlotId slotId = (proto.hasSlotId()) ? 
-        PBHelperClient.convert(proto.getSlotId()) : null;
+        PBHelper.convert(proto.getSlotId()) : null;
     TraceScope traceScope = continueTraceSpan(proto.getHeader(),
         proto.getClass().getSimpleName());
     try {
-      requestShortCircuitFds(PBHelperClient.convert(proto.getHeader().getBlock()),
-          PBHelperClient.convert(proto.getHeader().getToken()),
+      requestShortCircuitFds(PBHelper.convert(proto.getHeader().getBlock()),
+          PBHelper.convert(proto.getHeader().getToken()),
           slotId, proto.getMaxVersion(),
           proto.getSupportsReceiptVerification());
     } finally {
@@ -201,7 +201,7 @@ public abstract class Receiver implements DataTransferProtocol {
     TraceScope traceScope = continueTraceSpan(proto.getTraceInfo(),
         proto.getClass().getSimpleName());
     try {
-      releaseShortCircuitFds(PBHelperClient.convert(proto.getSlotId()));
+      releaseShortCircuitFds(PBHelper.convert(proto.getSlotId()));
     } finally {
       if (traceScope != null) traceScope.close();
     }
@@ -226,11 +226,11 @@ public abstract class Receiver implements DataTransferProtocol {
     TraceScope traceScope = continueTraceSpan(proto.getHeader(),
         proto.getClass().getSimpleName());
     try {
-      replaceBlock(PBHelperClient.convert(proto.getHeader().getBlock()),
-          PBHelperClient.convertStorageType(proto.getStorageType()),
-          PBHelperClient.convert(proto.getHeader().getToken()),
+      replaceBlock(PBHelper.convert(proto.getHeader().getBlock()),
+          PBHelper.convertStorageType(proto.getStorageType()),
+          PBHelper.convert(proto.getHeader().getToken()),
           proto.getDelHint(),
-          PBHelperClient.convert(proto.getSource()));
+          PBHelper.convert(proto.getSource()));
     } finally {
       if (traceScope != null) traceScope.close();
     }
@@ -242,8 +242,8 @@ public abstract class Receiver implements DataTransferProtocol {
     TraceScope traceScope = continueTraceSpan(proto.getHeader(),
         proto.getClass().getSimpleName());
     try {
-      copyBlock(PBHelperClient.convert(proto.getHeader().getBlock()),
-          PBHelperClient.convert(proto.getHeader().getToken()));
+      copyBlock(PBHelper.convert(proto.getHeader().getBlock()),
+          PBHelper.convert(proto.getHeader().getToken()));
     } finally {
       if (traceScope != null) traceScope.close();
     }
@@ -255,8 +255,8 @@ public abstract class Receiver implements DataTransferProtocol {
     TraceScope traceScope = continueTraceSpan(proto.getHeader(),
         proto.getClass().getSimpleName());
     try {
-    blockChecksum(PBHelperClient.convert(proto.getHeader().getBlock()),
-        PBHelperClient.convert(proto.getHeader().getToken()));
+    blockChecksum(PBHelper.convert(proto.getHeader().getBlock()),
+        PBHelper.convert(proto.getHeader().getToken()));
     } finally {
       if (traceScope != null) traceScope.close();
     }

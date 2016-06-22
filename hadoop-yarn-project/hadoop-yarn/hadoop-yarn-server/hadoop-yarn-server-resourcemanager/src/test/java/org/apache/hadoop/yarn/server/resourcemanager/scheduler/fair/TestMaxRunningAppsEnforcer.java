@@ -31,7 +31,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
-import org.apache.hadoop.yarn.util.ControlledClock;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -41,14 +40,14 @@ public class TestMaxRunningAppsEnforcer {
   private Map<String, Integer> userMaxApps;
   private MaxRunningAppsEnforcer maxAppsEnforcer;
   private int appNum;
-  private ControlledClock clock;
+  private TestFairScheduler.MockClock clock;
   private RMContext rmContext;
   private FairScheduler scheduler;
   
   @Before
   public void setup() throws Exception {
     Configuration conf = new Configuration();
-    clock = new ControlledClock();
+    clock = new TestFairScheduler.MockClock();
     scheduler = mock(FairScheduler.class);
     when(scheduler.getConf()).thenReturn(
         new FairSchedulerConfiguration(conf));
@@ -152,7 +151,7 @@ public class TestMaxRunningAppsEnforcer {
     FSAppAttempt app1 = addApp(leaf1, "user");
     addApp(leaf2, "user");
     addApp(leaf2, "user");
-    clock.tickSec(20);
+    clock.tick(20);
     addApp(leaf1, "user");
     assertEquals(1, leaf1.getNumRunnableApps());
     assertEquals(1, leaf2.getNumRunnableApps());

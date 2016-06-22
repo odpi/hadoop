@@ -198,7 +198,7 @@ public class TestSafeMode {
     
     String status = nn.getNamesystem().getSafemode();
     assertEquals("Safe mode is ON. The reported blocks 0 needs additional " +
-        "14 blocks to reach the threshold 0.9990 of total blocks 15." + NEWLINE +
+        "15 blocks to reach the threshold 0.9990 of total blocks 15." + NEWLINE +
         "The number of live datanodes 0 has reached the minimum number 0. " +
         "Safe mode will be turned off automatically once the thresholds " +
         "have been reached.", status);
@@ -295,8 +295,8 @@ public class TestSafeMode {
       fail(msg);
     } catch (RemoteException re) {
       assertEquals(SafeModeException.class.getName(), re.getClassName());
-      GenericTestUtils.assertExceptionContains("Name node is in safe mode", re);
-    } catch (SafeModeException ignored) {
+      GenericTestUtils.assertExceptionContains(
+          "Name node is in safe mode", re);
     } catch (IOException ioe) {
       fail(msg + " " + StringUtils.stringifyException(ioe));
     }

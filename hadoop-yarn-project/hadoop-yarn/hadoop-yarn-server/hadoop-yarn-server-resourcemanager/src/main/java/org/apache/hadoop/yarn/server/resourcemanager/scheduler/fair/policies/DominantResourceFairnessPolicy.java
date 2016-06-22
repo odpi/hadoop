@@ -29,9 +29,6 @@ import org.apache.hadoop.yarn.server.resourcemanager.resource.ResourceWeights;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FSQueue;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.Schedulable;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.SchedulingPolicy;
-
-import org.apache.hadoop.yarn.util.resource.DominantResourceCalculator;
-import org.apache.hadoop.yarn.util.resource.ResourceCalculator;
 import org.apache.hadoop.yarn.util.resource.Resources;
 
 import static org.apache.hadoop.yarn.server.resourcemanager.resource.ResourceType.*;
@@ -47,10 +44,8 @@ public class DominantResourceFairnessPolicy extends SchedulingPolicy {
 
   public static final String NAME = "DRF";
 
-  private static final DominantResourceFairnessComparator COMPARATOR =
+  private DominantResourceFairnessComparator comparator =
       new DominantResourceFairnessComparator();
-  private static final DominantResourceCalculator CALCULATOR =
-      new DominantResourceCalculator();
 
   @Override
   public String getName() {
@@ -64,14 +59,9 @@ public class DominantResourceFairnessPolicy extends SchedulingPolicy {
 
   @Override
   public Comparator<Schedulable> getComparator() {
-    return COMPARATOR;
+    return comparator;
   }
-
-  @Override
-  public ResourceCalculator getResourceCalculator() {
-    return CALCULATOR;
-  }
-
+  
   @Override
   public void computeShares(Collection<? extends Schedulable> schedulables,
       Resource totalResources) {
@@ -115,7 +105,7 @@ public class DominantResourceFairnessPolicy extends SchedulingPolicy {
 
   @Override
   public void initialize(Resource clusterCapacity) {
-    COMPARATOR.setClusterCapacity(clusterCapacity);
+    comparator.setClusterCapacity(clusterCapacity);
   }
 
   public static class DominantResourceFairnessComparator implements Comparator<Schedulable> {

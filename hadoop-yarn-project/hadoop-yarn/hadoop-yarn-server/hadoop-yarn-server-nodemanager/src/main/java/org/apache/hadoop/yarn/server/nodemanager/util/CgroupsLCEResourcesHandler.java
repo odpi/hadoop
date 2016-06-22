@@ -22,6 +22,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
@@ -29,7 +30,6 @@ import java.io.PrintWriter;
 import java.io.Writer;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,7 +49,6 @@ import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.nodemanager.LinuxContainerExecutor;
-import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.privileged.PrivilegedOperation;
 import org.apache.hadoop.yarn.util.Clock;
 import org.apache.hadoop.yarn.util.ResourceCalculatorPlugin;
 import org.apache.hadoop.yarn.util.SystemClock;
@@ -83,8 +82,7 @@ public class CgroupsLCEResourcesHandler implements LCEResourcesHandler {
   Clock clock;
 
   private float yarnProcessors;
-  int nodeVCores;
-
+  
   public CgroupsLCEResourcesHandler() {
     this.controllerPaths = new HashMap<String, String>();
     clock = new SystemClock();
@@ -153,11 +151,9 @@ public class CgroupsLCEResourcesHandler implements LCEResourcesHandler {
 
     initializeControllerPaths();
 
-    nodeVCores = NodeManagerHardwareUtils.getVCores(plugin, conf);
-
     // cap overall usage to the number of cores allocated to YARN
-    yarnProcessors = NodeManagerHardwareUtils.getContainersCPUs(plugin, conf);
-    int systemProcessors = NodeManagerHardwareUtils.getNodeCPUs(plugin, conf);
+    yarnProcessors = NodeManagerHardwareUtils.getContainersCores(plugin, conf);
+    int systemProcessors = plugin.getNumProcessors();
     if (systemProcessors != (int) yarnProcessors) {
       LOG.info("YARN containers restricted to " + yarnProcessors + " cores");
       int[] limits = getOverallLimits(yarnProcessors);
@@ -371,6 +367,9 @@ public class CgroupsLCEResourcesHandler implements LCEResourcesHandler {
       updateCgroup(CONTROLLER_CPU, containerName, "shares",
           String.valueOf(cpuShares));
       if (strictResourceUsageMode) {
+        int nodeVCores =
+            conf.getInt(YarnConfiguration.NM_VCORES,
+              YarnConfiguration.DEFAULT_NM_VCORES);
         if (nodeVCores != containerVCores) {
           float containerCPU =
               (containerVCores * yarnProcessors) / (float) nodeVCores;
@@ -410,11 +409,10 @@ public class CgroupsLCEResourcesHandler implements LCEResourcesHandler {
 
     if (isCpuWeightEnabled()) {
       sb.append(pathForCgroup(CONTROLLER_CPU, containerName) + "/tasks");
-      sb.append(PrivilegedOperation.LINUX_FILE_PATH_SEPARATOR);
+      sb.append(",");
     }
 
-    if (sb.charAt(sb.length() - 1) ==
-        PrivilegedOperation.LINUX_FILE_PATH_SEPARATOR) {
+    if (sb.charAt(sb.length() - 1) == ',') {
       sb.deleteCharAt(sb.length() - 1);
     }
 
@@ -504,10 +502,5 @@ public class CgroupsLCEResourcesHandler implements LCEResourcesHandler {
   @VisibleForTesting
   String getMtabFileName() {
     return MTAB_FILE;
-  }
-
-  @VisibleForTesting
-  Map<String, String> getControllerPaths() {
-    return Collections.unmodifiableMap(controllerPaths);
   }
 }

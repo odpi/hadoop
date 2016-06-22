@@ -17,16 +17,17 @@
  */
 package org.apache.hadoop.hdfs.server.datanode.web;
 
-import static org.apache.hadoop.hdfs.server.datanode.web.webhdfs.WebHdfsHandler.WEBHDFS_PREFIX;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.HttpRequest;
-
-import java.net.InetSocketAddress;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.server.datanode.web.webhdfs.WebHdfsHandler;
+
+import java.io.IOException;
+import java.net.InetSocketAddress;
+
+import static org.apache.hadoop.hdfs.server.datanode.web.webhdfs.WebHdfsHandler.WEBHDFS_PREFIX;
 
 class URLDispatcher extends SimpleChannelInboundHandler<HttpRequest> {
   private final InetSocketAddress proxyHost;
@@ -43,7 +44,7 @@ class URLDispatcher extends SimpleChannelInboundHandler<HttpRequest> {
   @Override
   protected void channelRead0(ChannelHandlerContext ctx, HttpRequest req)
     throws Exception {
-    String uri = req.uri();
+    String uri = req.getUri();
     ChannelPipeline p = ctx.pipeline();
     if (uri.startsWith(WEBHDFS_PREFIX)) {
       WebHdfsHandler h = new WebHdfsHandler(conf, confForCreate);

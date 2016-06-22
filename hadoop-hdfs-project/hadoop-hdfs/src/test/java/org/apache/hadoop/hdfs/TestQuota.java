@@ -17,37 +17,27 @@
  */
 package org.apache.hadoop.hdfs;
 
-import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.io.OutputStream;
-import java.io.PrintStream;
 import java.security.PrivilegedExceptionAction;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.ContentSummary;
-import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.hdfs.protocol.DSQuotaExceededException;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.NSQuotaExceededException;
 import org.apache.hadoop.hdfs.protocol.QuotaExceededException;
-import org.apache.hadoop.hdfs.server.namenode.FSImageTestUtil;
 import org.apache.hadoop.hdfs.tools.DFSAdmin;
-import org.apache.hadoop.hdfs.web.WebHdfsConstants;
+import org.apache.hadoop.hdfs.web.WebHdfsFileSystem;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.junit.Assert;
 import org.junit.Test;
-
-import com.google.common.base.Charsets;
 
 /** A class for testing quota-related commands */
 public class TestQuota {
@@ -790,64 +780,7 @@ public class TestQuota {
       final ContentSummary computed) {
     assertEquals(expected.toString(), computed.toString());
   }
- 
-  /**
-   * Test limit cases for setting space quotas.
-   */
-  @Test
-  public void testMaxSpaceQuotas() throws Exception {
-    final Configuration conf = new HdfsConfiguration();
-    final MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).numDataNodes(2).build();
-    try {
-      final FileSystem fs = cluster.getFileSystem();
-      assertTrue("Not a HDFS: "+fs.getUri(),
-                  fs instanceof DistributedFileSystem);
-      final DistributedFileSystem dfs = (DistributedFileSystem)fs;
-    
-      // create test directory
-      final Path testFolder = new Path("/testFolder");
-      assertTrue(dfs.mkdirs(testFolder));
-    
-      // setting namespace quota to Long.MAX_VALUE - 1 should work
-      dfs.setQuota(testFolder, Long.MAX_VALUE - 1, 10);
-      ContentSummary c = dfs.getContentSummary(testFolder);
-      assertTrue("Quota not set properly", c.getQuota() == Long.MAX_VALUE - 1);
-    
-      // setting diskspace quota to Long.MAX_VALUE - 1 should work
-      dfs.setQuota(testFolder, 10, Long.MAX_VALUE - 1);
-      c = dfs.getContentSummary(testFolder);
-      assertTrue("Quota not set properly", c.getSpaceQuota() == Long.MAX_VALUE - 1);
-    
-      // setting namespace quota to Long.MAX_VALUE should not work + no error
-      dfs.setQuota(testFolder, Long.MAX_VALUE, 10);
-      c = dfs.getContentSummary(testFolder);
-      assertTrue("Quota should not have changed", c.getQuota() == 10);
-    
-      // setting diskspace quota to Long.MAX_VALUE should not work + no error
-      dfs.setQuota(testFolder, 10, Long.MAX_VALUE);
-      c = dfs.getContentSummary(testFolder);
-      assertTrue("Quota should not have changed", c.getSpaceQuota() == 10);
-    
-      // setting namespace quota to Long.MAX_VALUE + 1 should not work + error
-      try {
-        dfs.setQuota(testFolder, Long.MAX_VALUE + 1, 10);
-        fail("Exception not thrown");
-      } catch (IllegalArgumentException e) {
-        // Expected
-      }
-    
-      // setting diskspace quota to Long.MAX_VALUE + 1 should not work + error
-      try {
-        dfs.setQuota(testFolder, 10, Long.MAX_VALUE + 1);
-        fail("Exception not thrown");
-      } catch (IllegalArgumentException e) {
-        // Expected
-      }
-    } finally {
-      cluster.shutdown();
-    }
-  }
-  
+
   /**
    * Violate a space quota using files of size < 1 block. Test that block
    * allocation conservatively assumes that for quota checking the entire
@@ -859,14 +792,15 @@ public class TestQuota {
     Configuration conf = new HdfsConfiguration();
     final int BLOCK_SIZE = 6 * 1024;
     conf.setInt(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, BLOCK_SIZE);
-    MiniDFSCluster cluster =
+    conf.setBoolean(DFSConfigKeys.DFS_WEBHDFS_ENABLED_KEY, true);
+    MiniDFSCluster cluster = 
       new MiniDFSCluster.Builder(conf).numDataNodes(3).build();
     cluster.waitActive();
     FileSystem fs = cluster.getFileSystem();
     DFSAdmin admin = new DFSAdmin(conf);
 
     final String nnAddr = conf.get(DFSConfigKeys.DFS_NAMENODE_HTTP_ADDRESS_KEY);
-    final String webhdfsuri = WebHdfsConstants.WEBHDFS_SCHEME + "://" + nnAddr;
+    final String webhdfsuri = WebHdfsFileSystem.SCHEME  + "://" + nnAddr;
     System.out.println("webhdfsuri=" + webhdfsuri);
     final FileSystem webhdfs = new Path(webhdfsuri).getFileSystem(conf);
 
@@ -920,6 +854,7 @@ public class TestQuota {
     Configuration conf = new HdfsConfiguration();
     final int BLOCK_SIZE = 6 * 1024;
     conf.setInt(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, BLOCK_SIZE);
+    conf.setBoolean(DFSConfigKeys.DFS_WEBHDFS_ENABLED_KEY, true);
     // Make it relinquish locks. When run serially, the result should
     // be identical.
     conf.setInt(DFSConfigKeys.DFS_CONTENT_SUMMARY_LIMIT_KEY, 2);
@@ -930,19 +865,11 @@ public class TestQuota {
     DFSAdmin admin = new DFSAdmin(conf);
 
     final String nnAddr = conf.get(DFSConfigKeys.DFS_NAMENODE_HTTP_ADDRESS_KEY);
-    final String webhdfsuri = WebHdfsConstants.WEBHDFS_SCHEME + "://" + nnAddr;
+    final String webhdfsuri = WebHdfsFileSystem.SCHEME  + "://" + nnAddr;
     System.out.println("webhdfsuri=" + webhdfsuri);
     final FileSystem webhdfs = new Path(webhdfsuri).getFileSystem(conf);
     
     try {
-      
-      //Test for deafult NameSpace Quota
-      long nsQuota = FSImageTestUtil.getNSQuota(cluster.getNameNode()
-          .getNamesystem());
-      assertTrue(
-          "Default namespace quota expected as long max. But the value is :"
-              + nsQuota, nsQuota == Long.MAX_VALUE);
-      
       Path dir = new Path("/test");
       boolean exceededQuota = false;
       ContentSummary c;
@@ -994,49 +921,4 @@ public class TestQuota {
       cluster.shutdown();
     }
   }
-
-  @Test
-  public void testSetSpaceQuotaWhenStorageTypeIsWrong() throws Exception {
-    Configuration conf = new HdfsConfiguration();
-    conf.set(FS_DEFAULT_NAME_KEY, "hdfs://127.0.0.1:8020");
-    DFSAdmin admin = new DFSAdmin(conf);
-    ByteArrayOutputStream err = new ByteArrayOutputStream();
-    System.setErr(new PrintStream(err));
-    String[] args = { "-setSpaceQuota", "100", "-storageType", "COLD",
-        "/testDir" };
-    admin.run(args);
-    String errOutput = new String(err.toByteArray(), Charsets.UTF_8);
-    assertTrue(errOutput.contains(StorageType.getTypesSupportingQuota()
-        .toString()));
-  }
-
-   /**
-   * File count on root , should return total value of files in Filesystem
-   * when one folder contains files more than "dfs.content-summary.limit".
-   */
-  @Test
-  public void testHugeFileCount() throws IOException {
-    MiniDFSCluster cluster = null;
-    Configuration conf = new Configuration();
-    conf.setInt("dfs.content-summary.limit", 4);
-    try {
-      cluster = new MiniDFSCluster.Builder(conf).numDataNodes(0).build();
-      DistributedFileSystem dfs = cluster.getFileSystem();
-      for (int i = 1; i <= 5; i++) {
-        FSDataOutputStream out =
-            dfs.create(new Path("/Folder1/" + "file" + i),(short)1);
-        out.close();
-      }
-      FSDataOutputStream out = dfs.create(new Path("/Folder2/file6"),(short)1);
-      out.close();
-      ContentSummary contentSummary = dfs.getContentSummary(new Path("/"));
-      assertEquals(6, contentSummary.getFileCount());
-    } finally {
-      if (cluster != null) {
-        cluster.shutdown();
-        cluster = null;
-      }
-    }
-  }
-
 }

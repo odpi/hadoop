@@ -28,14 +28,13 @@ import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.common.base.Joiner;
 import org.apache.commons.logging.Log;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.ha.HAServiceProtocol.HAServiceState;
 import org.apache.hadoop.hdfs.client.BlockReportOptions;
+import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.protocol.BlockListAsLongs;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
@@ -84,6 +83,8 @@ class BPServiceActor implements Runnable {
 
   final BPOfferService bpos;
   
+  volatile long lastDeletedReport = 0;
+
   volatile long lastCacheReport = 0;
   private final Scheduler scheduler;
 
@@ -112,7 +113,6 @@ class BPServiceActor implements Runnable {
   private volatile boolean shouldServiceRun = true;
   private final DataNode dn;
   private final DNConf dnConf;
-  private long prevBlockReportId;
 
   private DatanodeRegistration bpRegistration;
   final LinkedList<BPServiceActorAction> bpThreadQueue 
@@ -123,7 +123,6 @@ class BPServiceActor implements Runnable {
     this.dn = bpos.getDataNode();
     this.nnAddr = nnAddr;
     this.dnConf = dn.getDnConf();
-    prevBlockReportId = ThreadLocalRandom.current().nextLong();
     scheduler = new Scheduler(dnConf.heartBeatInterval, dnConf.blockReportInterval);
   }
 
@@ -356,10 +355,9 @@ class BPServiceActor implements Runnable {
   void triggerBlockReportForTests() {
     synchronized (pendingIncrementalBRperStorage) {
       scheduler.scheduleHeartbeat();
-      long oldBlockReportTime = scheduler.nextBlockReportTime;
-      scheduler.forceFullBlockReportNow();
+      long nextBlockReportTime = scheduler.scheduleBlockReport(0);
       pendingIncrementalBRperStorage.notifyAll();
-      while (oldBlockReportTime == scheduler.nextBlockReportTime) {
+      while (nextBlockReportTime - scheduler.nextBlockReportTime >= 0) {
         try {
           pendingIncrementalBRperStorage.wait(100);
         } catch (InterruptedException e) {
@@ -387,10 +385,10 @@ class BPServiceActor implements Runnable {
   @VisibleForTesting
   void triggerDeletionReportForTests() {
     synchronized (pendingIncrementalBRperStorage) {
-      sendImmediateIBR = true;
+      lastDeletedReport = 0;
       pendingIncrementalBRperStorage.notifyAll();
 
-      while (sendImmediateIBR) {
+      while (lastDeletedReport == 0) {
         try {
           pendingIncrementalBRperStorage.wait(100);
         } catch (InterruptedException e) {
@@ -405,15 +403,15 @@ class BPServiceActor implements Runnable {
     return sendImmediateIBR;
   }
 
+  private long prevBlockReportId = 0;
+
   private long generateUniqueBlockReportId() {
-    // Initialize the block report ID the first time through.
-    // Note that 0 is used on the NN to indicate "uninitialized", so we should
-    // not send a 0 value ourselves.
-    prevBlockReportId++;
-    while (prevBlockReportId == 0) {
-      prevBlockReportId = ThreadLocalRandom.current().nextLong();
+    long id = System.nanoTime();
+    if (id <= prevBlockReportId) {
+      id = prevBlockReportId + 1;
     }
-    return prevBlockReportId;
+    prevBlockReportId = id;
+    return id;
   }
 
   /**
@@ -421,7 +419,13 @@ class BPServiceActor implements Runnable {
    * @return DatanodeCommands returned by the NN. May be null.
    * @throws IOException
    */
-  List<DatanodeCommand> blockReport(long fullBrLeaseId) throws IOException {
+  List<DatanodeCommand> blockReport() throws IOException {
+    // send block report if timer has expired.
+    final long startTime = scheduler.monotonicNow(); 
+    if (!scheduler.isBlockReportDue()) {
+      return null;
+    }
+
     final ArrayList<DatanodeCommand> cmds = new ArrayList<DatanodeCommand>();
 
     // Flush any block information that precedes the block report. Otherwise
@@ -429,6 +433,7 @@ class BPServiceActor implements Runnable {
     // or we will report an RBW replica after the BlockReport already reports
     // a FINALIZED one.
     reportReceivedDeletedBlocks();
+    lastDeletedReport = startTime;
 
     long brCreateStartTime = monotonicNow();
     Map<DatanodeStorage, BlockListAsLongs> perVolumeBlockLists =
@@ -457,7 +462,7 @@ class BPServiceActor implements Runnable {
         // Below split threshold, send all reports in a single message.
         DatanodeCommand cmd = bpNamenode.blockReport(
             bpRegistration, bpos.getBlockPoolId(), reports,
-              new BlockReportContext(1, 0, reportId, fullBrLeaseId));
+              new BlockReportContext(1, 0, reportId));
         numRPCs = 1;
         numReportsSent = reports.length;
         if (cmd != null) {
@@ -469,8 +474,7 @@ class BPServiceActor implements Runnable {
           StorageBlockReport singleReport[] = { reports[r] };
           DatanodeCommand cmd = bpNamenode.blockReport(
               bpRegistration, bpos.getBlockPoolId(), singleReport,
-              new BlockReportContext(reports.length, r, reportId,
-                  fullBrLeaseId));
+              new BlockReportContext(reports.length, r, reportId));
           numReportsSent++;
           numRPCs++;
           if (cmd != null) {
@@ -527,17 +531,14 @@ class BPServiceActor implements Runnable {
       long createCost = createTime - startTime;
       long sendCost = sendTime - createTime;
       dn.getMetrics().addCacheReport(sendCost);
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("CacheReport of " + blockIds.size()
-            + " block(s) took " + createCost + " msec to generate and "
-            + sendCost + " msecs for RPC and NN processing");
-      }
+      LOG.debug("CacheReport of " + blockIds.size()
+          + " block(s) took " + createCost + " msec to generate and "
+          + sendCost + " msecs for RPC and NN processing");
     }
     return cmd;
   }
   
-  HeartbeatResponse sendHeartBeat(boolean requestBlockReportLease)
-      throws IOException {
+  HeartbeatResponse sendHeartBeat() throws IOException {
     StorageReport[] reports =
         dn.getFSDataset().getStorageReports(bpos.getBlockPoolId());
     if (LOG.isDebugEnabled()) {
@@ -556,8 +557,7 @@ class BPServiceActor implements Runnable {
         dn.getXmitsInProgress(),
         dn.getXceiverCount(),
         numFailedVolumes,
-        volumeFailureSummary,
-        requestBlockReportLease);
+        volumeFailureSummary);
   }
   
   //This must be called only by BPOfferService
@@ -613,7 +613,7 @@ class BPServiceActor implements Runnable {
           " in HeartbeatResponse. Expected " +
           bpos.getBlockPoolId());
     } else {
-      bpos.signalRollingUpgrade(rollingUpgradeStatus);
+      bpos.signalRollingUpgrade(rollingUpgradeStatus != null);
     }
   }
 
@@ -623,11 +623,11 @@ class BPServiceActor implements Runnable {
    */
   private void offerService() throws Exception {
     LOG.info("For namenode " + nnAddr + " using"
+        + " DELETEREPORT_INTERVAL of " + dnConf.deleteReportInterval + " msec "
         + " BLOCKREPORT_INTERVAL of " + dnConf.blockReportInterval + "msec"
         + " CACHEREPORT_INTERVAL of " + dnConf.cacheReportInterval + "msec"
-        + " Initial delay: " + dnConf.initialBlockReportDelayMs + "msec"
+        + " Initial delay: " + dnConf.initialBlockReportDelay + "msec"
         + "; heartBeatInterval=" + dnConf.heartBeatInterval);
-    long fullBlockReportLeaseId = 0;
 
     //
     // Now loop for a long time....
@@ -640,7 +640,6 @@ class BPServiceActor implements Runnable {
         // Every so often, send heartbeat or block-report
         //
         final boolean sendHeartbeat = scheduler.isHeartbeatDue(startTime);
-        HeartbeatResponse resp = null;
         if (sendHeartbeat) {
           //
           // All heartbeat messages include following info:
@@ -649,23 +648,10 @@ class BPServiceActor implements Runnable {
           // -- Total capacity
           // -- Bytes remaining
           //
-          boolean requestBlockReportLease = (fullBlockReportLeaseId == 0) &&
-                  scheduler.isBlockReportDue(startTime);
           scheduler.scheduleNextHeartbeat();
           if (!dn.areHeartbeatsDisabledForTests()) {
-            resp = sendHeartBeat(requestBlockReportLease);
+            HeartbeatResponse resp = sendHeartBeat();
             assert resp != null;
-            if (resp.getFullBlockReportLeaseId() != 0) {
-              if (fullBlockReportLeaseId != 0) {
-                LOG.warn(nnAddr + " sent back a full block report lease " +
-                        "ID of 0x" +
-                        Long.toHexString(resp.getFullBlockReportLeaseId()) +
-                        ", but we already have a lease ID of 0x" +
-                        Long.toHexString(fullBlockReportLeaseId) + ". " +
-                        "Overwriting old lease ID.");
-              }
-              fullBlockReportLeaseId = resp.getFullBlockReportLeaseId();
-            }
             dn.getMetrics().addHeartbeat(scheduler.monotonicNow() - startTime);
 
             // If the state of this NN has changed (eg STANDBY->ACTIVE)
@@ -693,26 +679,17 @@ class BPServiceActor implements Runnable {
             }
           }
         }
-        if (sendImmediateIBR || sendHeartbeat) {
+        if (sendImmediateIBR ||
+            (startTime - lastDeletedReport > dnConf.deleteReportInterval)) {
           reportReceivedDeletedBlocks();
+          lastDeletedReport = startTime;
         }
 
-        List<DatanodeCommand> cmds = null;
-        boolean forceFullBr =
-            scheduler.forceFullBlockReport.getAndSet(false);
-        if (forceFullBr) {
-          LOG.info("Forcing a full block report to " + nnAddr);
-        }
-        if ((fullBlockReportLeaseId != 0) || forceFullBr) {
-          cmds = blockReport(fullBlockReportLeaseId);
-          fullBlockReportLeaseId = 0;
-        }
+        List<DatanodeCommand> cmds = blockReport();
         processCommand(cmds == null ? null : cmds.toArray(new DatanodeCommand[cmds.size()]));
 
-        if (!dn.areCacheReportsDisabledForTests()) {
-          DatanodeCommand cmd = cacheReport();
-          processCommand(new DatanodeCommand[]{ cmd });
-        }
+        DatanodeCommand cmd = cacheReport();
+        processCommand(new DatanodeCommand[]{ cmd });
 
         //
         // There is no work to do;  sleep until hearbeat timer elapses, 
@@ -767,16 +744,15 @@ class BPServiceActor implements Runnable {
   void register(NamespaceInfo nsInfo) throws IOException {
     // The handshake() phase loaded the block pool storage
     // off disk - so update the bpRegistration object from that info
-    DatanodeRegistration newBpRegistration = bpos.createRegistration();
+    bpRegistration = bpos.createRegistration();
 
     LOG.info(this + " beginning handshake with NN");
 
     while (shouldRun()) {
       try {
         // Use returned registration from namenode with updated fields
-        newBpRegistration = bpNamenode.registerDatanode(newBpRegistration);
-        newBpRegistration.setNamespaceInfo(nsInfo);
-        bpRegistration = newBpRegistration;
+        bpRegistration = bpNamenode.registerDatanode(bpRegistration);
+        bpRegistration.setNamespaceInfo(nsInfo);
         break;
       } catch(EOFException e) {  // namenode might have just restarted
         LOG.info("Problem connecting to server: " + nnAddr + " :"
@@ -792,7 +768,7 @@ class BPServiceActor implements Runnable {
     bpos.registrationSucceeded(this, bpRegistration);
 
     // random short delay - helps scatter the BR from all DNs
-    scheduler.scheduleBlockReport(dnConf.initialBlockReportDelayMs);
+    scheduler.scheduleBlockReport(dnConf.initialBlockReportDelay);
   }
 
 
@@ -985,7 +961,7 @@ class BPServiceActor implements Runnable {
     } else {
       LOG.info(bpos.toString() + ": scheduling a full block report.");
       synchronized(pendingIncrementalBRperStorage) {
-        scheduler.forceFullBlockReportNow();
+        scheduler.scheduleBlockReport(0);
         pendingIncrementalBRperStorage.notifyAll();
       }
     }
@@ -1038,9 +1014,6 @@ class BPServiceActor implements Runnable {
     @VisibleForTesting
     boolean resetBlockReportTime = true;
 
-    private final AtomicBoolean forceFullBlockReport =
-        new AtomicBoolean(false);
-
     private final long heartbeatIntervalMs;
     private final long blockReportIntervalMs;
 
@@ -1072,13 +1045,8 @@ class BPServiceActor implements Runnable {
       return (nextHeartbeatTime - startTime <= 0);
     }
 
-    boolean isBlockReportDue(long curTime) {
-      return nextBlockReportTime - curTime <= 0;
-    }
-
-    void forceFullBlockReportNow() {
-      forceFullBlockReport.set(true);
-      resetBlockReportTime = true;
+    boolean isBlockReportDue() {
+      return nextBlockReportTime - monotonicNow() <= 0;
     }
 
     /**
@@ -1089,7 +1057,7 @@ class BPServiceActor implements Runnable {
       if (delay > 0) { // send BR after random delay
         // Numerical overflow is possible here and is okay.
         nextBlockReportTime =
-            monotonicNow() + ThreadLocalRandom.current().nextInt((int) (delay));
+            monotonicNow() + DFSUtil.getRandom().nextInt((int) (delay));
       } else { // send at next heartbeat
         nextBlockReportTime = monotonicNow();
       }
@@ -1108,7 +1076,7 @@ class BPServiceActor implements Runnable {
       // time before we start the periodic block reports.
       if (resetBlockReportTime) {
         nextBlockReportTime = monotonicNow() +
-            ThreadLocalRandom.current().nextInt((int)(blockReportIntervalMs));
+            DFSUtil.getRandom().nextInt((int)(blockReportIntervalMs));
         resetBlockReportTime = false;
       } else {
         /* say the last block report was at 8:20:14. The current report

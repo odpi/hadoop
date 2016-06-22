@@ -22,6 +22,7 @@ import java.util.Map;
 
 import org.apache.hadoop.yarn.api.records.ReservationDefinition;
 import org.apache.hadoop.yarn.api.records.ReservationId;
+import org.apache.hadoop.yarn.api.records.ReservationRequest;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.util.resource.ResourceCalculator;
 import org.apache.hadoop.yarn.util.resource.Resources;
@@ -29,9 +30,9 @@ import org.apache.hadoop.yarn.util.resource.Resources;
 /**
  * An in memory implementation of a reservation allocation using the
  * {@link RLESparseResourceAllocation}
- *
+ * 
  */
-public class InMemoryReservationAllocation implements ReservationAllocation {
+class InMemoryReservationAllocation implements ReservationAllocation {
 
   private final String planName;
   private final ReservationId reservationID;
@@ -39,38 +40,31 @@ public class InMemoryReservationAllocation implements ReservationAllocation {
   private final ReservationDefinition contract;
   private final long startTime;
   private final long endTime;
-  private final Map<ReservationInterval, Resource> allocationRequests;
+  private final Map<ReservationInterval, ReservationRequest> allocationRequests;
   private boolean hasGang = false;
   private long acceptedAt = -1;
 
   private RLESparseResourceAllocation resourcesOverTime;
 
-  public InMemoryReservationAllocation(ReservationId reservationID,
+  InMemoryReservationAllocation(ReservationId reservationID,
       ReservationDefinition contract, String user, String planName,
       long startTime, long endTime,
-      Map<ReservationInterval, Resource> allocations,
+      Map<ReservationInterval, ReservationRequest> allocationRequests,
       ResourceCalculator calculator, Resource minAlloc) {
-    this(reservationID, contract, user, planName, startTime, endTime,
-        allocations, calculator, minAlloc, false);
-  }
-
-  public InMemoryReservationAllocation(ReservationId reservationID,
-      ReservationDefinition contract, String user, String planName,
-      long startTime, long endTime,
-      Map<ReservationInterval, Resource> allocations,
-      ResourceCalculator calculator, Resource minAlloc, boolean hasGang) {
     this.contract = contract;
     this.startTime = startTime;
     this.endTime = endTime;
     this.reservationID = reservationID;
     this.user = user;
-    this.allocationRequests = allocations;
+    this.allocationRequests = allocationRequests;
     this.planName = planName;
-    this.hasGang = hasGang;
     resourcesOverTime = new RLESparseResourceAllocation(calculator, minAlloc);
-    for (Map.Entry<ReservationInterval, Resource> r : allocations
+    for (Map.Entry<ReservationInterval, ReservationRequest> r : allocationRequests
         .entrySet()) {
       resourcesOverTime.addInterval(r.getKey(), r.getValue());
+      if (r.getValue().getConcurrency() > 1) {
+        hasGang = true;
+      }
     }
   }
 
@@ -95,7 +89,7 @@ public class InMemoryReservationAllocation implements ReservationAllocation {
   }
 
   @Override
-  public Map<ReservationInterval, Resource> getAllocationRequests() {
+  public Map<ReservationInterval, ReservationRequest> getAllocationRequests() {
     return Collections.unmodifiableMap(allocationRequests);
   }
 

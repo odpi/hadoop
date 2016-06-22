@@ -24,7 +24,6 @@ import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
-import java.util.Random;
 import java.util.concurrent.TimeoutException;
 
 import org.apache.commons.logging.Log;
@@ -39,7 +38,6 @@ import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.MiniDFSNNTopology;
-import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocolPB.DatanodeProtocolClientSideTranslatorPB;
@@ -56,7 +54,6 @@ import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.test.GenericTestUtils.DelayAnswer;
 import org.apache.hadoop.test.MultithreadedTestUtil.RepeatingTestThread;
 import org.apache.hadoop.test.MultithreadedTestUtil.TestContext;
-import org.apache.hadoop.util.Shell.ShellCommandExecutor;
 import org.apache.log4j.Level;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -82,33 +79,24 @@ public class TestPipelinesFailover {
   
   private static final int STRESS_NUM_THREADS = 25;
   private static final int STRESS_RUNTIME = 40000;
-
-  private static final int NN_COUNT = 3;
-  private static final long FAILOVER_SEED = System.currentTimeMillis();
-  private static final Random failoverRandom = new Random(FAILOVER_SEED);
-  static{
-    // log the failover seed so we can reproduce the test exactly
-    LOG.info("Using random seed: " + FAILOVER_SEED
-        + " for selecting active target NN during failover");
-  }
-
+  
   enum TestScenario {
     GRACEFUL_FAILOVER {
       @Override
-      void run(MiniDFSCluster cluster, int previousActive, int activeIndex) throws IOException {
-        cluster.transitionToStandby(previousActive);
-        cluster.transitionToActive(activeIndex);
+      void run(MiniDFSCluster cluster) throws IOException {
+        cluster.transitionToStandby(0);
+        cluster.transitionToActive(1);
       }
     },
     ORIGINAL_ACTIVE_CRASHED {
       @Override
-      void run(MiniDFSCluster cluster, int previousActive, int activeIndex) throws IOException {
-        cluster.restartNameNode(previousActive);
-        cluster.transitionToActive(activeIndex);
+      void run(MiniDFSCluster cluster) throws IOException {
+        cluster.restartNameNode(0);
+        cluster.transitionToActive(1);
       }
     };
 
-    abstract void run(MiniDFSCluster cluster, int previousActive, int activeIndex) throws IOException;
+    abstract void run(MiniDFSCluster cluster) throws IOException;
   }
   
   enum MethodToTestIdempotence {
@@ -145,7 +133,10 @@ public class TestPipelinesFailover {
     conf.setInt(DFSConfigKeys.DFS_NAMENODE_REPLICATION_INTERVAL_KEY, 1000);
     
     FSDataOutputStream stm = null;
-    MiniDFSCluster cluster = newMiniCluster(conf, 3);
+    MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf)
+      .nnTopology(MiniDFSNNTopology.simpleHATopology())
+      .numDataNodes(3)
+      .build();
     try {
       int sizeWritten = 0;
       
@@ -164,15 +155,15 @@ public class TestPipelinesFailover {
       // Make sure all of the blocks are written out before failover.
       stm.hflush();
 
-      LOG.info("Failing over to another NN");
-      int activeIndex = failover(cluster, scenario);
+      LOG.info("Failing over to NN 1");
+      scenario.run(cluster);
 
       // NOTE: explicitly do *not* make any further metadata calls
       // to the NN here. The next IPC call should be to allocate the next
       // block. Any other call would notice the failover and not test
       // idempotence of the operation (HDFS-3031)
       
-      FSNamesystem ns1 = cluster.getNameNode(activeIndex).getNamesystem();
+      FSNamesystem ns1 = cluster.getNameNode(1).getNamesystem();
       BlockManagerTestUtil.updateState(ns1.getBlockManager());
       assertEquals(0, ns1.getPendingReplicationBlocks());
       assertEquals(0, ns1.getCorruptReplicaBlocks());
@@ -220,7 +211,10 @@ public class TestPipelinesFailover {
     conf.setInt(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, BLOCK_SIZE);
     
     FSDataOutputStream stm = null;
-    MiniDFSCluster cluster = newMiniCluster(conf, 5);
+    MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf)
+      .nnTopology(MiniDFSNNTopology.simpleHATopology())
+      .numDataNodes(5)
+      .build();
     try {
       cluster.waitActive();
       cluster.transitionToActive(0);
@@ -236,7 +230,8 @@ public class TestPipelinesFailover {
       // Make sure all the blocks are written before failover
       stm.hflush();
 
-      int nextActive = failover(cluster, scenario);
+      LOG.info("Failing over to NN 1");
+      scenario.run(cluster);
 
       assertTrue(fs.exists(TEST_PATH));
       
@@ -245,9 +240,9 @@ public class TestPipelinesFailover {
       // write another block and a half
       AppendTestUtil.write(stm, BLOCK_AND_A_HALF, BLOCK_AND_A_HALF);
       stm.hflush();
-
-      LOG.info("Failing back from NN " + nextActive + " to NN 0");
-      cluster.transitionToStandby(nextActive);
+      
+      LOG.info("Failing back to NN 0");
+      cluster.transitionToStandby(1);
       cluster.transitionToActive(0);
       
       cluster.stopDataNode(1);
@@ -265,7 +260,7 @@ public class TestPipelinesFailover {
       cluster.shutdown();
     }
   }
-
+  
   /**
    * Tests lease recovery if a client crashes. This approximates the
    * use case of HBase WALs being recovered after a NN failover.
@@ -278,7 +273,10 @@ public class TestPipelinesFailover {
     conf.setInt(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, BLOCK_SIZE);
     
     FSDataOutputStream stm = null;
-    final MiniDFSCluster cluster = newMiniCluster(conf, 3);
+    final MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf)
+      .nnTopology(MiniDFSNNTopology.simpleHATopology())
+      .numDataNodes(3)
+      .build();
     try {
       cluster.waitActive();
       cluster.transitionToActive(0);
@@ -329,7 +327,10 @@ public class TestPipelinesFailover {
     conf.setInt(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, BLOCK_SIZE);
     
     FSDataOutputStream stm = null;
-    final MiniDFSCluster cluster = newMiniCluster(conf, 3);
+    final MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf)
+      .nnTopology(MiniDFSNNTopology.simpleHATopology())
+      .numDataNodes(3)
+      .build();
     try {
       cluster.waitActive();
       cluster.transitionToActive(0);
@@ -403,20 +404,7 @@ public class TestPipelinesFailover {
       cluster.shutdown();
     }
   }
-
-  /**
-   * Create a MiniCluster with the specified base configuration and the specified number of
-   * DataNodes. Helper method to ensure that the we use the same number of NNs across all the tests.
-   * @return mini cluster ready to use
-   * @throws IOException cluster cannot be started
-   */
-  private MiniDFSCluster newMiniCluster(Configuration conf, int dnCount) throws IOException {
-    return new MiniDFSCluster.Builder(conf)
-             .nnTopology(MiniDFSNNTopology.simpleHATopology(NN_COUNT))
-             .numDataNodes(dnCount)
-             .build();
-  }
-
+  
   /**
    * Stress test for pipeline/lease recovery. Starts a number of
    * threads, each of which creates a file and has another client
@@ -425,33 +413,6 @@ public class TestPipelinesFailover {
    */
   @Test(timeout=STRESS_RUNTIME*3)
   public void testPipelineRecoveryStress() throws Exception {
-
-    // The following section of code is to help debug HDFS-6694 about
-    // this test that fails from time to time due to "too many open files".
-    //
-    String[] scmd = new String[] {"/bin/sh", "-c", "ulimit -a"};
-    ShellCommandExecutor sce = new ShellCommandExecutor(scmd);
-    sce.execute();
-
-    System.out.println("HDFS-6694 Debug Data BEGIN===");
-    System.out.println("'ulimit -a' output:\n" + sce.getOutput());
-
-    scmd = new String[] {"hostname"};
-    sce = new ShellCommandExecutor(scmd);
-    sce.execute();
-    System.out.println("'hostname' output:\n" + sce.getOutput());
-
-    scmd = new String[] {"ifconfig"};
-    sce = new ShellCommandExecutor(scmd);
-    sce.execute();
-    System.out.println("'ifconfig' output:\n" + sce.getOutput());
-
-    scmd = new String[] {"whoami"};
-    sce = new ShellCommandExecutor(scmd);
-    sce.execute();
-    System.out.println("'whoami' output:\n" + sce.getOutput());
-    System.out.println("===HDFS-6694 Debug Data END");
-
     HAStressTestHarness harness = new HAStressTestHarness();
     // Disable permissions so that another user can recover the lease.
     harness.conf.setBoolean(
@@ -459,7 +420,8 @@ public class TestPipelinesFailover {
     // This test triggers rapid NN failovers.  The client retry policy uses an
     // exponential backoff.  This can quickly lead to long sleep times and even
     // timeout the whole test.  Cap the sleep time at 1s to prevent this.
-    harness.conf.setInt(HdfsClientConfigKeys.Failover.SLEEPTIME_MAX_KEY, 1000);
+    harness.conf.setInt(DFSConfigKeys.DFS_CLIENT_FAILOVER_SLEEPTIME_MAX_KEY,
+      1000);
 
     final MiniDFSCluster cluster = harness.startCluster();
     try {
@@ -492,38 +454,6 @@ public class TestPipelinesFailover {
       System.err.println("===========================\n\n\n\n");
       harness.shutdown();
     }
-  }
-
-  /**
-   * Fail-over using the given scenario, assuming NN0 is currently active
-   * @param cluster cluster on which to run the scenario
-   * @param scenario failure scenario to run
-   * @return the index of the new active NN
-   * @throws IOException
-   */
-  private int failover(MiniDFSCluster cluster, TestScenario scenario) throws IOException {
-    return failover(cluster, scenario, 0);
-  }
-
-  /**
-   * Do a fail-over with the given scenario.
-   * @param cluster cluster on which to run the scenario
-   * @param scenario failure scenario to run
-   * @param activeIndex index of the currently active node
-   * @throws IOException on failure
-   * @return the index of the new active NN
-   */
-  private int failover(MiniDFSCluster cluster, TestScenario scenario, int activeIndex)
-      throws IOException {
-    // get index of the next node that should be active, ensuring its not the same as the currently
-    // active node
-    int nextActive = failoverRandom.nextInt(NN_COUNT);
-    if (nextActive == activeIndex) {
-      nextActive = (nextActive + 1) % NN_COUNT;
-    }
-    LOG.info("Failing over to a standby NN:" + nextActive + " from NN " + activeIndex);
-    scenario.run(cluster, activeIndex, nextActive);
-    return nextActive;
   }
 
   /**

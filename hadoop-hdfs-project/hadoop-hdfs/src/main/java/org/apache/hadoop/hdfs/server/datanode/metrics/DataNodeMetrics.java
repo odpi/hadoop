@@ -22,6 +22,7 @@ import static org.apache.hadoop.metrics2.impl.MsInfo.SessionId;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.annotation.Metrics;
@@ -31,8 +32,6 @@ import org.apache.hadoop.metrics2.lib.MutableCounterLong;
 import org.apache.hadoop.metrics2.lib.MutableQuantiles;
 import org.apache.hadoop.metrics2.lib.MutableRate;
 import org.apache.hadoop.metrics2.source.JvmMetrics;
-
-import java.util.concurrent.ThreadLocalRandom;
 
 /**
  *
@@ -178,7 +177,7 @@ public class DataNodeMetrics {
     MetricsSystem ms = DefaultMetricsSystem.instance();
     JvmMetrics jm = JvmMetrics.create("DataNode", sessionId, ms);
     String name = "DataNodeActivity-"+ (dnName.isEmpty()
-        ? "UndefinedDataNodeName"+ ThreadLocalRandom.current().nextInt()
+        ? "UndefinedDataNodeName"+ DFSUtil.getRandom().nextInt() 
             : dnName.replace(':', '-'));
 
     // Percentile measurement is off by default, by watching no intervals
@@ -211,8 +210,8 @@ public class DataNodeMetrics {
     cacheReports.add(latency);
   }
 
-  public void incrBlocksReplicated() {
-    blocksReplicated.incr();
+  public void incrBlocksReplicated(int delta) {
+    blocksReplicated.incr(delta);
   }
 
   public void incrBlocksWritten() {

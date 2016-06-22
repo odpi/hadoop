@@ -27,9 +27,6 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.io.ReadaheadPool;
 import org.apache.hadoop.io.ReadaheadPool.ReadaheadRequest;
 import org.apache.hadoop.io.nativeio.NativeIO;
-
-import static org.apache.hadoop.io.nativeio.NativeIO.POSIX.POSIX_FADV_DONTNEED;
-
 import org.jboss.netty.handler.stream.ChunkedFile;
 
 public class FadvisedChunkedFile extends ChunkedFile {
@@ -75,7 +72,7 @@ public class FadvisedChunkedFile extends ChunkedFile {
         NativeIO.POSIX.getCacheManipulator().posixFadviseIfPossible(identifier,
             fd,
             getStartOffset(), getEndOffset() - getStartOffset(),
-            POSIX_FADV_DONTNEED);
+            NativeIO.POSIX.POSIX_FADV_DONTNEED);
       } catch (Throwable t) {
         LOG.warn("Failed to manage OS cache for " + identifier, t);
       }

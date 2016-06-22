@@ -33,7 +33,6 @@ import org.apache.hadoop.yarn.event.Dispatcher;
 import org.apache.hadoop.yarn.server.resourcemanager.ahs.RMApplicationHistoryWriter;
 import org.apache.hadoop.yarn.server.resourcemanager.metrics.SystemMetricsPublisher;
 import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMNodeLabelsManager;
-import org.apache.hadoop.yarn.server.resourcemanager.placement.PlacementManager;
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.NullRMStateStore;
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.RMStateStore;
 import org.apache.hadoop.yarn.server.resourcemanager.reservation.ReservationSystem;
@@ -69,8 +68,8 @@ public class RMActiveServiceContext {
   private final ConcurrentMap<NodeId, RMNode> nodes =
       new ConcurrentHashMap<NodeId, RMNode>();
 
-  private final ConcurrentMap<NodeId, RMNode> inactiveNodes =
-      new ConcurrentHashMap<NodeId, RMNode>();
+  private final ConcurrentMap<String, RMNode> inactiveNodes =
+      new ConcurrentHashMap<String, RMNode>();
 
   private final ConcurrentMap<ApplicationId, ByteBuffer> systemCredentials =
       new ConcurrentHashMap<ApplicationId, ByteBuffer>();
@@ -93,6 +92,8 @@ public class RMActiveServiceContext {
   private NodesListManager nodesListManager;
   private ResourceTrackerService resourceTrackerService;
   private ApplicationMasterService applicationMasterService;
+  private RMApplicationHistoryWriter rmApplicationHistoryWriter;
+  private SystemMetricsPublisher systemMetricsPublisher;
   private RMNodeLabelsManager nodeLabelManager;
   private long epoch;
   private Clock systemClock = new SystemClock();
@@ -100,10 +101,9 @@ public class RMActiveServiceContext {
   private long schedulerRecoveryWaitTime = 0;
   private boolean printLog = true;
   private boolean isSchedulerReady = false;
-  private PlacementManager queuePlacementManager = null;
 
   public RMActiveServiceContext() {
-    queuePlacementManager = new PlacementManager();
+
   }
 
   @Private
@@ -117,6 +117,7 @@ public class RMActiveServiceContext {
       RMContainerTokenSecretManager containerTokenSecretManager,
       NMTokenSecretManagerInRM nmTokenSecretManager,
       ClientToAMTokenSecretManagerInRM clientToAMTokenSecretManager,
+      RMApplicationHistoryWriter rmApplicationHistoryWriter,
       ResourceScheduler scheduler) {
     this();
     this.setContainerAllocationExpirer(containerAllocationExpirer);
@@ -127,6 +128,7 @@ public class RMActiveServiceContext {
     this.setContainerTokenSecretManager(containerTokenSecretManager);
     this.setNMTokenSecretManager(nmTokenSecretManager);
     this.setClientToAMTokenSecretManager(clientToAMTokenSecretManager);
+    this.setRMApplicationHistoryWriter(rmApplicationHistoryWriter);
     this.setScheduler(scheduler);
 
     RMStateStore nullStore = new NullRMStateStore();
@@ -183,7 +185,7 @@ public class RMActiveServiceContext {
 
   @Private
   @Unstable
-  public ConcurrentMap<NodeId, RMNode> getInactiveRMNodes() {
+  public ConcurrentMap<String, RMNode> getInactiveRMNodes() {
     return this.inactiveNodes;
   }
 
@@ -368,6 +370,32 @@ public class RMActiveServiceContext {
 
   @Private
   @Unstable
+  public RMApplicationHistoryWriter getRMApplicationHistoryWriter() {
+    return rmApplicationHistoryWriter;
+  }
+
+  @Private
+  @Unstable
+  public void setSystemMetricsPublisher(
+      SystemMetricsPublisher systemMetricsPublisher) {
+    this.systemMetricsPublisher = systemMetricsPublisher;
+  }
+
+  @Private
+  @Unstable
+  public SystemMetricsPublisher getSystemMetricsPublisher() {
+    return systemMetricsPublisher;
+  }
+
+  @Private
+  @Unstable
+  public void setRMApplicationHistoryWriter(
+      RMApplicationHistoryWriter rmApplicationHistoryWriter) {
+    this.rmApplicationHistoryWriter = rmApplicationHistoryWriter;
+  }
+
+  @Private
+  @Unstable
   public long getEpoch() {
     return this.epoch;
   }
@@ -425,17 +453,5 @@ public class RMActiveServiceContext {
   @Unstable
   public ConcurrentMap<ApplicationId, ByteBuffer> getSystemCredentialsForApps() {
     return systemCredentials;
-  }
-  
-  @Private
-  @Unstable
-  public PlacementManager getQueuePlacementManager() {
-    return queuePlacementManager;
-  }
-  
-  @Private
-  @Unstable
-  public void setQueuePlacementManager(PlacementManager placementMgr) {
-    this.queuePlacementManager = placementMgr;
   }
 }

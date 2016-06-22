@@ -28,15 +28,7 @@ static volatile int curlGlobalInited = 0;
 
 const char *hdfs_strerror(int errnoval)
 {
-#if defined(__sun)
-// MT-Safe under Solaris which doesn't support sys_errlist/sys_nerr
-  return strerror(errnoval);
-#else
-  if ((errnoval < 0) || (errnoval >= sys_nerr)) {
-    return "unknown error.";
-  }
-  return sys_errlist[errnoval];
-#endif
+  return terror(errnoval);
 }
 
 int initResponseBuffer(struct ResponseBuffer **buffer)

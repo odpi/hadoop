@@ -27,14 +27,13 @@ import java.io.RandomAccessFile;
 import java.util.EnumSet;
 import java.util.List;
 
-import org.apache.hadoop.fs.CreateFlag;
 import org.apache.hadoop.test.GenericTestUtils;
+import org.apache.hadoop.fs.CreateFlag;
 import org.mockito.invocation.InvocationOnMock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 import org.mockito.stubbing.Answer;
 
-import org.apache.commons.logging.impl.Log4JLogger;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.FSDataOutputStream;

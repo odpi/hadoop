@@ -224,7 +224,7 @@ class JobQueueClient extends Configured implements Tool {
   }
 
   private void displayUsage(String cmd) {
-    String prefix = "Usage: queue ";
+    String prefix = "Usage: JobQueueClient ";
     if ("-queueinfo".equals(cmd)) {
       System.err.println(prefix + "[" + cmd + "<job-queue-name> [-showJobs]]");
     } else {

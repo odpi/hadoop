@@ -398,11 +398,4 @@ public class TestHarFileSystemBasics {
     }
   }
 
-  @Test
-  public void testHarFsWithoutAuthority() throws Exception {
-    final URI uri = harFileSystem.getUri();
-    Assert.assertNull("har uri authority not null: " + uri, uri.getAuthority());
-    FileContext.getFileContext(uri, conf);
-  }
-
 }

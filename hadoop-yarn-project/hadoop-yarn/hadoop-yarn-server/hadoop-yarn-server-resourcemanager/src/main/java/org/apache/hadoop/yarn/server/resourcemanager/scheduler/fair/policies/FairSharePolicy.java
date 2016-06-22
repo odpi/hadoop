@@ -29,7 +29,6 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FSQueue;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.Schedulable;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.SchedulingPolicy;
 import org.apache.hadoop.yarn.util.resource.DefaultResourceCalculator;
-import org.apache.hadoop.yarn.util.resource.ResourceCalculator;
 import org.apache.hadoop.yarn.util.resource.Resources;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -44,8 +43,7 @@ public class FairSharePolicy extends SchedulingPolicy {
   public static final String NAME = "fair";
   private static final DefaultResourceCalculator RESOURCE_CALCULATOR =
       new DefaultResourceCalculator();
-  private static final FairShareComparator COMPARATOR =
-          new FairShareComparator();
+  private FairShareComparator comparator = new FairShareComparator();
 
   @Override
   public String getName() {
@@ -113,12 +111,7 @@ public class FairSharePolicy extends SchedulingPolicy {
 
   @Override
   public Comparator<Schedulable> getComparator() {
-    return COMPARATOR;
-  }
-
-  @Override
-  public ResourceCalculator getResourceCalculator() {
-    return RESOURCE_CALCULATOR;
+    return comparator;
   }
 
   @Override

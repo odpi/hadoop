@@ -40,7 +40,9 @@ import org.apache.hadoop.security.SaslRpcServer;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authorize.PolicyProvider;
 import org.apache.hadoop.security.token.Token;
+import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.service.AbstractService;
+import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.yarn.api.ApplicationMasterProtocol;
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse;
@@ -74,6 +76,7 @@ import org.apache.hadoop.yarn.exceptions.InvalidResourceRequestException;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.factories.RecordFactory;
 import org.apache.hadoop.yarn.factory.providers.RecordFactoryProvider;
+import org.apache.hadoop.yarn.ipc.RPCUtil;
 import org.apache.hadoop.yarn.ipc.YarnRPC;
 import org.apache.hadoop.yarn.security.AMRMTokenIdentifier;
 import org.apache.hadoop.yarn.server.resourcemanager.RMAuditLogger.AuditConstants;
@@ -81,19 +84,17 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.AMLivelinessMonitor;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttempt;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptImpl;
-import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptState;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.event.RMAppAttemptRegistrationEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.event.RMAppAttemptStatusupdateEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.event.RMAppAttemptUnregistrationEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.AbstractYarnScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.Allocation;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerNodeReport;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.YarnScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.security.authorize.RMPolicyProvider;
 import org.apache.hadoop.yarn.server.security.MasterKeyData;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
-import org.apache.hadoop.yarn.server.utils.YarnServerSecurityUtils;
-import org.apache.hadoop.yarn.util.resource.Resources;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -104,7 +105,7 @@ public class ApplicationMasterService extends AbstractService implements
   private static final Log LOG = LogFactory.getLog(ApplicationMasterService.class);
   private final AMLivelinessMonitor amLivelinessMonitor;
   private YarnScheduler rScheduler;
-  private InetSocketAddress masterServiceAddress;
+  private InetSocketAddress bindAddress;
   private Server server;
   private final RecordFactory recordFactory =
       RecordFactoryProvider.getRecordFactory(null);
@@ -120,18 +121,15 @@ public class ApplicationMasterService extends AbstractService implements
   }
 
   @Override
-  protected void serviceInit(Configuration conf) throws Exception {
-    masterServiceAddress = conf.getSocketAddr(
+  protected void serviceStart() throws Exception {
+    Configuration conf = getConfig();
+    YarnRPC rpc = YarnRPC.create(conf);
+
+    InetSocketAddress masterServiceAddress = conf.getSocketAddr(
         YarnConfiguration.RM_BIND_HOST,
         YarnConfiguration.RM_SCHEDULER_ADDRESS,
         YarnConfiguration.DEFAULT_RM_SCHEDULER_ADDRESS,
         YarnConfiguration.DEFAULT_RM_SCHEDULER_PORT);
-  }
-
-  @Override
-  protected void serviceStart() throws Exception {
-    Configuration conf = getConfig();
-    YarnRPC rpc = YarnRPC.create(conf);
 
     Configuration serverConf = conf;
     // If the auth is not-simple, enforce it to be token-based.
@@ -160,7 +158,7 @@ public class ApplicationMasterService extends AbstractService implements
     }
     
     this.server.start();
-    this.masterServiceAddress =
+    this.bindAddress =
         conf.updateConnectAddr(YarnConfiguration.RM_BIND_HOST,
                                YarnConfiguration.RM_SCHEDULER_ADDRESS,
                                YarnConfiguration.DEFAULT_RM_SCHEDULER_ADDRESS,
@@ -170,7 +168,64 @@ public class ApplicationMasterService extends AbstractService implements
 
   @Private
   public InetSocketAddress getBindAddress() {
-    return this.masterServiceAddress;
+    return this.bindAddress;
+  }
+
+  // Obtain the needed AMRMTokenIdentifier from the remote-UGI. RPC layer
+  // currently sets only the required id, but iterate through anyways just to be
+  // sure.
+  private AMRMTokenIdentifier selectAMRMTokenIdentifier(
+      UserGroupInformation remoteUgi) throws IOException {
+    AMRMTokenIdentifier result = null;
+    Set<TokenIdentifier> tokenIds = remoteUgi.getTokenIdentifiers();
+    for (TokenIdentifier tokenId : tokenIds) {
+      if (tokenId instanceof AMRMTokenIdentifier) {
+        result = (AMRMTokenIdentifier) tokenId;
+        break;
+      }
+    }
+
+    return result;
+  }
+
+  private AMRMTokenIdentifier authorizeRequest()
+      throws YarnException {
+
+    UserGroupInformation remoteUgi;
+    try {
+      remoteUgi = UserGroupInformation.getCurrentUser();
+    } catch (IOException e) {
+      String msg =
+          "Cannot obtain the user-name for authorizing ApplicationMaster. "
+              + "Got exception: " + StringUtils.stringifyException(e);
+      LOG.warn(msg);
+      throw RPCUtil.getRemoteException(msg);
+    }
+
+    boolean tokenFound = false;
+    String message = "";
+    AMRMTokenIdentifier appTokenIdentifier = null;
+    try {
+      appTokenIdentifier = selectAMRMTokenIdentifier(remoteUgi);
+      if (appTokenIdentifier == null) {
+        tokenFound = false;
+        message = "No AMRMToken found for user " + remoteUgi.getUserName();
+      } else {
+        tokenFound = true;
+      }
+    } catch (IOException e) {
+      tokenFound = false;
+      message =
+          "Got exception while looking for AMRMToken for user "
+              + remoteUgi.getUserName();
+    }
+
+    if (!tokenFound) {
+      LOG.warn(message);
+      throw RPCUtil.getRemoteException(message);
+    }
+
+    return appTokenIdentifier;
   }
 
   @Override
@@ -178,8 +233,7 @@ public class ApplicationMasterService extends AbstractService implements
       RegisterApplicationMasterRequest request) throws YarnException,
       IOException {
 
-    AMRMTokenIdentifier amrmTokenIdentifier =
-        YarnServerSecurityUtils.authorizeRequest();
+    AMRMTokenIdentifier amrmTokenIdentifier = authorizeRequest();
     ApplicationAttemptId applicationAttemptId =
         amrmTokenIdentifier.getApplicationAttemptId();
 
@@ -244,35 +298,32 @@ public class ApplicationMasterService extends AbstractService implements
 
       // For work-preserving AM restart, retrieve previous attempts' containers
       // and corresponding NM tokens.
-      if (app.getApplicationSubmissionContext()
-          .getKeepContainersAcrossApplicationAttempts()) {
-        List<Container> transferredContainers = rScheduler
+      List<Container> transferredContainers =
+          ((AbstractYarnScheduler) rScheduler)
             .getTransferredContainers(applicationAttemptId);
-        if (!transferredContainers.isEmpty()) {
-          response.setContainersFromPreviousAttempts(transferredContainers);
-          List<NMToken> nmTokens = new ArrayList<NMToken>();
-          for (Container container : transferredContainers) {
-            try {
-              NMToken token = rmContext.getNMTokenSecretManager()
-                  .createAndGetNMToken(app.getUser(), applicationAttemptId,
-                      container);
-              if (null != token) {
-                nmTokens.add(token);
-              }
-            } catch (IllegalArgumentException e) {
-              // if it's a DNS issue, throw UnknowHostException directly and
-              // that
-              // will be automatically retried by RMProxy in RPC layer.
-              if (e.getCause() instanceof UnknownHostException) {
-                throw (UnknownHostException) e.getCause();
-              }
+      if (!transferredContainers.isEmpty()) {
+        response.setContainersFromPreviousAttempts(transferredContainers);
+        List<NMToken> nmTokens = new ArrayList<NMToken>();
+        for (Container container : transferredContainers) {
+          try {
+            NMToken token = rmContext.getNMTokenSecretManager()
+                .createAndGetNMToken(app.getUser(), applicationAttemptId,
+                    container);
+            if (null != token) {
+              nmTokens.add(token);
+            }
+          } catch (IllegalArgumentException e) {
+            // if it's a DNS issue, throw UnknowHostException directly and that
+            // will be automatically retried by RMProxy in RPC layer.
+            if (e.getCause() instanceof UnknownHostException) {
+              throw (UnknownHostException) e.getCause();
             }
           }
-          response.setNMTokensFromPreviousAttempts(nmTokens);
-          LOG.info("Application " + appID + " retrieved "
-              + transferredContainers.size() + " containers from previous"
-              + " attempts and " + nmTokens.size() + " NM tokens.");
         }
+        response.setNMTokensFromPreviousAttempts(nmTokens);
+        LOG.info("Application " + appID + " retrieved "
+            + transferredContainers.size() + " containers from previous"
+            + " attempts and " + nmTokens.size() + " NM tokens.");
       }
 
       response.setSchedulerResourceTypes(rScheduler
@@ -288,7 +339,7 @@ public class ApplicationMasterService extends AbstractService implements
       IOException {
 
     ApplicationAttemptId applicationAttemptId =
-        YarnServerSecurityUtils.authorizeRequest().getApplicationAttemptId();
+        authorizeRequest().getApplicationAttemptId();
     ApplicationId appId = applicationAttemptId.getApplicationId();
 
     RMApp rmApp =
@@ -363,17 +414,11 @@ public class ApplicationMasterService extends AbstractService implements
     return hasApplicationMasterRegistered;
   }
 
-  protected final static List<Container> EMPTY_CONTAINER_LIST =
-      new ArrayList<Container>();
-  protected static final Allocation EMPTY_ALLOCATION = new Allocation(
-      EMPTY_CONTAINER_LIST, Resources.createResource(0), null, null, null);
-
   @Override
   public AllocateResponse allocate(AllocateRequest request)
       throws YarnException, IOException {
 
-    AMRMTokenIdentifier amrmTokenIdentifier =
-        YarnServerSecurityUtils.authorizeRequest();
+    AMRMTokenIdentifier amrmTokenIdentifier = authorizeRequest();
 
     ApplicationAttemptId appAttemptId =
         amrmTokenIdentifier.getApplicationAttemptId();
@@ -482,20 +527,9 @@ public class ApplicationMasterService extends AbstractService implements
       }
 
       // Send new requests to appAttempt.
-      Allocation allocation;
-      RMAppAttemptState state =
-          app.getRMAppAttempt(appAttemptId).getAppAttemptState();
-      if (state.equals(RMAppAttemptState.FINAL_SAVING) ||
-          state.equals(RMAppAttemptState.FINISHING) ||
-          app.isAppFinalStateStored()) {
-        LOG.warn(appAttemptId + " is in " + state +
-                 " state, ignore container allocate request.");
-        allocation = EMPTY_ALLOCATION;
-      } else {
-        allocation =
-          this.rScheduler.allocate(appAttemptId, ask, release,
+      Allocation allocation =
+          this.rScheduler.allocate(appAttemptId, ask, release, 
               blacklistAdditions, blacklistRemovals);
-      }
 
       if (!blacklistAdditions.isEmpty() || !blacklistRemovals.isEmpty()) {
         LOG.info("blacklist are updated in Scheduler." +

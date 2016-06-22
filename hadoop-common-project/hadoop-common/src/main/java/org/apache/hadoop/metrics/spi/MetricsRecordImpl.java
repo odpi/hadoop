@@ -57,7 +57,6 @@ public class MetricsRecordImpl implements MetricsRecord {
    *
    * @return the record name
    */
-  @Override
   public String getRecordName() {
     return recordName;
   }
@@ -69,7 +68,6 @@ public class MetricsRecordImpl implements MetricsRecord {
    * @param tagValue new value of the tag
    * @throws MetricsException if the tagName conflicts with the configuration
    */
-  @Override
   public void setTag(String tagName, String tagValue) {
     if (tagValue == null) {
       tagValue = "";
@@ -84,7 +82,6 @@ public class MetricsRecordImpl implements MetricsRecord {
    * @param tagValue new value of the tag
    * @throws MetricsException if the tagName conflicts with the configuration
    */
-  @Override
   public void setTag(String tagName, int tagValue) {
     tagTable.put(tagName, Integer.valueOf(tagValue));
   }
@@ -96,7 +93,6 @@ public class MetricsRecordImpl implements MetricsRecord {
    * @param tagValue new value of the tag
    * @throws MetricsException if the tagName conflicts with the configuration
    */
-  @Override
   public void setTag(String tagName, long tagValue) {
     tagTable.put(tagName, Long.valueOf(tagValue));
   }
@@ -108,7 +104,6 @@ public class MetricsRecordImpl implements MetricsRecord {
    * @param tagValue new value of the tag
    * @throws MetricsException if the tagName conflicts with the configuration
    */
-  @Override
   public void setTag(String tagName, short tagValue) {
     tagTable.put(tagName, Short.valueOf(tagValue));
   }
@@ -120,7 +115,6 @@ public class MetricsRecordImpl implements MetricsRecord {
    * @param tagValue new value of the tag
    * @throws MetricsException if the tagName conflicts with the configuration
    */
-  @Override
   public void setTag(String tagName, byte tagValue) {
     tagTable.put(tagName, Byte.valueOf(tagValue));
   }
@@ -128,7 +122,6 @@ public class MetricsRecordImpl implements MetricsRecord {
   /**
    * Removes any tag of the specified name.
    */
-  @Override
   public void removeTag(String tagName) {
     tagTable.remove(tagName);
   }
@@ -141,7 +134,6 @@ public class MetricsRecordImpl implements MetricsRecord {
    * @throws MetricsException if the metricName or the type of the metricValue 
    * conflicts with the configuration
    */
-  @Override
   public void setMetric(String metricName, int metricValue) {
     setAbsolute(metricName, Integer.valueOf(metricValue));
   }
@@ -154,7 +146,6 @@ public class MetricsRecordImpl implements MetricsRecord {
    * @throws MetricsException if the metricName or the type of the metricValue 
    * conflicts with the configuration
    */
-  @Override
   public void setMetric(String metricName, long metricValue) {
     setAbsolute(metricName, Long.valueOf(metricValue));
   }
@@ -167,7 +158,6 @@ public class MetricsRecordImpl implements MetricsRecord {
    * @throws MetricsException if the metricName or the type of the metricValue 
    * conflicts with the configuration
    */
-  @Override
   public void setMetric(String metricName, short metricValue) {
     setAbsolute(metricName, Short.valueOf(metricValue));
   }
@@ -180,7 +170,6 @@ public class MetricsRecordImpl implements MetricsRecord {
    * @throws MetricsException if the metricName or the type of the metricValue 
    * conflicts with the configuration
    */
-  @Override
   public void setMetric(String metricName, byte metricValue) {
     setAbsolute(metricName, Byte.valueOf(metricValue));
   }
@@ -193,7 +182,6 @@ public class MetricsRecordImpl implements MetricsRecord {
    * @throws MetricsException if the metricName or the type of the metricValue 
    * conflicts with the configuration
    */
-  @Override
   public void setMetric(String metricName, float metricValue) {
     setAbsolute(metricName, new Float(metricValue));
   }
@@ -206,7 +194,6 @@ public class MetricsRecordImpl implements MetricsRecord {
    * @throws MetricsException if the metricName or the type of the metricValue 
    * conflicts with the configuration
    */
-  @Override
   public void incrMetric(String metricName, int metricValue) {
     setIncrement(metricName, Integer.valueOf(metricValue));
   }
@@ -219,7 +206,6 @@ public class MetricsRecordImpl implements MetricsRecord {
    * @throws MetricsException if the metricName or the type of the metricValue 
    * conflicts with the configuration
    */
-  @Override
   public void incrMetric(String metricName, long metricValue) {
     setIncrement(metricName, Long.valueOf(metricValue));
   }
@@ -232,7 +218,6 @@ public class MetricsRecordImpl implements MetricsRecord {
    * @throws MetricsException if the metricName or the type of the metricValue 
    * conflicts with the configuration
    */
-  @Override
   public void incrMetric(String metricName, short metricValue) {
     setIncrement(metricName, Short.valueOf(metricValue));
   }
@@ -245,7 +230,6 @@ public class MetricsRecordImpl implements MetricsRecord {
    * @throws MetricsException if the metricName or the type of the metricValue 
    * conflicts with the configuration
    */
-  @Override
   public void incrMetric(String metricName, byte metricValue) {
     setIncrement(metricName, Byte.valueOf(metricValue));
   }
@@ -258,7 +242,6 @@ public class MetricsRecordImpl implements MetricsRecord {
    * @throws MetricsException if the metricName or the type of the metricValue 
    * conflicts with the configuration
    */
-  @Override
   public void incrMetric(String metricName, float metricValue) {
     setIncrement(metricName, new Float(metricValue));
   }
@@ -276,7 +259,6 @@ public class MetricsRecordImpl implements MetricsRecord {
    * If the tag values match an existing row, that row is updated; 
    * otherwise, a new row is added.
    */
-  @Override
   public void update() {
     context.update(this);
   }
@@ -285,7 +267,6 @@ public class MetricsRecordImpl implements MetricsRecord {
    * Removes the row, if it exists, in the buffered data table having tags 
    * that equal the tags that have been set on this record. 
    */
-  @Override
   public void remove() {
     context.remove(this);
   }

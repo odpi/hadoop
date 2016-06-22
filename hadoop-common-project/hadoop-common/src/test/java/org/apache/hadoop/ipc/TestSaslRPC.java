@@ -558,16 +558,9 @@ public class TestSaslRPC {
       e = se;
     }
     assertNotNull(e);
-    String message = e.getMessage();
-    assertContains("PLAIN auth failed", message);
-    assertContains("wrong password", message);
+    assertEquals("PLAIN auth failed: wrong password", e.getMessage());
   }
 
-  private void assertContains(String expected, String text) {
-    assertNotNull("null text", text );
-    assertTrue("No {" + expected + "} in {" + text + "}",
-        text.contains(expected));
-  }
 
   private void runNegotiation(CallbackHandler clientCbh,
                               CallbackHandler serverCbh)

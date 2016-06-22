@@ -22,9 +22,7 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 
 /**
- * The metrics filter interface. The MetricsFilter objects can be used either to
- * filter the metrics from {@link MetricsSource}s or to filter metrics per
- * {@link MetricsSink}.
+ * The metrics filter interface
  */
 @InterfaceAudience.Public
 @InterfaceStability.Evolving

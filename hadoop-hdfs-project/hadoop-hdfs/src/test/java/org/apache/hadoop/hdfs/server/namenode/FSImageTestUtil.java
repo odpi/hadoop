@@ -74,7 +74,7 @@ import com.google.common.io.Files;
 public abstract class FSImageTestUtil {
   
   public static final Log LOG = LogFactory.getLog(FSImageTestUtil.class);
-  
+
   /**
    * The position in the fsimage header where the txid is
    * written.
@@ -213,7 +213,7 @@ public abstract class FSImageTestUtil {
       long firstTxId, long newInodeId) throws IOException {
     FSEditLog editLog = FSImageTestUtil.createStandaloneEditLog(editsLogDir);
     editLog.setNextTxId(firstTxId);
-    editLog.openForWrite(NameNodeLayoutVersion.CURRENT_LAYOUT_VERSION);
+    editLog.openForWrite();
     
     PermissionStatus perms = PermissionStatus.createImmutable("fakeuser", "fakegroup",
         FsPermission.createImmutable((short)0755));

@@ -88,11 +88,6 @@ public abstract class ReconfigurableBase
     reconfigurationUtil = Preconditions.checkNotNull(ru);
   }
 
-  /**
-   * Create a new configuration.
-   */
-  protected abstract Configuration getNewConf();
-
   @VisibleForTesting
   public Collection<PropertyChange> getChangedProperties(
       Configuration newConf, Configuration oldConf) {
@@ -113,16 +108,17 @@ public abstract class ReconfigurableBase
     public void run() {
       LOG.info("Starting reconfiguration task.");
       Configuration oldConf = this.parent.getConf();
-      Configuration newConf = this.parent.getNewConf();
+      Configuration newConf = new Configuration();
       Collection<PropertyChange> changes =
           this.parent.getChangedProperties(newConf, oldConf);
       Map<PropertyChange, Optional<String>> results = Maps.newHashMap();
       for (PropertyChange change : changes) {
         String errorMessage = null;
         if (!this.parent.isPropertyReconfigurable(change.prop)) {
-          LOG.info(String.format(
-              "Property %s is not configurable: old value: %s, new value: %s",
-              change.prop, change.oldVal, change.newVal));
+          errorMessage = "Property " + change.prop +
+              " is not reconfigurable";
+          LOG.info(errorMessage);
+          results.put(change, Optional.of(errorMessage));
           continue;
         }
         LOG.info("Change property: " + change.prop + " from \""

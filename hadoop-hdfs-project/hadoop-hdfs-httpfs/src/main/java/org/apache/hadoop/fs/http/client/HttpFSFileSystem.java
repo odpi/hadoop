@@ -238,7 +238,7 @@ public class HttpFSFileSystem extends FileSystem
    * @return a <code>HttpURLConnection</code> for the HttpFSServer server,
    *         authenticated and ready to use for the specified path and file system operation.
    *
-   * @throws IOException thrown if an IO error occurs.
+   * @throws IOException thrown if an IO error occurrs.
    */
   private HttpURLConnection getConnection(final String method,
       Map<String, String> params, Path path, boolean makeQualified)
@@ -263,7 +263,7 @@ public class HttpFSFileSystem extends FileSystem
    *         HttpFSServer server, authenticated and ready to use for the
    *         specified path and file system operation.
    *
-   * @throws IOException thrown if an IO error occurs.
+   * @throws IOException thrown if an IO error occurrs.
    */
   private HttpURLConnection getConnection(final String method,
       Map<String, String> params, Map<String, List<String>> multiValuedParams,
@@ -301,7 +301,7 @@ public class HttpFSFileSystem extends FileSystem
    * @return a <code>HttpURLConnection</code> for the HttpFSServer server, authenticated and ready to use for
    *         the specified path and file system operation.
    *
-   * @throws IOException thrown if an IO error occurs.
+   * @throws IOException thrown if an IO error occurrs.
    */
   private HttpURLConnection getConnection(URL url, String method) throws IOException {
     try {
@@ -369,7 +369,8 @@ public class HttpFSFileSystem extends FileSystem
    */
   @Override
   protected int getDefaultPort() {
-    return DFSConfigKeys.DFS_NAMENODE_HTTP_PORT_DEFAULT;
+    return getConf().getInt(DFSConfigKeys.DFS_NAMENODE_HTTP_PORT_KEY,
+        DFSConfigKeys.DFS_NAMENODE_HTTP_PORT_DEFAULT);
   }
 
   /**

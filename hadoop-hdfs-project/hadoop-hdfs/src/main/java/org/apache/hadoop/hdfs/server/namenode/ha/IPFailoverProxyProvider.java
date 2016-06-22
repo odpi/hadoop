@@ -24,10 +24,11 @@ import java.net.URI;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
-import org.apache.hadoop.hdfs.DFSUtilClient;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.NameNodeProxies;
-import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
+import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocols;
+import org.apache.hadoop.io.retry.FailoverProxyProvider;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.security.UserGroupInformation;
 
@@ -66,15 +67,15 @@ public class IPFailoverProxyProvider<T> extends
 
     this.conf = new Configuration(conf);
     int maxRetries = this.conf.getInt(
-        HdfsClientConfigKeys.Failover.CONNECTION_RETRIES_KEY,
-        HdfsClientConfigKeys.Failover.CONNECTION_RETRIES_DEFAULT);
+        DFSConfigKeys.DFS_CLIENT_FAILOVER_CONNECTION_RETRIES_KEY,
+        DFSConfigKeys.DFS_CLIENT_FAILOVER_CONNECTION_RETRIES_DEFAULT);
     this.conf.setInt(
         CommonConfigurationKeysPublic.IPC_CLIENT_CONNECT_MAX_RETRIES_KEY,
         maxRetries);
     
     int maxRetriesOnSocketTimeouts = this.conf.getInt(
-        HdfsClientConfigKeys.Failover.CONNECTION_RETRIES_ON_SOCKET_TIMEOUTS_KEY,
-        HdfsClientConfigKeys.Failover.CONNECTION_RETRIES_ON_SOCKET_TIMEOUTS_DEFAULT);
+        DFSConfigKeys.DFS_CLIENT_FAILOVER_CONNECTION_RETRIES_ON_SOCKET_TIMEOUTS_KEY,
+        DFSConfigKeys.DFS_CLIENT_FAILOVER_CONNECTION_RETRIES_ON_SOCKET_TIMEOUTS_DEFAULT);
     this.conf.setInt(
         CommonConfigurationKeysPublic.IPC_CLIENT_CONNECT_MAX_RETRIES_ON_SOCKET_TIMEOUTS_KEY,
         maxRetriesOnSocketTimeouts);
@@ -91,7 +92,7 @@ public class IPFailoverProxyProvider<T> extends
     if (nnProxyInfo == null) {
       try {
         // Create a proxy that is not wrapped in RetryProxy
-        InetSocketAddress nnAddr = DFSUtilClient.getNNAddress(nameNodeUri);
+        InetSocketAddress nnAddr = NameNode.getAddress(nameNodeUri);
         nnProxyInfo = new ProxyInfo<T>(NameNodeProxies.createNonHAProxy(
             conf, nnAddr, xface, UserGroupInformation.getCurrentUser(), 
             false).getProxy(), nnAddr.toString());

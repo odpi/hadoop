@@ -19,7 +19,6 @@
 package org.apache.hadoop.yarn.server.resourcemanager;
 
 import java.io.File;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -27,7 +26,6 @@ import java.util.Set;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.yarn.api.records.NodeId;
-import org.apache.hadoop.yarn.api.records.NodeLabel;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.junit.Assert;
 import org.junit.Before;
@@ -67,9 +65,7 @@ public class TestRMHAForNodeLabels extends RMHATestBase {
     // Add labels to rm1
     rm1.getRMContext()
         .getNodeLabelManager()
-        .addToCluserNodeLabels(
-            Arrays.asList(NodeLabel.newInstance("a"),
-                NodeLabel.newInstance("b"), NodeLabel.newInstance("c")));
+        .addToCluserNodeLabels(ImmutableSet.of("a", "b", "c"));
    
     Map<NodeId, Set<String>> nodeToLabels = new HashMap<>();
     nodeToLabels.put(NodeId.newInstance("host1", 0), ImmutableSet.of("a"));
@@ -83,7 +79,7 @@ public class TestRMHAForNodeLabels extends RMHATestBase {
     // Check labels in rm2
     Assert
         .assertTrue(rm2.getRMContext().getNodeLabelManager()
-            .getClusterNodeLabelNames()
+            .getClusterNodeLabels()
             .containsAll(ImmutableSet.of("a", "b", "c")));
     Assert.assertTrue(rm2.getRMContext().getNodeLabelManager()
         .getNodeLabels().get(NodeId.newInstance("host1", 0)).contains("a"));

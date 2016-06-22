@@ -61,7 +61,7 @@ class MetricsSourceAdapter implements DynamicMBean {
 
   private Iterable<MetricsRecordImpl> lastRecs;
   private long jmxCacheTS = 0;
-  private long jmxCacheTTL;
+  private int jmxCacheTTL;
   private MBeanInfo infoCache;
   private ObjectName mbeanName;
   private final boolean startMBeans;
@@ -69,7 +69,7 @@ class MetricsSourceAdapter implements DynamicMBean {
   MetricsSourceAdapter(String prefix, String name, String description,
                        MetricsSource source, Iterable<MetricsTag> injectedTags,
                        MetricsFilter recordFilter, MetricsFilter metricFilter,
-                       long jmxCacheTTL, boolean startMBeans) {
+                       int jmxCacheTTL, boolean startMBeans) {
     this.prefix = checkNotNull(prefix, "prefix");
     this.name = checkNotNull(name, "name");
     this.source = checkNotNull(source, "source");
@@ -84,7 +84,7 @@ class MetricsSourceAdapter implements DynamicMBean {
 
   MetricsSourceAdapter(String prefix, String name, String description,
                        MetricsSource source, Iterable<MetricsTag> injectedTags,
-                       long period, MetricsConfig conf) {
+                       int period, MetricsConfig conf) {
     this(prefix, name, description, source, injectedTags,
          conf.getFilter(RECORD_FILTER_KEY),
          conf.getFilter(METRIC_FILTER_KEY),
@@ -154,28 +154,31 @@ class MetricsSourceAdapter implements DynamicMBean {
 
   private void updateJmxCache() {
     boolean getAllMetrics = false;
-    synchronized (this) {
+    synchronized(this) {
       if (Time.now() - jmxCacheTS >= jmxCacheTTL) {
         // temporarilly advance the expiry while updating the cache
         jmxCacheTS = Time.now() + jmxCacheTTL;
         if (lastRecs == null) {
           getAllMetrics = true;
         }
-      } else {
+      }
+      else {
         return;
       }
+    }
 
-      if (getAllMetrics) {
-        MetricsCollectorImpl builder = new MetricsCollectorImpl();
-        getMetrics(builder, true);
-      }
+    if (getAllMetrics) {
+      MetricsCollectorImpl builder = new MetricsCollectorImpl();
+      getMetrics(builder, true);
+    }
 
+    synchronized(this) {
       updateAttrCache();
       if (getAllMetrics) {
         updateInfoCache();
       }
       jmxCacheTS = Time.now();
-      lastRecs = null; // in case regular interval update is not running
+      lastRecs = null;  // in case regular interval update is not running
     }
   }
 
@@ -189,7 +192,8 @@ class MetricsSourceAdapter implements DynamicMBean {
     }
     try {
       source.getMetrics(builder, all);
-    } catch (Exception e) {
+    }
+    catch (Exception e) {
       LOG.error("Error getting metrics from source "+ name, e);
     }
     for (MetricsRecordBuilderImpl rb : builder) {
@@ -229,11 +233,7 @@ class MetricsSourceAdapter implements DynamicMBean {
     return mbeanName;
   }
 
-  @VisibleForTesting
-  long getJmxCacheTTL() {
-    return jmxCacheTTL;
-  }
-
+  
   private void updateInfoCache() {
     LOG.debug("Updating info cache...");
     infoCache = infoBuilder.reset(lastRecs).get();

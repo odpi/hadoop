@@ -42,13 +42,14 @@ public class BlockStoragePolicySuite {
   public static final XAttr.NameSpace XAttrNS = XAttr.NameSpace.SYSTEM;
 
   public static final int ID_BIT_LENGTH = 4;
+  public static final byte ID_UNSPECIFIED = 0;
 
   @VisibleForTesting
   public static BlockStoragePolicySuite createDefaultSuite() {
     final BlockStoragePolicy[] policies =
         new BlockStoragePolicy[1 << ID_BIT_LENGTH];
     final byte lazyPersistId = HdfsConstants.MEMORY_STORAGE_POLICY_ID;
-    policies[lazyPersistId] = new BlockStoragePolicy(lazyPersistId,
+    policies[lazyPersistId] = new BlockStoragePolicy(lazyPersistId, 
         HdfsConstants.MEMORY_STORAGE_POLICY_NAME,
         new StorageType[]{StorageType.RAM_DISK, StorageType.DISK},
         new StorageType[]{StorageType.DISK},
@@ -140,7 +141,8 @@ public class BlockStoragePolicySuite {
     return XAttrHelper.buildXAttr(name, new byte[]{policyId});
   }
 
-  public static String getStoragePolicyXAttrPrefixedName() {
-    return XAttrHelper.getPrefixedName(XAttrNS, STORAGE_POLICY_XATTR_NAME);
+  public static boolean isStoragePolicyXAttr(XAttr xattr) {
+    return xattr != null && xattr.getNameSpace() == XAttrNS
+        && xattr.getName().equals(STORAGE_POLICY_XATTR_NAME);
   }
 }

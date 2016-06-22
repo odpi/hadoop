@@ -26,38 +26,25 @@ import org.apache.hadoop.yarn.util.resource.Resources;
  * that, it's not "extra") resource you can get.
  */
 public class ResourceLimits {
-  private volatile Resource limit;
+  volatile Resource limit;
 
   // This is special limit that goes with the RESERVE_CONT_LOOK_ALL_NODES
   // config. This limit indicates how much we need to unreserve to allocate
   // another container.
   private volatile Resource amountNeededUnreserve;
 
-  // How much resource you can use for next allocation, if this isn't enough for
-  // next container allocation, you may need to consider unreserve some
-  // containers.
-  private volatile Resource headroom;
-
   public ResourceLimits(Resource limit) {
-    this(limit, Resources.none());
+    this.amountNeededUnreserve = Resources.none();
+    this.limit = limit;
   }
 
   public ResourceLimits(Resource limit, Resource amountNeededUnreserve) {
     this.amountNeededUnreserve = amountNeededUnreserve;
-    this.headroom = limit;
     this.limit = limit;
   }
 
   public Resource getLimit() {
     return limit;
-  }
-
-  public Resource getHeadroom() {
-    return headroom;
-  }
-
-  public void setHeadroom(Resource headroom) {
-    this.headroom = headroom;
   }
 
   public Resource getAmountNeededUnreserve() {
@@ -71,5 +58,4 @@ public class ResourceLimits {
   public void setAmountNeededUnreserve(Resource amountNeededUnreserve) {
     this.amountNeededUnreserve = amountNeededUnreserve;
   }
-
 }

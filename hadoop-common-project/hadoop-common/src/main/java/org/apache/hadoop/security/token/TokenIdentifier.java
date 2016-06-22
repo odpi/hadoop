@@ -33,7 +33,7 @@ import org.apache.hadoop.security.UserGroupInformation;
  * An identifier that identifies a token, may contain public information 
  * about a token, including its kind (or type).
  */
-@InterfaceAudience.Public
+@InterfaceAudience.LimitedPrivate({"HDFS", "MapReduce"})
 @InterfaceStability.Evolving
 public abstract class TokenIdentifier implements Writable {
 

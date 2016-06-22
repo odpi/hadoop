@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.fs;
 
+import java.io.*;
 import java.io.DataOutputStream;
 import java.io.FilterOutputStream;
 import java.io.IOException;
@@ -34,16 +35,17 @@ public class FSDataOutputStream extends DataOutputStream
   private final OutputStream wrappedStream;
 
   private static class PositionCache extends FilterOutputStream {
-    private final FileSystem.Statistics statistics;
-    private long position;
+    private FileSystem.Statistics statistics;
+    long position;
 
-    PositionCache(OutputStream out, FileSystem.Statistics stats, long pos) {
+    public PositionCache(OutputStream out, 
+                         FileSystem.Statistics stats,
+                         long pos) throws IOException {
       super(out);
       statistics = stats;
       position = pos;
     }
 
-    @Override
     public void write(int b) throws IOException {
       out.write(b);
       position++;
@@ -52,7 +54,6 @@ public class FSDataOutputStream extends DataOutputStream
       }
     }
     
-    @Override
     public void write(byte b[], int off, int len) throws IOException {
       out.write(b, off, len);
       position += len;                            // update position
@@ -61,11 +62,10 @@ public class FSDataOutputStream extends DataOutputStream
       }
     }
       
-    long getPos() {
+    public long getPos() throws IOException {
       return position;                            // return cached position
     }
-
-    @Override
+    
     public void close() throws IOException {
       // ensure close works even if a null reference was passed in
       if (out != null) {
@@ -74,12 +74,18 @@ public class FSDataOutputStream extends DataOutputStream
     }
   }
 
-  public FSDataOutputStream(OutputStream out, FileSystem.Statistics stats) {
+  @Deprecated
+  public FSDataOutputStream(OutputStream out) throws IOException {
+    this(out, null);
+  }
+
+  public FSDataOutputStream(OutputStream out, FileSystem.Statistics stats)
+    throws IOException {
     this(out, stats, 0);
   }
 
   public FSDataOutputStream(OutputStream out, FileSystem.Statistics stats,
-                            long startPosition) {
+                            long startPosition) throws IOException {
     super(new PositionCache(out, stats, startPosition));
     wrappedStream = out;
   }
@@ -89,14 +95,13 @@ public class FSDataOutputStream extends DataOutputStream
    *
    * @return the current position in the output stream
    */
-  public long getPos() {
+  public long getPos() throws IOException {
     return ((PositionCache)out).getPos();
   }
 
   /**
    * Close the underlying output stream.
    */
-  @Override
   public void close() throws IOException {
     out.close(); // This invokes PositionCache.close()
   }
@@ -111,6 +116,14 @@ public class FSDataOutputStream extends DataOutputStream
     return wrappedStream;
   }
 
+  @Override  // Syncable
+  @Deprecated
+  public void sync() throws IOException {
+    if (wrappedStream instanceof Syncable) {
+      ((Syncable)wrappedStream).sync();
+    }
+  }
+  
   @Override  // Syncable
   public void hflush() throws IOException {
     if (wrappedStream instanceof Syncable) {

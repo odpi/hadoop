@@ -86,7 +86,7 @@ public class VersionInfo {
   }
 
   protected String _getBuildVersion(){
-    return _getVersion() +
+    return getVersion() +
       " from " + _getRevision() +
       " by " + _getUser() +
       " source checksum " + _getSrcChecksum();
@@ -170,8 +170,7 @@ public class VersionInfo {
   public static void main(String[] args) {
     LOG.debug("version: "+ getVersion());
     System.out.println("Hadoop " + getVersion());
-    System.out.println("Source code repository " + getUrl() + " -r " +
-        getRevision());
+    System.out.println("Subversion " + getUrl() + " -r " + getRevision());
     System.out.println("Compiled by " + getUser() + " on " + getDate());
     System.out.println("Compiled with protoc " + getProtocVersion());
     System.out.println("From source with checksum " + getSrcChecksum());

@@ -90,7 +90,6 @@ public class MetricsIntValue extends MetricsBase {
    *
    * @param mr
    */
-  @Override
   public synchronized void pushMetric(final MetricsRecord mr) {
     if (changed) {
       try {

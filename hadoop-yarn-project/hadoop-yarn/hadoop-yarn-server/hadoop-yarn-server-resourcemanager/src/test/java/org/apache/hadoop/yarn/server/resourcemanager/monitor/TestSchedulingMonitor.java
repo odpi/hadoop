@@ -20,7 +20,6 @@ package org.apache.hadoop.yarn.server.resourcemanager.monitor;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
-import org.apache.hadoop.yarn.server.resourcemanager.MockRM;
 import org.apache.hadoop.yarn.server.resourcemanager.ResourceManager;
 import org.apache.hadoop.yarn.server.resourcemanager.monitor.capacity.ProportionalCapacityPreemptionPolicy;
 import org.junit.Test;
@@ -36,7 +35,7 @@ public class TestSchedulingMonitor {
     conf.set(YarnConfiguration.RM_SCHEDULER_MONITOR_POLICIES,
         ProportionalCapacityPreemptionPolicy.class.getCanonicalName());
 
-    ResourceManager rm = new MockRM();
+    ResourceManager rm = new ResourceManager();
     try {
       rm.init(conf);
     } catch (Exception e) {

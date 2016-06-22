@@ -90,7 +90,6 @@ class NodesPage extends RmView {
         case DECOMMISSIONED:
         case LOST:
         case REBOOTED:
-        case SHUTDOWN:
           rmNodes = this.rm.getRMContext().getInactiveRMNodes().values();
           isInactive = true;
           break;

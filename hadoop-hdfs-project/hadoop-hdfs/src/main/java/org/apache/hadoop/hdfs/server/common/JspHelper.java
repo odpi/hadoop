@@ -18,10 +18,30 @@
 
 package org.apache.hadoop.hdfs.server.common;
 
+import static org.apache.hadoop.fs.CommonConfigurationKeys.DEFAULT_HADOOP_HTTP_STATIC_USER;
+import static org.apache.hadoop.fs.CommonConfigurationKeys.HADOOP_HTTP_STATIC_USER;
+
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+
+import javax.servlet.ServletContext;
+import javax.servlet.http.HttpServletRequest;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.DFSUtil;
+import org.apache.hadoop.hdfs.protocol.DatanodeID;
+import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.namenode.NameNodeHttpServer;
@@ -53,10 +73,105 @@ public class JspHelper {
   public static final String CURRENT_CONF = "current.conf";
   public static final String DELEGATION_PARAMETER_NAME = DelegationParam.NAME;
   public static final String NAMENODE_ADDRESS = "nnaddr";
+  static final String SET_DELEGATION = "&" + DELEGATION_PARAMETER_NAME +
+                                              "=";
   private static final Log LOG = LogFactory.getLog(JspHelper.class);
 
   /** Private constructor for preventing creating JspHelper object. */
   private JspHelper() {}
+
+  // data structure to count number of blocks on datanodes.
+  private static class NodeRecord extends DatanodeInfo {
+    int frequency;
+
+    public NodeRecord(DatanodeInfo info, int count) {
+      super(info);
+      this.frequency = count;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+      // Sufficient to use super equality as datanodes are uniquely identified
+      // by DatanodeID
+      return (this == obj) || super.equals(obj);
+    }
+    @Override
+    public int hashCode() {
+      // Super implementation is sufficient
+      return super.hashCode();
+    }
+  }
+
+  // compare two records based on their frequency
+  private static class NodeRecordComparator implements Comparator<NodeRecord> {
+
+    @Override
+    public int compare(NodeRecord o1, NodeRecord o2) {
+      if (o1.frequency < o2.frequency) {
+        return -1;
+      } else if (o1.frequency > o2.frequency) {
+        return 1;
+      }
+      return 0;
+    }
+  }
+
+  public static DatanodeInfo bestNode(LocatedBlocks blks, Configuration conf)
+      throws IOException {
+    HashMap<DatanodeInfo, NodeRecord> map =
+      new HashMap<DatanodeInfo, NodeRecord>();
+    for (LocatedBlock block : blks.getLocatedBlocks()) {
+      DatanodeInfo[] nodes = block.getLocations();
+      for (DatanodeInfo node : nodes) {
+        NodeRecord record = map.get(node);
+        if (record == null) {
+          map.put(node, new NodeRecord(node, 1));
+        } else {
+          record.frequency++;
+        }
+      }
+    }
+    NodeRecord[] nodes = map.values().toArray(new NodeRecord[map.size()]);
+    Arrays.sort(nodes, new NodeRecordComparator());
+    return bestNode(nodes, false);
+  }
+
+  private static DatanodeInfo bestNode(DatanodeInfo[] nodes, boolean doRandom)
+      throws IOException {
+    if (nodes == null || nodes.length == 0) {
+      throw new IOException("No nodes contain this block");
+    }
+    int l = 0;
+    while (l < nodes.length && !nodes[l].isDecommissioned()) {
+      ++l;
+    }
+
+    if (l == 0) {
+      throw new IOException("No active nodes contain this block");
+    }
+
+    int index = doRandom ? DFSUtil.getRandom().nextInt(l) : 0;
+    return nodes[index];
+  }
+
+  /**
+   * Validate filename. 
+   * @return null if the filename is invalid.
+   *         Otherwise, return the validated filename.
+   */
+  public static String validatePath(String p) {
+    return p == null || p.length() == 0?
+        null: new Path(p).toUri().getPath();
+  }
+
+  /**
+   * Validate a long value. 
+   * @return null if the value is invalid.
+   *         Otherwise, return the validated Long object.
+   */
+  public static Long validateLong(String value) {
+    return value == null? null: Long.parseLong(value);
+  }
 
   public static String getDefaultWebUserName(Configuration conf) throws IOException {
     String user = conf.get(
@@ -236,4 +351,56 @@ public class JspHelper {
     return username;
   }
 
+  /**
+   * Returns the url parameter for the given token string.
+   * @param tokenString
+   * @return url parameter
+   */
+  public static String getDelegationTokenUrlParam(String tokenString) {
+    if (tokenString == null ) {
+      return "";
+    }
+    if (UserGroupInformation.isSecurityEnabled()) {
+      return SET_DELEGATION + tokenString;
+    } else {
+      return "";
+    }
+  }
+
+  /**
+   * Returns the url parameter for the given string, prefixed with
+   * paramSeparator.
+   * 
+   * @param name parameter name
+   * @param val parameter value
+   * @param paramSeparator URL parameter prefix, i.e. either '?' or '&'
+   * @return url parameter
+   */
+  public static String getUrlParam(String name, String val, String paramSeparator) {
+    return val == null ? "" : paramSeparator + name + "=" + val;
+  }
+  
+  /**
+   * Returns the url parameter for the given string, prefixed with '?' if
+   * firstParam is true, prefixed with '&' if firstParam is false.
+   * 
+   * @param name parameter name
+   * @param val parameter value
+   * @param firstParam true if this is the first parameter in the list, false otherwise
+   * @return url parameter
+   */
+  public static String getUrlParam(String name, String val, boolean firstParam) {
+    return getUrlParam(name, val, firstParam ? "?" : "&");
+  }
+  
+  /**
+   * Returns the url parameter for the given string, prefixed with '&'.
+   * 
+   * @param name parameter name
+   * @param val parameter value
+   * @return url parameter
+   */
+  public static String getUrlParam(String name, String val) {
+    return getUrlParam(name, val, false);
+  }
 }

@@ -313,7 +313,6 @@ public class BuilderUtils {
     request.setResourceName(r.getResourceName());
     request.setCapability(r.getCapability());
     request.setNumContainers(r.getNumContainers());
-    request.setNodeLabelExpression(r.getNodeLabelExpression());
     return request;
   }
 
@@ -324,8 +323,7 @@ public class BuilderUtils {
       String url, long startTime, long finishTime,
       FinalApplicationStatus finalStatus,
       ApplicationResourceUsageReport appResources, String origTrackingUrl,
-      float progress, String appType, Token amRmToken, Set<String> tags,
-      Priority priority) {
+      float progress, String appType, Token amRmToken, Set<String> tags) {
     ApplicationReport report = recordFactory
         .newRecordInstance(ApplicationReport.class);
     report.setApplicationId(applicationId);
@@ -348,7 +346,6 @@ public class BuilderUtils {
     report.setApplicationType(appType);
     report.setAMRMToken(amRmToken);
     report.setApplicationTags(tags);
-    report.setPriority(priority);
     return report;
   }
   

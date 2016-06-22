@@ -25,16 +25,22 @@ public class CapacityHeadroomProvider {
   LeafQueue.User user;
   LeafQueue queue;
   FiCaSchedulerApp application;
+  Resource required;
   LeafQueue.QueueResourceLimitsInfo queueResourceLimitsInfo;
   
-  public CapacityHeadroomProvider(LeafQueue.User user, LeafQueue queue,
-      FiCaSchedulerApp application,
-      LeafQueue.QueueResourceLimitsInfo queueResourceLimitsInfo) {
-
+  public CapacityHeadroomProvider(
+    LeafQueue.User user,
+    LeafQueue queue,
+    FiCaSchedulerApp application,
+    Resource required,
+    LeafQueue.QueueResourceLimitsInfo queueResourceLimitsInfo) {
+    
     this.user = user;
     this.queue = queue;
     this.application = application;
+    this.required = required;
     this.queueResourceLimitsInfo = queueResourceLimitsInfo;
+    
   }
   
   public Resource getHeadroom() {
@@ -46,7 +52,7 @@ public class CapacityHeadroomProvider {
       clusterResource = queueResourceLimitsInfo.getClusterResource();
     }
     Resource headroom = queue.getHeadroom(user, queueCurrentLimit, 
-      clusterResource, application);
+      clusterResource, application, required);
     
     // Corner case to deal with applications being slightly over-limit
     if (headroom.getMemory() < 0) {

@@ -28,7 +28,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.logging.Log;
@@ -37,7 +37,6 @@ import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.ipc.RetriableException;
 import org.apache.hadoop.ipc.StandbyException;
 import org.apache.hadoop.net.ConnectTimeoutException;
-import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 
 /**
  * <p>
@@ -47,6 +46,13 @@ import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 public class RetryPolicies {
   
   public static final Log LOG = LogFactory.getLog(RetryPolicies.class);
+  
+  private static ThreadLocal<Random> RANDOM = new ThreadLocal<Random>() {
+    @Override
+    protected Random initialValue() {
+      return new Random();
+    }
+  };
   
   /**
    * <p>
@@ -62,17 +68,6 @@ public class RetryPolicies {
    * </p>
    */
   public static final RetryPolicy RETRY_FOREVER = new RetryForever();
-
-  /**
-   * <p>
-   * Keep trying forever with a fixed time between attempts.
-   * </p>
-   */
-  public static final RetryPolicy retryForeverWithFixedSleep(long sleepTime,
-      TimeUnit timeUnit) {
-    return new RetryUpToMaximumCountWithFixedSleep(Integer.MAX_VALUE,
-        sleepTime, timeUnit);
-  }
 
   /**
    * <p>
@@ -162,7 +157,7 @@ public class RetryPolicies {
     return new FailoverOnNetworkExceptionRetry(fallbackPolicy, maxFailovers,
         maxRetries, delayMillis, maxDelayBase);
   }
-
+  
   static class TryOnceThenFail implements RetryPolicy {
     @Override
     public RetryAction shouldRetry(Exception e, int retries, int failovers,
@@ -326,8 +321,7 @@ public class RetryPolicies {
       }
 
       //calculate sleep time and return.
-      // ensure 0.5 <= ratio <=1.5
-      final double ratio = ThreadLocalRandom.current().nextDouble() + 0.5;
+      final double ratio = RANDOM.get().nextDouble() + 0.5;//0.5 <= ratio <=1.5
       final long sleepTime = Math.round(p.sleepMillis * ratio);
       return new RetryAction(RetryAction.RetryDecision.RETRY, sleepTime);
     }
@@ -587,9 +581,6 @@ public class RetryPolicies {
         // RetriableException or RetriableException wrapped 
         return new RetryAction(RetryAction.RetryDecision.RETRY,
               getFailoverOrRetrySleepTime(retries));
-      } else if (e instanceof InvalidToken) {
-        return new RetryAction(RetryAction.RetryDecision.FAIL, 0,
-            "Invalid or Cancelled Token");
       } else if (e instanceof SocketException
           || (e instanceof IOException && !(e instanceof RemoteException))) {
         if (isIdempotentOrAtMostOnce) {
@@ -619,7 +610,7 @@ public class RetryPolicies {
   private static long calculateExponentialTime(long time, int retries,
       long cap) {
     long baseTime = Math.min(time * (1L << retries), cap);
-    return (long) (baseTime * (ThreadLocalRandom.current().nextDouble() + 0.5));
+    return (long) (baseTime * (RANDOM.get().nextDouble() + 0.5));
   }
 
   private static long calculateExponentialTime(long time, int retries) {

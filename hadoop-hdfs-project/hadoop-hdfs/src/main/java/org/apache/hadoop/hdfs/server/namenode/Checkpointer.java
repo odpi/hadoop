@@ -254,14 +254,10 @@ class Checkpointer extends Daemon {
     try {
       backupNode.namesystem.setImageLoaded();
       if(backupNode.namesystem.getBlocksTotal() > 0) {
-        long completeBlocksTotal =
-            backupNode.namesystem.getCompleteBlocksTotal();
-        backupNode.namesystem.setBlockTotal(completeBlocksTotal);
+        backupNode.namesystem.setBlockTotal();
       }
       bnImage.saveFSImageInAllDirs(backupNode.getNamesystem(), txid);
-      if (!backupNode.namesystem.isRollingUpgrade()) {
-        bnStorage.writeAll();
-      }
+      bnStorage.writeAll();
     } finally {
       backupNode.namesystem.writeUnlock();
     }

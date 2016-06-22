@@ -31,7 +31,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.service.CompositeService;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
-import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity;
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEvent;
@@ -46,7 +45,6 @@ import org.apache.hadoop.yarn.server.metrics.ApplicationMetricsConstants;
 import org.apache.hadoop.yarn.server.metrics.ContainerMetricsConstants;
 import org.apache.hadoop.yarn.server.resourcemanager.RMServerUtils;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
-import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppMetrics;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppState;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttempt;
@@ -100,8 +98,6 @@ public class SystemMetricsPublisher extends CompositeService {
   @SuppressWarnings("unchecked")
   public void appCreated(RMApp app, long createdTime) {
     if (publishSystemMetrics) {
-      ApplicationSubmissionContext appSubmissionContext =
-          app.getApplicationSubmissionContext();
       dispatcher.getEventHandler().handle(
           new ApplicationCreatedEvent(
               app.getApplicationId(),
@@ -110,11 +106,7 @@ public class SystemMetricsPublisher extends CompositeService {
               app.getUser(),
               app.getQueue(),
               app.getSubmitTime(),
-              createdTime, app.getApplicationTags(),
-              appSubmissionContext.getUnmanagedAM(),
-              appSubmissionContext.getPriority(),
-              app.getAppNodeLabelExpression(),
-              app.getAmNodeLabelExpression()));
+              createdTime));
     }
   }
 
@@ -259,17 +251,6 @@ public class SystemMetricsPublisher extends CompositeService {
         event.getQueue());
     entityInfo.put(ApplicationMetricsConstants.SUBMITTED_TIME_ENTITY_INFO,
         event.getSubmittedTime());
-    entityInfo.put(ApplicationMetricsConstants.APP_TAGS_INFO,
-        event.getAppTags());
-    entityInfo.put(
-        ApplicationMetricsConstants.UNMANAGED_APPLICATION_ENTITY_INFO,
-        event.isUnmanagedApp());
-    entityInfo.put(ApplicationMetricsConstants.APPLICATION_PRIORITY_INFO,
-        event.getApplicationPriority().getPriority());
-    entityInfo.put(ApplicationMetricsConstants.APP_NODE_LABEL_EXPRESSION,
-        event.getAppNodeLabelsExpression());
-    entityInfo.put(ApplicationMetricsConstants.AM_NODE_LABEL_EXPRESSION,
-        event.getAmNodeLabelsExpression());
     entity.setOtherInfo(entityInfo);
     TimelineEvent tEvent = new TimelineEvent();
     tEvent.setEventType(

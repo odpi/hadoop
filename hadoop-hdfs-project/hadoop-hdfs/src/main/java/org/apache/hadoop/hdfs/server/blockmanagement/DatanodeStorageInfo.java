@@ -36,9 +36,8 @@ import org.apache.hadoop.hdfs.server.protocol.StorageReport;
 public class DatanodeStorageInfo {
   public static final DatanodeStorageInfo[] EMPTY_ARRAY = {};
 
-  public static DatanodeInfo[] toDatanodeInfos(
-      DatanodeStorageInfo[] storages) {
-    return storages == null ? null: toDatanodeInfos(Arrays.asList(storages));
+  public static DatanodeInfo[] toDatanodeInfos(DatanodeStorageInfo[] storages) {
+    return toDatanodeInfos(Arrays.asList(storages));
   }
   static DatanodeInfo[] toDatanodeInfos(List<DatanodeStorageInfo> storages) {
     final DatanodeInfo[] datanodes = new DatanodeInfo[storages.size()];
@@ -58,9 +57,6 @@ public class DatanodeStorageInfo {
   }
 
   public static String[] toStorageIDs(DatanodeStorageInfo[] storages) {
-    if (storages == null) {
-      return null;
-    }
     String[] storageIDs = new String[storages.length];
     for(int i = 0; i < storageIDs.length; i++) {
       storageIDs[i] = storages[i].getStorageID();
@@ -69,9 +65,6 @@ public class DatanodeStorageInfo {
   }
 
   public static StorageType[] toStorageTypes(DatanodeStorageInfo[] storages) {
-    if (storages == null) {
-      return null;
-    }
     StorageType[] storageTypes = new StorageType[storages.length];
     for(int i = 0; i < storageTypes.length; i++) {
       storageTypes[i] = storages[i].getStorageType();
@@ -87,10 +80,10 @@ public class DatanodeStorageInfo {
   /**
    * Iterates over the list of blocks belonging to the data-node.
    */
-  class BlockIterator implements Iterator<BlockInfo> {
-    private BlockInfo current;
+  class BlockIterator implements Iterator<BlockInfoContiguous> {
+    private BlockInfoContiguous current;
 
-    BlockIterator(BlockInfo head) {
+    BlockIterator(BlockInfoContiguous head) {
       this.current = head;
     }
 
@@ -98,8 +91,8 @@ public class DatanodeStorageInfo {
       return current != null;
     }
 
-    public BlockInfo next() {
-      BlockInfo res = current;
+    public BlockInfoContiguous next() {
+      BlockInfoContiguous res = current;
       current = current.getNext(current.findStorageInfo(DatanodeStorageInfo.this));
       return res;
     }
@@ -119,7 +112,7 @@ public class DatanodeStorageInfo {
   private volatile long remaining;
   private long blockPoolUsed;
 
-  private volatile BlockInfo blockList = null;
+  private volatile BlockInfoContiguous blockList = null;
   private int numBlocks = 0;
 
   // The ID of the last full block report which updated this storage.
@@ -159,7 +152,7 @@ public class DatanodeStorageInfo {
     this.blockReportCount = blockReportCount;
   }
 
-  public boolean areBlockContentsStale() {
+  boolean areBlockContentsStale() {
     return blockContentsStale;
   }
 
@@ -209,7 +202,7 @@ public class DatanodeStorageInfo {
     return getState() == State.FAILED && numBlocks != 0;
   }
 
-  public String getStorageID() {
+  String getStorageID() {
     return storageID;
   }
 
@@ -233,7 +226,7 @@ public class DatanodeStorageInfo {
     return blockPoolUsed;
   }
 
-  public AddBlockResult addBlock(BlockInfo b) {
+  public AddBlockResult addBlock(BlockInfoContiguous b) {
     // First check whether the block belongs to a different storage
     // on the same DN.
     AddBlockResult result = AddBlockResult.ADDED;
@@ -258,7 +251,7 @@ public class DatanodeStorageInfo {
     return result;
   }
 
-  public boolean removeBlock(BlockInfo b) {
+  public boolean removeBlock(BlockInfoContiguous b) {
     blockList = b.listRemove(blockList, this);
     if (b.removeStorage(this)) {
       numBlocks--;
@@ -272,7 +265,7 @@ public class DatanodeStorageInfo {
     return numBlocks;
   }
   
-  Iterator<BlockInfo> getBlockIterator() {
+  Iterator<BlockInfoContiguous> getBlockIterator() {
     return new BlockIterator(blockList);
 
   }
@@ -281,7 +274,7 @@ public class DatanodeStorageInfo {
    * Move block to the head of the list of blocks belonging to the data-node.
    * @return the index of the head of the blockList
    */
-  int moveBlockToHead(BlockInfo b, int curIndex, int headIndex) {
+  int moveBlockToHead(BlockInfoContiguous b, int curIndex, int headIndex) {
     blockList = b.moveBlockToHead(blockList, this, curIndex, headIndex);
     return curIndex;
   }
@@ -291,7 +284,7 @@ public class DatanodeStorageInfo {
    * @return the head of the blockList
    */
   @VisibleForTesting
-  BlockInfo getBlockListHeadForTesting(){
+  BlockInfoContiguous getBlockListHeadForTesting(){
     return blockList;
   }
 
@@ -378,6 +371,6 @@ public class DatanodeStorageInfo {
   }
 
   static enum AddBlockResult {
-    ADDED, REPLACED, ALREADY_EXIST
+    ADDED, REPLACED, ALREADY_EXIST;
   }
 }

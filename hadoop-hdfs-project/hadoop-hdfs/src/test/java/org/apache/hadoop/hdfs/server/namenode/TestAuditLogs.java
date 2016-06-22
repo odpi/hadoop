@@ -42,7 +42,7 @@ import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
-import org.apache.hadoop.hdfs.web.WebHdfsConstants;
+import org.apache.hadoop.hdfs.web.HftpFileSystem;
 import org.apache.hadoop.hdfs.web.WebHdfsTestUtil;
 import org.apache.hadoop.hdfs.web.WebHdfsFileSystem;
 import org.apache.hadoop.security.AccessControlException;
@@ -115,6 +115,7 @@ public class TestAuditLogs {
     final long precision = 1L;
     conf.setLong(DFSConfigKeys.DFS_NAMENODE_ACCESSTIME_PRECISION_KEY, precision);
     conf.setLong(DFSConfigKeys.DFS_BLOCKREPORT_INTERVAL_MSEC_KEY, 10000L);
+    conf.setBoolean(DFSConfigKeys.DFS_WEBHDFS_ENABLED_KEY, true);
     conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_AUDIT_LOG_ASYNC_KEY, useAsyncLog);
     util = new DFSTestUtil.Builder().setName("TestAuditAllowed").
         setNumFiles(20).build();
@@ -197,7 +198,7 @@ public class TestAuditLogs {
 
     setupAuditLogs();
 
-    WebHdfsFileSystem webfs = WebHdfsTestUtil.getWebHdfsFileSystemAs(userGroupInfo, conf, WebHdfsConstants.WEBHDFS_SCHEME);
+    WebHdfsFileSystem webfs = WebHdfsTestUtil.getWebHdfsFileSystemAs(userGroupInfo, conf, WebHdfsFileSystem.SCHEME);
     InputStream istream = webfs.open(file);
     int val = istream.read();
     istream.close();
@@ -216,11 +217,35 @@ public class TestAuditLogs {
 
     setupAuditLogs();
 
-    WebHdfsFileSystem webfs = WebHdfsTestUtil.getWebHdfsFileSystemAs(userGroupInfo, conf, WebHdfsConstants.WEBHDFS_SCHEME);
+    WebHdfsFileSystem webfs = WebHdfsTestUtil.getWebHdfsFileSystemAs(userGroupInfo, conf, WebHdfsFileSystem.SCHEME);
     FileStatus st = webfs.getFileStatus(file);
 
     verifyAuditLogs(true);
     assertTrue("failed to stat file", st != null && st.isFile());
+  }
+
+  /** test that access via Hftp puts proper entry in audit log */
+  @Test
+  public void testAuditHftp() throws Exception {
+    final Path file = new Path(fnames[0]);
+
+    final String hftpUri =
+      "hftp://" + conf.get(DFSConfigKeys.DFS_NAMENODE_HTTP_ADDRESS_KEY);
+
+    HftpFileSystem hftpFs = null;
+
+    setupAuditLogs();
+    try {
+      hftpFs = (HftpFileSystem) new Path(hftpUri).getFileSystem(conf);
+      InputStream istream = hftpFs.open(file);
+      @SuppressWarnings("unused")
+      int val = istream.read();
+      istream.close();
+
+      verifyAuditLogs(true);
+    } finally {
+      if (hftpFs != null) hftpFs.close();
+    }
   }
 
   /** test that denied access via webhdfs puts proper entry in audit log */
@@ -233,7 +258,7 @@ public class TestAuditLogs {
 
     setupAuditLogs();
     try {
-      WebHdfsFileSystem webfs = WebHdfsTestUtil.getWebHdfsFileSystemAs(userGroupInfo, conf, WebHdfsConstants.WEBHDFS_SCHEME);
+      WebHdfsFileSystem webfs = WebHdfsTestUtil.getWebHdfsFileSystemAs(userGroupInfo, conf, WebHdfsFileSystem.SCHEME);
       InputStream istream = webfs.open(file);
       int val = istream.read();
       fail("open+read must not succeed, got " + val);
@@ -253,7 +278,7 @@ public class TestAuditLogs {
 
     setupAuditLogs();
 
-    WebHdfsFileSystem webfs = WebHdfsTestUtil.getWebHdfsFileSystemAs(userGroupInfo, conf, WebHdfsConstants.WEBHDFS_SCHEME);
+    WebHdfsFileSystem webfs = WebHdfsTestUtil.getWebHdfsFileSystemAs(userGroupInfo, conf, WebHdfsFileSystem.SCHEME);
     webfs.open(file);
 
     verifyAuditLogsCheckPattern(true, 3, webOpenPattern);

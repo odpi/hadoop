@@ -16,24 +16,25 @@
 
 cmake_minimum_required(VERSION 2.6 FATAL_ERROR)
 
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/../../../../../hadoop-common-project/hadoop-common)
-include(HadoopCommon)
+set(CMAKE_BUILD_TYPE, Release)
 
-# Note: can't use -D_FILE_OFFSET_BITS=64, see MAPREDUCE-4258
-string(REPLACE "-D_FILE_OFFSET_BITS=64" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
-string(REPLACE "-D_FILE_OFFSET_BITS=64" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+include(../../../../../hadoop-common-project/hadoop-common/src/JNIFlags.cmake NO_POLICY_SCOPE)
 
 include(CheckFunctionExists)
-check_function_exists(fcloseall HAVE_FCLOSEALL)
+CHECK_FUNCTION_EXISTS(fcloseall HAVE_FCLOSEALL)
 
 function(output_directory TGT DIR)
-    set_target_properties(${TGT} PROPERTIES
+    SET_TARGET_PROPERTIES(${TGT} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${DIR}")
-    set_target_properties(${TGT} PROPERTIES
+    SET_TARGET_PROPERTIES(${TGT} PROPERTIES
         ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${DIR}")
-    set_target_properties(${TGT} PROPERTIES
+    SET_TARGET_PROPERTIES(${TGT} PROPERTIES
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${DIR}")
-endfunction()
+endfunction(output_directory TGT DIR)
+
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -Wall -O2 -D_GNU_SOURCE")
+# note: can't enable -D_LARGEFILE: see MAPREDUCE-4258
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_REENTRANT")
 
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -41,7 +42,7 @@ include_directories(
     main/native/container-executor
     main/native/container-executor/impl
 )
-configure_file(${CMAKE_SOURCE_DIR}/config.h.cmake ${CMAKE_BINARY_DIR}/config.h)
+CONFIGURE_FILE(${CMAKE_SOURCE_DIR}/config.h.cmake ${CMAKE_BINARY_DIR}/config.h)
 
 add_library(container
     main/native/container-executor/impl/configuration.c

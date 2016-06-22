@@ -130,7 +130,7 @@ public class XAttrHelper {
     }
     Map<String, byte[]> xAttrMap = Maps.newHashMap();
     for (XAttr xAttr : xAttrs) {
-      String name = getPrefixedName(xAttr);
+      String name = getPrefixName(xAttr);
       byte[] value = xAttr.getValue();
       if (value == null) {
         value = new byte[0];
@@ -144,16 +144,13 @@ public class XAttrHelper {
   /**
    * Get name with prefix from <code>XAttr</code>
    */
-  public static String getPrefixedName(XAttr xAttr) {
+  public static String getPrefixName(XAttr xAttr) {
     if (xAttr == null) {
       return null;
     }
-
-    return getPrefixedName(xAttr.getNameSpace(), xAttr.getName());
-  }
-
-  public static String getPrefixedName(XAttr.NameSpace ns, String name) {
-    return StringUtils.toLowerCase(ns.toString()) + "." + name;
+    
+    String namespace = xAttr.getNameSpace().toString();
+    return StringUtils.toLowerCase(namespace) + "." + xAttr.getName();
   }
 
   /**

@@ -95,7 +95,7 @@ public class RMServerUtils {
       Resource maximumResource, String queueName, YarnScheduler scheduler,
       RMContext rmContext)
       throws InvalidResourceRequestException {
-    // Get queue from scheduler
+
     QueueInfo queueInfo = null;
     try {
       queueInfo = scheduler.getQueueInfo(queueName, false, false);

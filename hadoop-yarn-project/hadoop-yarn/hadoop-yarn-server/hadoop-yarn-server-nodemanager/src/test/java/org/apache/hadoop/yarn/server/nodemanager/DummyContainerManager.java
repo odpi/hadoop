@@ -54,6 +54,7 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer.even
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.loghandler.LogHandler;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.loghandler.event.LogHandlerEvent;
 import org.apache.hadoop.yarn.server.nodemanager.metrics.NodeManagerMetrics;
+import org.apache.hadoop.yarn.server.security.ApplicationACLsManager;
 
 public class DummyContainerManager extends ContainerManagerImpl {
 
@@ -62,9 +63,11 @@ public class DummyContainerManager extends ContainerManagerImpl {
   
   public DummyContainerManager(Context context, ContainerExecutor exec,
       DeletionService deletionContext, NodeStatusUpdater nodeStatusUpdater,
-      NodeManagerMetrics metrics, LocalDirsHandlerService dirsHandler) {
+      NodeManagerMetrics metrics,
+      ApplicationACLsManager applicationACLsManager,
+      LocalDirsHandlerService dirsHandler) {
     super(context, exec, deletionContext, nodeStatusUpdater, metrics,
-        dirsHandler);
+      applicationACLsManager, dirsHandler);
   }
 
   @Override

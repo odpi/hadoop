@@ -45,7 +45,6 @@ public abstract class RamDiskReplicaTracker {
     private final long blockId;
     private File savedBlockFile;
     private File savedMetaFile;
-    private long lockedBytesReserved;
 
     private long creationTime;
     protected AtomicLong numReads = new AtomicLong(0);
@@ -62,12 +61,10 @@ public abstract class RamDiskReplicaTracker {
     FsVolumeImpl lazyPersistVolume;
 
     RamDiskReplica(final String bpid, final long blockId,
-                   final FsVolumeImpl ramDiskVolume,
-                   long lockedBytesReserved) {
+                   final FsVolumeImpl ramDiskVolume) {
       this.bpid = bpid;
       this.blockId = blockId;
       this.ramDiskVolume = ramDiskVolume;
-      this.lockedBytesReserved = lockedBytesReserved;
       lazyPersistVolume = null;
       savedMetaFile = null;
       savedBlockFile = null;
@@ -171,10 +168,6 @@ public abstract class RamDiskReplicaTracker {
     public String toString() {
       return "[BlockPoolID=" + bpid + "; BlockId=" + blockId + "]";
     }
-
-    public long getLockedBytesReserved() {
-      return lockedBytesReserved;
-    }
   }
 
   /**
@@ -208,8 +201,7 @@ public abstract class RamDiskReplicaTracker {
    * @param transientVolume RAM disk volume that stores the replica.
    */
   abstract void addReplica(final String bpid, final long blockId,
-                           final FsVolumeImpl transientVolume,
-                           long lockedBytesReserved);
+                           final FsVolumeImpl transientVolume);
 
   /**
    * Invoked when a replica is opened by a client. This may be used as

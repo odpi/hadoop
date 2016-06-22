@@ -21,7 +21,6 @@ package org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair;
 import java.io.File;
 import java.io.IOException;
 
-import org.apache.hadoop.yarn.server.resourcemanager.MockRM;
 import org.junit.Assert;
 
 import org.apache.hadoop.conf.Configuration;
@@ -49,7 +48,8 @@ public class TestFairSchedulerEventLog {
 
     // All tests assume only one assignment per node update
     conf.set(FairSchedulerConfiguration.ASSIGN_MULTIPLE, "false");
-    resourceManager = new MockRM(conf);
+    resourceManager = new ResourceManager();
+    resourceManager.init(conf);
     ((AsyncDispatcher)resourceManager.getRMContext().getDispatcher()).start();
     scheduler.init(conf);
     scheduler.start();

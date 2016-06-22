@@ -43,7 +43,6 @@ import java.util.Iterator;
 import java.util.Map.Entry;
 import java.util.Random;
 import java.util.Set;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -57,8 +56,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import javax.net.SocketFactory;
 import javax.security.sasl.Sasl;
 
-import com.google.common.cache.Cache;
-import com.google.common.cache.CacheBuilder;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -105,8 +102,6 @@ import com.google.protobuf.CodedOutputStream;
  * 
  * @see Server
  */
-@InterfaceAudience.LimitedPrivate(value = { "Common", "HDFS", "MapReduce", "Yarn" })
-@InterfaceStability.Evolving
 public class Client {
   
   public static final Log LOG = LogFactory.getLog(Client.class);
@@ -127,8 +122,8 @@ public class Client {
     retryCount.set(rc);
   }
 
-  private final Cache<ConnectionId, Connection> connections =
-      CacheBuilder.newBuilder().build();
+  private Hashtable<ConnectionId, Connection> connections =
+    new Hashtable<ConnectionId, Connection>();
 
   private Class<? extends Writable> valueClass;   // class of call values
   private AtomicBoolean running = new AtomicBoolean(true); // if client runs
@@ -141,6 +136,8 @@ public class Client {
 
   private final boolean fallbackAllowed;
   private final byte[] clientId;
+  
+  final static int CONNECTION_CONTEXT_CALL_ID = -3;
   
   /**
    * Executor on which IPC calls' parameters are sent.
@@ -197,10 +194,9 @@ public class Client {
             clientExecutor.shutdownNow();
           }
         } catch (InterruptedException e) {
-          LOG.warn("Interrupted while waiting for clientExecutor" +
-              " to stop");
+          LOG.error("Interrupted while waiting for clientExecutor" +
+              "to stop", e);
           clientExecutor.shutdownNow();
-          Thread.currentThread().interrupt();
         }
         clientExecutor = null;
       }
@@ -257,10 +253,6 @@ public class Client {
     conf.setInt(CommonConfigurationKeys.IPC_CLIENT_CONNECT_TIMEOUT_KEY, timeout);
   }
 
-  @VisibleForTesting
-  public static final ExecutorService getClientExecutor() {
-    return Client.clientExcecutorFactory.clientExecutor;
-  }
   /**
    * Increment this client's reference count
    *
@@ -392,8 +384,7 @@ public class Client {
     private final RetryPolicy connectionRetryPolicy;
     private final int maxRetriesOnSasl;
     private int maxRetriesOnSocketTimeouts;
-    private final boolean tcpNoDelay; // if T then disable Nagle's Algorithm
-    private final boolean tcpLowLatency; // if T then use low-delay QoS
+    private boolean tcpNoDelay; // if T then disable Nagle's Algorithm
     private boolean doPing; //do we need to send ping message
     private int pingInterval; // how often sends ping to the server in msecs
     private ByteArrayOutputStream pingRequest; // ping message
@@ -422,7 +413,6 @@ public class Client {
       this.maxRetriesOnSasl = remoteId.getMaxRetriesOnSasl();
       this.maxRetriesOnSocketTimeouts = remoteId.getMaxRetriesOnSocketTimeouts();
       this.tcpNoDelay = remoteId.getTcpNoDelay();
-      this.tcpLowLatency = remoteId.getTcpLowLatency();
       this.doPing = remoteId.getDoPing();
       if (doPing) {
         // construct a RPC header with the callId as the ping callId
@@ -595,20 +585,6 @@ public class Client {
           this.socket.setTcpNoDelay(tcpNoDelay);
           this.socket.setKeepAlive(true);
           
-          if (tcpLowLatency) {
-            /*
-             * This allows intermediate switches to shape IPC traffic
-             * differently from Shuffle/HDFS DataStreamer traffic.
-             *
-             * IPTOS_RELIABILITY (0x04) | IPTOS_LOWDELAY (0x10)
-             *
-             * Prefer to optimize connect() speed & response latency over net
-             * throughput.
-             */
-            this.socket.setTrafficClass(0x04 | 0x10);
-            this.socket.setPerformancePreferences(1, 2, 0);
-          }
-
           /*
            * Bind the socket to the host specified in the principal name of the
            * client, to ensure Server matching address of the client connection
@@ -1147,7 +1123,10 @@ public class Client {
           if (erCode == null) {
              LOG.warn("Detailed error code not set by server on rpc error");
           }
-          RemoteException re = new RemoteException(exceptionClassName, errorMsg, erCode);
+          RemoteException re = 
+              ( (erCode == null) ? 
+                  new RemoteException(exceptionClassName, errorMsg) :
+              new RemoteException(exceptionClassName, errorMsg, erCode));
           if (status == RpcStatusProto.ERROR) {
             calls.remove(callId);
             call.setException(re);
@@ -1175,7 +1154,13 @@ public class Client {
         return;
       }
 
-      connections.invalidate(remoteId);
+      // release the resources
+      // first thing to do;take the connection out of the connection list
+      synchronized (connections) {
+        if (connections.get(remoteId) == this) {
+          connections.remove(remoteId);
+        }
+      }
 
       // close the streams and therefore the socket
       IOUtils.closeStream(out);
@@ -1262,12 +1247,14 @@ public class Client {
     }
     
     // wake up all connections
-    for (Connection conn : connections.asMap().values()) {
-      conn.interrupt();
+    synchronized (connections) {
+      for (Connection conn : connections.values()) {
+        conn.interrupt();
+      }
     }
     
     // wait until all connections are closed
-    while (connections.size() > 0) {
+    while (!connections.isEmpty()) {
       try {
         Thread.sleep(100);
       } catch (InterruptedException e) {
@@ -1283,12 +1270,56 @@ public class Client {
    */
   public Writable call(Writable param, InetSocketAddress address)
       throws IOException {
-    ConnectionId remoteId = ConnectionId.getConnectionId(address, null, null, 0,
+    return call(RPC.RpcKind.RPC_BUILTIN, param, address);
+    
+  }
+  /** Make a call, passing <code>param</code>, to the IPC server running at
+   * <code>address</code>, returning the value.  Throws exceptions if there are
+   * network problems or if the remote code threw an exception.
+   * @deprecated Use {@link #call(RPC.RpcKind, Writable,
+   *  ConnectionId)} instead 
+   */
+  @Deprecated
+  public Writable call(RPC.RpcKind rpcKind, Writable param, InetSocketAddress address)
+  throws IOException {
+      return call(rpcKind, param, address, null);
+  }
+  
+  /** Make a call, passing <code>param</code>, to the IPC server running at
+   * <code>address</code> with the <code>ticket</code> credentials, returning 
+   * the value.  
+   * Throws exceptions if there are network problems or if the remote code 
+   * threw an exception.
+   * @deprecated Use {@link #call(RPC.RpcKind, Writable, 
+   * ConnectionId)} instead 
+   */
+  @Deprecated
+  public Writable call(RPC.RpcKind rpcKind, Writable param, InetSocketAddress addr, 
+      UserGroupInformation ticket) throws IOException {
+    ConnectionId remoteId = ConnectionId.getConnectionId(addr, null, ticket, 0,
         conf);
-    return call(RpcKind.RPC_BUILTIN, param, remoteId);
-
+    return call(rpcKind, param, remoteId);
+  }
+  
+  /** Make a call, passing <code>param</code>, to the IPC server running at
+   * <code>address</code> which is servicing the <code>protocol</code> protocol, 
+   * with the <code>ticket</code> credentials and <code>rpcTimeout</code> as 
+   * timeout, returning the value.  
+   * Throws exceptions if there are network problems or if the remote code 
+   * threw an exception. 
+   * @deprecated Use {@link #call(RPC.RpcKind, Writable,
+   *  ConnectionId)} instead 
+   */
+  @Deprecated
+  public Writable call(RPC.RpcKind rpcKind, Writable param, InetSocketAddress addr, 
+                       Class<?> protocol, UserGroupInformation ticket,
+                       int rpcTimeout) throws IOException {
+    ConnectionId remoteId = ConnectionId.getConnectionId(addr, protocol,
+        ticket, rpcTimeout, conf);
+    return call(rpcKind, param, remoteId);
   }
 
+  
   /**
    * Same as {@link #call(RPC.RpcKind, Writable, InetSocketAddress,
    * Class, UserGroupInformation, int, Configuration)}
@@ -1462,14 +1493,15 @@ public class Client {
   @InterfaceAudience.Private
   @InterfaceStability.Unstable
   Set<ConnectionId> getConnectionIds() {
-    return connections.asMap().keySet();
+    synchronized (connections) {
+      return connections.keySet();
+    }
   }
   
   /** Get a connection from the pool, or create a new one and add it to the
    * pool.  Connections to a given ConnectionId are reused. */
-  private Connection getConnection(
-      final ConnectionId remoteId,
-      Call call, final int serviceClass, AtomicBoolean fallbackToSimpleAuth)
+  private Connection getConnection(ConnectionId remoteId,
+      Call call, int serviceClass, AtomicBoolean fallbackToSimpleAuth)
       throws IOException {
     if (!running.get()) {
       // the client is stopped
@@ -1480,29 +1512,15 @@ public class Client {
      * connectionsId object and with set() method. We need to manage the
      * refs for keys in HashMap properly. For now its ok.
      */
-    while(true) {
-      try {
-        connection = connections.get(remoteId, new Callable<Connection>() {
-          @Override
-          public Connection call() throws Exception {
-            return new Connection(remoteId, serviceClass);
-          }
-        });
-      } catch (ExecutionException e) {
-        Throwable cause = e.getCause();
-        // the underlying exception should normally be IOException
-        if (cause instanceof IOException) {
-          throw (IOException) cause;
-        } else {
-          throw new IOException(cause);
+    do {
+      synchronized (connections) {
+        connection = connections.get(remoteId);
+        if (connection == null) {
+          connection = new Connection(remoteId, serviceClass);
+          connections.put(remoteId, connection);
         }
       }
-      if (connection.addCall(call)) {
-        break;
-      } else {
-        connections.invalidate(remoteId);
-      }
-    }
+    } while (!connection.addCall(call));
     
     //we don't invoke the method below inside "synchronized (connections)"
     //block above. The reason for that is if the server happens to be slow,
@@ -1531,7 +1549,6 @@ public class Client {
     // the max. no. of retries for socket connections on time out exceptions
     private final int maxRetriesOnSocketTimeouts;
     private final boolean tcpNoDelay; // if T then disable Nagle's Algorithm
-    private final boolean tcpLowLatency; // if T then use low-delay QoS
     private final boolean doPing; //do we need to send ping message
     private final int pingInterval; // how often sends ping to the server in msecs
     private String saslQop; // here for testing
@@ -1558,10 +1575,6 @@ public class Client {
       this.tcpNoDelay = conf.getBoolean(
           CommonConfigurationKeysPublic.IPC_CLIENT_TCPNODELAY_KEY,
           CommonConfigurationKeysPublic.IPC_CLIENT_TCPNODELAY_DEFAULT);
-      this.tcpLowLatency = conf.getBoolean(
-          CommonConfigurationKeysPublic.IPC_CLIENT_LOW_LATENCY,
-          CommonConfigurationKeysPublic.IPC_CLIENT_LOW_LATENCY_DEFAULT
-          );
       this.doPing = conf.getBoolean(
           CommonConfigurationKeys.IPC_CLIENT_PING_KEY,
           CommonConfigurationKeys.IPC_CLIENT_PING_DEFAULT);
@@ -1597,17 +1610,11 @@ public class Client {
     public int getMaxRetriesOnSocketTimeouts() {
       return maxRetriesOnSocketTimeouts;
     }
-
-    /** disable nagle's algorithm */
+    
     boolean getTcpNoDelay() {
       return tcpNoDelay;
     }
-
-    /** use low-latency QoS bits over TCP */
-    boolean getTcpLowLatency() {
-      return tcpLowLatency;
-    }
-
+    
     boolean getDoPing() {
       return doPing;
     }

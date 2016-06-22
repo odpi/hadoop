@@ -17,7 +17,6 @@
  */
 package org.apache.hadoop.hdfs.server.blockmanagement;
 
-import static org.apache.hadoop.hdfs.server.common.HdfsServerConstants.BlockUCState.UNDER_CONSTRUCTION;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -45,13 +44,12 @@ import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.BlockListAsLongs;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeDescriptor.BlockTargetPair;
-import org.apache.hadoop.hdfs.server.common.HdfsServerConstants;
 import org.apache.hadoop.hdfs.server.datanode.DataNodeTestUtils;
 import org.apache.hadoop.hdfs.server.datanode.FinalizedReplica;
 import org.apache.hadoop.hdfs.server.datanode.ReplicaBeingWritten;
 import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
-import org.apache.hadoop.hdfs.server.namenode.INodeId;
 import org.apache.hadoop.hdfs.server.namenode.NameNodeAdapter;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeRegistration;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeStorage;
@@ -90,16 +88,13 @@ public class TestBlockManager {
 
   private FSNamesystem fsn;
   private BlockManager bm;
-  private long mockINodeId;
 
   @Before
   public void setupMockCluster() throws IOException {
     Configuration conf = new HdfsConfiguration();
-    conf.set(DFSConfigKeys.NET_TOPOLOGY_SCRIPT_FILE_NAME_KEY,
-             "need to set a dummy value here so it assumes a multi-rack cluster");
+    conf.set(DFSConfigKeys.NET_TOPOLOGY_SCRIPT_FILE_NAME_KEY, "need to set a dummy value here so it assumes a multi-rack cluster");
     fsn = Mockito.mock(FSNamesystem.class);
     Mockito.doReturn(true).when(fsn).hasWriteLock();
-    Mockito.doReturn(true).when(fsn).hasReadLock();
     bm = new BlockManager(fsn, conf);
     final String[] racks = {
         "/rackA",
@@ -112,7 +107,6 @@ public class TestBlockManager {
     nodes = Arrays.asList(DFSTestUtil.toDatanodeDescriptor(storages));
     rackA = nodes.subList(0, 3);
     rackB = nodes.subList(3, 6);
-    mockINodeId = INodeId.ROOT_INODE_ID + 1;
   }
 
   private void addNodes(Iterable<DatanodeDescriptor> nodesToAdd) {
@@ -121,8 +115,8 @@ public class TestBlockManager {
     for (DatanodeDescriptor dn : nodesToAdd) {
       cluster.add(dn);
       dn.getStorageInfos()[0].setUtilizationForTesting(
-          2 * HdfsServerConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L,
-          2 * HdfsServerConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L);
+          2 * HdfsConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L,
+          2 * HdfsConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L);
       dn.updateHeartbeat(
           BlockManagerTestUtil.getStorageReportsForDatanode(dn), 0L, 0L, 0, 0,
           null);
@@ -152,7 +146,7 @@ public class TestBlockManager {
   private void doBasicTest(int testIndex) {
     List<DatanodeStorageInfo> origStorages = getStorages(0, 1);
     List<DatanodeDescriptor> origNodes = getNodes(origStorages);
-    BlockInfo blockInfo = addBlockOnNodes(testIndex, origNodes);
+    BlockInfoContiguous blockInfo = addBlockOnNodes(testIndex, origNodes);
 
     DatanodeStorageInfo[] pipeline = scheduleSingleReplication(blockInfo);
     assertEquals(2, pipeline.length);
@@ -184,7 +178,7 @@ public class TestBlockManager {
     // Block originally on A1, A2, B1
     List<DatanodeStorageInfo> origStorages = getStorages(0, 1, 3);
     List<DatanodeDescriptor> origNodes = getNodes(origStorages);
-    BlockInfo blockInfo = addBlockOnNodes(testIndex, origNodes);
+    BlockInfoContiguous blockInfo = addBlockOnNodes(testIndex, origNodes);
     
     // Decommission two of the nodes (A1, A2)
     List<DatanodeDescriptor> decomNodes = startDecommission(0, 1);
@@ -228,7 +222,7 @@ public class TestBlockManager {
     // Block originally on A1, A2, B1
     List<DatanodeStorageInfo> origStorages = getStorages(0, 1, 3);
     List<DatanodeDescriptor> origNodes = getNodes(origStorages);
-    BlockInfo blockInfo = addBlockOnNodes(testIndex, origNodes);
+    BlockInfoContiguous blockInfo = addBlockOnNodes(testIndex, origNodes);
     
     // Decommission all of the nodes
     List<DatanodeDescriptor> decomNodes = startDecommission(0, 1, 3);
@@ -281,7 +275,7 @@ public class TestBlockManager {
     // Block originally on A1, A2, B1
     List<DatanodeStorageInfo> origStorages = getStorages(0, 1, 3);
     List<DatanodeDescriptor> origNodes = getNodes(origStorages);
-    BlockInfo blockInfo = addBlockOnNodes(testIndex, origNodes);
+    BlockInfoContiguous blockInfo = addBlockOnNodes(testIndex, origNodes);
     
     // Decommission all of the nodes in rack A
     List<DatanodeDescriptor> decomNodes = startDecommission(0, 1, 2);
@@ -340,7 +334,7 @@ public class TestBlockManager {
   private void doTestSufficientlyReplBlocksUsesNewRack(int testIndex) {
     // Originally on only nodes in rack A.
     List<DatanodeDescriptor> origNodes = rackA;
-    BlockInfo blockInfo = addBlockOnNodes(testIndex, origNodes);
+    BlockInfoContiguous blockInfo = addBlockOnNodes(testIndex, origNodes);
     DatanodeStorageInfo pipeline[] = scheduleSingleReplication(blockInfo);
     
     assertEquals(2, pipeline.length); // single new copy
@@ -383,7 +377,7 @@ public class TestBlockManager {
    * Tell the block manager that replication is completed for the given
    * pipeline.
    */
-  private void fulfillPipeline(BlockInfo blockInfo,
+  private void fulfillPipeline(BlockInfoContiguous blockInfo,
       DatanodeStorageInfo[] pipeline) throws IOException {
     for (int i = 1; i < pipeline.length; i++) {
       DatanodeStorageInfo storage = pipeline[i];
@@ -392,9 +386,9 @@ public class TestBlockManager {
     }
   }
 
-  private BlockInfo blockOnNodes(long blkId, List<DatanodeDescriptor> nodes) {
+  private BlockInfoContiguous blockOnNodes(long blkId, List<DatanodeDescriptor> nodes) {
     Block block = new Block(blkId);
-    BlockInfo blockInfo = new BlockInfoContiguous(block, (short) 3);
+    BlockInfoContiguous blockInfo = new BlockInfoContiguous(block, (short) 3);
 
     for (DatanodeDescriptor dn : nodes) {
       for (DatanodeStorageInfo storage : dn.getStorageInfos()) {
@@ -436,27 +430,23 @@ public class TestBlockManager {
     return nodes;
   }
   
-  private BlockInfo addBlockOnNodes(long blockId, List<DatanodeDescriptor> nodes) {
-    long inodeId = ++mockINodeId;
+  private BlockInfoContiguous addBlockOnNodes(long blockId, List<DatanodeDescriptor> nodes) {
     BlockCollection bc = Mockito.mock(BlockCollection.class);
-    Mockito.doReturn(inodeId).when(bc).getId();
-    Mockito.doReturn(bc).when(fsn).getBlockCollection(inodeId);
-    BlockInfo blockInfo = blockOnNodes(blockId, nodes);
+    Mockito.doReturn((short)3).when(bc).getBlockReplication();
+    BlockInfoContiguous blockInfo = blockOnNodes(blockId, nodes);
 
-    blockInfo.setReplication((short) 3);
-    blockInfo.setBlockCollectionId(inodeId);
     bm.blocksMap.addBlockCollection(blockInfo, bc);
     return blockInfo;
   }
 
-  private DatanodeStorageInfo[] scheduleSingleReplication(BlockInfo block) {
+  private DatanodeStorageInfo[] scheduleSingleReplication(Block block) {
     // list for priority 1
-    List<BlockInfo> list_p1 = new ArrayList<>();
+    List<Block> list_p1 = new ArrayList<Block>();
     list_p1.add(block);
 
     // list of lists for each priority
-    List<List<BlockInfo>> list_all = new ArrayList<>();
-    list_all.add(new ArrayList<BlockInfo>()); // for priority 0
+    List<List<Block>> list_all = new ArrayList<List<Block>>();
+    list_all.add(new ArrayList<Block>()); // for priority 0
     list_all.add(list_p1); // for priority 1
 
     assertEquals("Block not initially pending replication", 0,
@@ -686,21 +676,21 @@ public class TestBlockManager {
 
     // blk_42 is finalized.
     long receivedBlockId = 42;  // arbitrary
-    BlockInfo receivedBlock = addBlockToBM(receivedBlockId);
+    BlockInfoContiguous receivedBlock = addBlockToBM(receivedBlockId);
     rdbiList.add(new ReceivedDeletedBlockInfo(new Block(receivedBlock),
         ReceivedDeletedBlockInfo.BlockStatus.RECEIVED_BLOCK, null));
     builder.add(new FinalizedReplica(receivedBlock, null, null));
 
     // blk_43 is under construction.
     long receivingBlockId = 43;
-    BlockInfo receivingBlock = addUcBlockToBM(receivingBlockId);
+    BlockInfoContiguous receivingBlock = addUcBlockToBM(receivingBlockId);
     rdbiList.add(new ReceivedDeletedBlockInfo(new Block(receivingBlock),
         ReceivedDeletedBlockInfo.BlockStatus.RECEIVING_BLOCK, null));
     builder.add(new ReplicaBeingWritten(receivingBlock, null, null, null));
 
     // blk_44 has 2 records in IBR. It's finalized. So full BR has 1 record.
     long receivingReceivedBlockId = 44;
-    BlockInfo receivingReceivedBlock = addBlockToBM(receivingReceivedBlockId);
+    BlockInfoContiguous receivingReceivedBlock = addBlockToBM(receivingReceivedBlockId);
     rdbiList.add(new ReceivedDeletedBlockInfo(new Block(receivingReceivedBlock),
         ReceivedDeletedBlockInfo.BlockStatus.RECEIVING_BLOCK, null));
     rdbiList.add(new ReceivedDeletedBlockInfo(new Block(receivingReceivedBlock),
@@ -718,7 +708,7 @@ public class TestBlockManager {
 
     // blk_46 exists in DN for a long time, so it's in full BR, but not in IBR.
     long existedBlockId = 46;
-    BlockInfo existedBlock = addBlockToBM(existedBlockId);
+    BlockInfoContiguous existedBlock = addBlockToBM(existedBlockId);
     builder.add(new FinalizedReplica(existedBlock, null, null));
 
     // process IBR and full BR
@@ -735,8 +725,8 @@ public class TestBlockManager {
     // verify the storage info is correct
     assertTrue(bm.getStoredBlock(new Block(receivedBlockId)).findStorageInfo
         (ds) >= 0);
-    assertTrue(bm.getStoredBlock(new Block(receivingBlockId))
-        .getUnderConstructionFeature().getNumExpectedLocations() > 0);
+    assertTrue(((BlockInfoContiguousUnderConstruction) bm.
+        getStoredBlock(new Block(receivingBlockId))).getNumExpectedLocations() > 0);
     assertTrue(bm.getStoredBlock(new Block(receivingReceivedBlockId))
         .findStorageInfo(ds) >= 0);
     assertNull(bm.getStoredBlock(new Block(ReceivedDeletedBlockId)));
@@ -744,27 +734,23 @@ public class TestBlockManager {
         (ds) >= 0);
   }
 
-  private BlockInfo addBlockToBM(long blkId) {
+  private BlockInfoContiguous addBlockToBM(long blkId) {
     Block block = new Block(blkId);
-    BlockInfo blockInfo =
+    BlockInfoContiguous blockInfo =
         new BlockInfoContiguous(block, (short) 3);
     BlockCollection bc = Mockito.mock(BlockCollection.class);
-    long inodeId = ++mockINodeId;
-    doReturn(inodeId).when(bc).getId();
+    Mockito.doReturn((short) 3).when(bc).getBlockReplication();
     bm.blocksMap.addBlockCollection(blockInfo, bc);
-    doReturn(bc).when(fsn).getBlockCollection(inodeId);
     return blockInfo;
   }
 
-  private BlockInfo addUcBlockToBM(long blkId) {
+  private BlockInfoContiguous addUcBlockToBM(long blkId) {
     Block block = new Block(blkId);
-    BlockInfo blockInfo = new BlockInfoContiguous(block, (short) 3);
-    blockInfo.convertToBlockUnderConstruction(UNDER_CONSTRUCTION, null);
+    BlockInfoContiguousUnderConstruction blockInfo =
+        new BlockInfoContiguousUnderConstruction(block, (short) 3);
     BlockCollection bc = Mockito.mock(BlockCollection.class);
-    long inodeId = ++mockINodeId;
-    doReturn(inodeId).when(bc).getId();
+    Mockito.doReturn((short) 3).when(bc).getBlockReplication();
     bm.blocksMap.addBlockCollection(blockInfo, bc);
-    doReturn(bc).when(fsn).getBlockCollection(inodeId);
     return blockInfo;
   }
   

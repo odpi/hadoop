@@ -18,7 +18,6 @@ package org.apache.hadoop.security;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION;
 import static org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod.*;
-
 import static org.junit.Assert.*;
 
 import java.io.IOException;

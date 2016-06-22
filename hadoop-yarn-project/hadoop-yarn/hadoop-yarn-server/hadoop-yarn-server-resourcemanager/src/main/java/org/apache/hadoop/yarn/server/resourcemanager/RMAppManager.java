@@ -32,7 +32,6 @@ import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
-import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.EventHandler;
@@ -283,29 +282,29 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
     RMAppImpl application =
         createAndPopulateNewRMApp(submissionContext, submitTime, user, false);
     ApplicationId appId = submissionContext.getApplicationId();
-    Credentials credentials = null;
-    try {
-      credentials = parseCredentials(submissionContext);
-      if (UserGroupInformation.isSecurityEnabled()) {
+
+    if (UserGroupInformation.isSecurityEnabled()) {
+      try {
         this.rmContext.getDelegationTokenRenewer().addApplicationAsync(appId,
-            credentials, submissionContext.getCancelTokensWhenComplete(),
+            parseCredentials(submissionContext),
+            submissionContext.getCancelTokensWhenComplete(),
             application.getUser());
-      } else {
-        // Dispatcher is not yet started at this time, so these START events
-        // enqueued should be guaranteed to be first processed when dispatcher
-        // gets started.
+      } catch (Exception e) {
+        LOG.warn("Unable to parse credentials.", e);
+        // Sending APP_REJECTED is fine, since we assume that the
+        // RMApp is in NEW state and thus we haven't yet informed the
+        // scheduler about the existence of the application
+        assert application.getState() == RMAppState.NEW;
         this.rmContext.getDispatcher().getEventHandler()
-            .handle(new RMAppEvent(applicationId, RMAppEventType.START));
-      }
-    } catch (Exception e) {
-      LOG.warn("Unable to parse credentials.", e);
-      // Sending APP_REJECTED is fine, since we assume that the
-      // RMApp is in NEW state and thus we haven't yet informed the
-      // scheduler about the existence of the application
-      assert application.getState() == RMAppState.NEW;
-      this.rmContext.getDispatcher().getEventHandler()
           .handle(new RMAppRejectedEvent(applicationId, e.getMessage()));
-      throw RPCUtil.getRemoteException(e);
+        throw RPCUtil.getRemoteException(e);
+      }
+    } else {
+      // Dispatcher is not yet started at this time, so these START events
+      // enqueued should be guaranteed to be first processed when dispatcher
+      // gets started.
+      this.rmContext.getDispatcher().getEventHandler()
+        .handle(new RMAppEvent(applicationId, RMAppEventType.START));
     }
   }
 
@@ -326,32 +325,18 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
   private RMAppImpl createAndPopulateNewRMApp(
       ApplicationSubmissionContext submissionContext, long submitTime,
       String user, boolean isRecovery) throws YarnException {
-    // Do queue mapping
-    if (!isRecovery) {
-      if (rmContext.getQueuePlacementManager() != null) {
-        // We only do queue mapping when it's a new application
-        rmContext.getQueuePlacementManager().placeApplication(
-            submissionContext, user);
-      }
-    }
-    
     ApplicationId applicationId = submissionContext.getApplicationId();
     ResourceRequest amReq =
         validateAndCreateResourceRequest(submissionContext, isRecovery);
 
-    // Verify and get the update application priority and set back to
-    // submissionContext
-    Priority appPriority = rmContext.getScheduler()
-        .checkAndGetApplicationPriority(submissionContext.getPriority(), user,
-            submissionContext.getQueue(), applicationId);
-    submissionContext.setPriority(appPriority);
-
     // Create RMApp
-    RMAppImpl application = new RMAppImpl(applicationId, rmContext, this.conf,
-        submissionContext.getApplicationName(), user,
-        submissionContext.getQueue(), submissionContext, this.scheduler,
-        this.masterService, submitTime, submissionContext.getApplicationType(),
-        submissionContext.getApplicationTags(), amReq);
+    RMAppImpl application =
+        new RMAppImpl(applicationId, rmContext, this.conf,
+            submissionContext.getApplicationName(), user,
+            submissionContext.getQueue(),
+            submissionContext, this.scheduler, this.masterService,
+            submitTime, submissionContext.getApplicationType(),
+            submissionContext.getApplicationTags(), amReq);
 
     // Concurrent app submissions with same applicationId will fail here
     // Concurrent app submissions with different applicationIds will not

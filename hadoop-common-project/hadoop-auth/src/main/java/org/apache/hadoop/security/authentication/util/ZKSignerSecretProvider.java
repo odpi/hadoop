@@ -377,7 +377,7 @@ public class ZKSignerSecretProvider extends RolloverSignerSecretProvider {
    * This method creates the Curator client and connects to ZooKeeper.
    * @param config configuration properties
    * @return A Curator client
-   * @throws Exception thrown if an error occurred
+   * @throws Exception
    */
   protected CuratorFramework createCuratorClient(Properties config)
           throws Exception {

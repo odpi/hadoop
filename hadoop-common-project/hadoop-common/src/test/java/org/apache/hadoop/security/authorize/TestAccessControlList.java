@@ -37,10 +37,6 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.NativeCodeLoader;
 import org.junit.Test;
 
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.verify;
-
 @InterfaceAudience.LimitedPrivate({"HDFS", "MapReduce"})
 @InterfaceStability.Evolving
 public class TestAccessControlList {
@@ -147,7 +143,7 @@ public class TestAccessControlList {
     List<String> jerryLeeLewisGroups = groups.getGroups("jerryLeeLewis");
     assertTrue(jerryLeeLewisGroups.contains("@memphis"));
 
-    // allowed because his netgroup is in ACL
+    // allowed becuase his netgroup is in ACL
     UserGroupInformation elvis = 
       UserGroupInformation.createRemoteUser("elvis");
     assertUserAllowed(elvis, acl);
@@ -383,10 +379,10 @@ public class TestAccessControlList {
     assertTrue(acl.isAllAllowed());
 
     UserGroupInformation drwho =
-      UserGroupInformation.createUserForTesting("drwho@EXAMPLE.COM",
+      UserGroupInformation.createUserForTesting("drwho@APACHE.ORG",
           new String[] { "aliens" });
     UserGroupInformation drwho2 =
-      UserGroupInformation.createUserForTesting("drwho2@EXAMPLE.COM",
+      UserGroupInformation.createUserForTesting("drwho2@APACHE.ORG",
           new String[] { "tardis" });
 
     acl.addUser("drwho");
@@ -412,16 +408,16 @@ public class TestAccessControlList {
     AccessControlList acl;
 
     UserGroupInformation drwho =
-        UserGroupInformation.createUserForTesting("drwho@EXAMPLE.COM",
+        UserGroupInformation.createUserForTesting("drwho@APACHE.ORG",
             new String[] { "aliens", "humanoids", "timelord" });
     UserGroupInformation susan =
-        UserGroupInformation.createUserForTesting("susan@EXAMPLE.COM",
+        UserGroupInformation.createUserForTesting("susan@APACHE.ORG",
             new String[] { "aliens", "humanoids", "timelord" });
     UserGroupInformation barbara =
-        UserGroupInformation.createUserForTesting("barbara@EXAMPLE.COM",
+        UserGroupInformation.createUserForTesting("barbara@APACHE.ORG",
             new String[] { "humans", "teachers" });
     UserGroupInformation ian =
-        UserGroupInformation.createUserForTesting("ian@EXAMPLE.COM",
+        UserGroupInformation.createUserForTesting("ian@APACHE.ORG",
             new String[] { "humans", "teachers" });
 
     acl = new AccessControlList("drwho humanoids");
@@ -453,11 +449,6 @@ public class TestAccessControlList {
     assertUserAllowed(susan, acl);
     assertUserAllowed(barbara, acl);
     assertUserAllowed(ian, acl);
-
-    acl = new AccessControlList("");
-    UserGroupInformation spyUser = spy(drwho);
-    acl.isUserAllowed(spyUser);
-    verify(spyUser, never()).getGroupNames();
   }
 
   private void assertUserAllowed(UserGroupInformation ugi,

@@ -20,40 +20,24 @@
 # This script refreshes all namenodes, it's a simple wrapper
 # for dfsadmin to support multiple namenodes.
 
-# let's locate libexec...
-if [[ -n "${HADOOP_PREFIX}" ]]; then
-  DEFAULT_LIBEXEC_DIR="${HADOOP_PREFIX}/libexec"
-else
-  this="${BASH_SOURCE-$0}"
-  bin=$(cd -P -- "$(dirname -- "${this}")" >/dev/null && pwd -P)
-  DEFAULT_LIBEXEC_DIR="${bin}/../libexec"
-fi
+bin=`dirname "$0"`
+bin=`cd "$bin"; pwd`
 
-HADOOP_LIBEXEC_DIR="${HADOOP_LIBEXEC_DIR:-$DEFAULT_LIBEXEC_DIR}"
-# shellcheck disable=SC2034
-HADOOP_NEW_CONFIG=true
-if [[ -f "${HADOOP_LIBEXEC_DIR}/hdfs-config.sh" ]]; then
-  . "${HADOOP_LIBEXEC_DIR}/hdfs-config.sh"
-else
-  echo "ERROR: Cannot execute ${HADOOP_LIBEXEC_DIR}/hdfs-config.sh." 2>&1
-  exit 1
-fi
+DEFAULT_LIBEXEC_DIR="$bin"/../libexec
+HADOOP_LIBEXEC_DIR=${HADOOP_LIBEXEC_DIR:-$DEFAULT_LIBEXEC_DIR}
+. $HADOOP_LIBEXEC_DIR/hdfs-config.sh
 
-namenodes=$("${HADOOP_HDFS_HOME}/bin/hdfs" getconf -nnRpcAddresses)
-if [[ "$?" != '0' ]] ; then
-  errorFlag='1' ;
+namenodes=$("$HADOOP_PREFIX/bin/hdfs" getconf -nnRpcAddresses)
+if [ "$?" != '0' ] ; then errorFlag='1' ; 
 else
-  for namenode in ${namenodes} ; do
-    echo "Refreshing namenode [${namenode}]"
-    "${HADOOP_HDFS_HOME}/bin/hdfs" dfsadmin \
-    -fs hdfs://${namenode} -refreshNodes
-    if [[ "$?" != '0' ]]; then
-      errorFlag='1'
-    fi
+  for namenode in $namenodes ; do
+    echo "Refreshing namenode [$namenode]"
+    "$HADOOP_PREFIX/bin/hdfs" dfsadmin -fs hdfs://$namenode -refreshNodes
+    if [ "$?" != '0' ] ; then errorFlag='1' ; fi
   done
 fi
 
-if [[ "${errorFlag}" = '1' ]] ; then
+if [ "$errorFlag" = '1' ] ; then
   echo "Error: refresh of namenodes failed, see error messages above."
   exit 1
 else

@@ -38,8 +38,8 @@ public class TestKMSAudit {
   private ByteArrayOutputStream memOut;
   private FilterOut filterOut;
   private PrintStream capturedOut;
-  
-  private KMSAudit kmsAudit; 
+
+  private KMSAudit kmsAudit;
 
   private static class FilterOut extends FilterOutputStream {
     public FilterOut(OutputStream out) {

@@ -28,7 +28,6 @@ import java.util.Map;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.DataInputByteBuffer;
 import org.apache.hadoop.io.DataOutputBuffer;
@@ -79,10 +78,10 @@ public class AMLauncher implements Runnable {
   private final AMLauncherEventType eventType;
   private final RMContext rmContext;
   private final Container masterContainer;
-
+  
   @SuppressWarnings("rawtypes")
   private final EventHandler handler;
-
+  
   public AMLauncher(RMContext rmContext, RMAppAttempt application,
       AMLauncherEventType eventType, Configuration conf) {
     this.application = application;
@@ -92,20 +91,20 @@ public class AMLauncher implements Runnable {
     this.handler = rmContext.getDispatcher().getEventHandler();
     this.masterContainer = application.getMasterContainer();
   }
-
+  
   private void connect() throws IOException {
     ContainerId masterContainerID = masterContainer.getId();
-
+    
     containerMgrProxy = getContainerMgrProxy(masterContainerID);
   }
-
+  
   private void launch() throws IOException, YarnException {
     connect();
     ContainerId masterContainerID = masterContainer.getId();
     ApplicationSubmissionContext applicationContext =
       application.getSubmissionContext();
     LOG.info("Setting up container " + masterContainer
-        + " for AM " + application.getAppAttemptId());
+        + " for AM " + application.getAppAttemptId());  
     ContainerLaunchContext launchContext =
         createAMContainerLaunchContext(applicationContext, masterContainerID);
 
@@ -129,7 +128,7 @@ public class AMLauncher implements Runnable {
           + application.getAppAttemptId());
     }
   }
-
+  
   private void cleanup() throws IOException, YarnException {
     connect();
     ContainerId containerId = masterContainer.getId();
@@ -187,29 +186,27 @@ public class AMLauncher implements Runnable {
       ContainerId containerID) throws IOException {
 
     // Construct the actual Container
-    ContainerLaunchContext container =
+    ContainerLaunchContext container = 
         applicationMasterContext.getAMContainerSpec();
     LOG.info("Command to launch container "
         + containerID
         + " : "
         + StringUtils.arrayToString(container.getCommands().toArray(
             new String[0])));
-
+    
     // Finalize the container
     setupTokens(container, containerID);
-
+    
     return container;
   }
 
-  @Private
-  @VisibleForTesting
-  protected void setupTokens(
+  private void setupTokens(
       ContainerLaunchContext container, ContainerId containerID)
       throws IOException {
     Map<String, String> environment = container.getEnvironment();
     environment.put(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV,
         application.getWebProxyBase());
-    // Set AppSubmitTime to be consumable by the AM.
+    // Set AppSubmitTime and MaxAppAttempts to be consumable by the AM.
     ApplicationId applicationId =
         application.getAppAttemptId().getApplicationId();
     environment.put(
@@ -217,15 +214,16 @@ public class AMLauncher implements Runnable {
         String.valueOf(rmContext.getRMApps()
             .get(applicationId)
             .getSubmitTime()));
+    environment.put(ApplicationConstants.MAX_APP_ATTEMPTS_ENV,
+        String.valueOf(rmContext.getRMApps().get(
+            applicationId).getMaxAppAttempts()));
 
     Credentials credentials = new Credentials();
     DataInputByteBuffer dibb = new DataInputByteBuffer();
-    ByteBuffer tokens = container.getTokens();
-    if (tokens != null) {
+    if (container.getTokens() != null) {
       // TODO: Don't do this kind of checks everywhere.
-      dibb.reset(tokens);
+      dibb.reset(container.getTokens());
       credentials.readTokenStorageStream(dibb);
-      tokens.rewind();
     }
 
     // Add AMRMToken
@@ -246,7 +244,7 @@ public class AMLauncher implements Runnable {
     ((RMAppAttemptImpl)application).setAMRMToken(amrmToken);
     return amrmToken;
   }
-
+  
   @SuppressWarnings("unchecked")
   public void run() {
     switch (eventType) {
@@ -276,7 +274,7 @@ public class AMLauncher implements Runnable {
         sb.append(" is not handled by this NodeManager");
         if (!e.getMessage().contains(sb.toString())) {
           // Ignoring if container is already killed by Node Manager.
-          LOG.info("Error cleaning master ", e);
+          LOG.info("Error cleaning master ", e);          
         }
       }
       break;

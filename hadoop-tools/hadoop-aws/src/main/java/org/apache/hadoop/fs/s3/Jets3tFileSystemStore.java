@@ -138,15 +138,9 @@ class Jets3tFileSystemStore implements FileSystemStore {
 
   @Override
   public boolean inodeExists(Path path) throws IOException {
-    String key = pathToKey(path);
-    InputStream in = get(key, true);
+    InputStream in = get(pathToKey(path), true);
     if (in == null) {
-      if (isRoot(key)) {
-        storeINode(path, INode.DIRECTORY_INODE);
-        return true;
-      } else {
-        return false;
-      }
+      return false;
     }
     in.close();
     return true;
@@ -224,13 +218,7 @@ class Jets3tFileSystemStore implements FileSystemStore {
 
   @Override
   public INode retrieveINode(Path path) throws IOException {
-    String key = pathToKey(path);
-    InputStream in = get(key, true);
-    if (in == null && isRoot(key)) {
-      storeINode(path, INode.DIRECTORY_INODE);
-      return INode.DIRECTORY_INODE;
-    }
-    return INode.deserialize(in);
+    return INode.deserialize(get(pathToKey(path), true));
   }
 
   @Override
@@ -383,10 +371,6 @@ class Jets3tFileSystemStore implements FileSystemStore {
 
   private String blockToKey(Block block) {
     return blockToKey(block.getId());
-  }
-
-  private boolean isRoot(String key) {
-    return key.isEmpty() || key.equals("/");
   }
 
   @Override

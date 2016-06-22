@@ -17,12 +17,22 @@
  */
 package org.apache.hadoop.yarn.sls;
 
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.GnuParser;
+import org.apache.commons.cli.Options;
+import org.apache.hadoop.classification.InterfaceAudience.Private;
+import org.apache.hadoop.classification.InterfaceStability.Unstable;
+import org.codehaus.jackson.JsonFactory;
+import org.codehaus.jackson.map.ObjectMapper;
+import org.codehaus.jackson.map.ObjectWriter;
+
+import org.apache.hadoop.yarn.sls.utils.SLSUtils;
+
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
+import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
 import java.io.Reader;
 import java.io.Writer;
 import java.util.ArrayList;
@@ -33,17 +43,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
-
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.GnuParser;
-import org.apache.commons.cli.Options;
-import org.apache.hadoop.classification.InterfaceAudience.Private;
-import org.apache.hadoop.classification.InterfaceStability.Unstable;
-import org.apache.hadoop.yarn.sls.utils.SLSUtils;
-import org.codehaus.jackson.JsonFactory;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.map.ObjectWriter;
 
 @Private
 @Unstable
@@ -110,7 +109,7 @@ public class RumenToSLSConverter {
     if (! nodeFile.getParentFile().exists()
             && ! nodeFile.getParentFile().mkdirs()) {
       System.err.println("ERROR: Cannot create output directory in path: "
-              + nodeFile.getParentFile().getAbsoluteFile());
+              + jsonFile.getParentFile().getAbsoluteFile());
       System.exit(1);
     }
 
@@ -120,10 +119,10 @@ public class RumenToSLSConverter {
 
   private static void generateSLSLoadFile(String inputFile, String outputFile)
           throws IOException {
-    try (Reader input =
-        new InputStreamReader(new FileInputStream(inputFile), "UTF-8")) {
-      try (Writer output =
-          new OutputStreamWriter(new FileOutputStream(outputFile), "UTF-8")) {
+    Reader input = new FileReader(inputFile);
+    try {
+      Writer output = new FileWriter(outputFile);
+      try {
         ObjectMapper mapper = new ObjectMapper();
         ObjectWriter writer = mapper.writerWithDefaultPrettyPrinter();
         Iterator<Map> i = mapper.readValues(
@@ -132,15 +131,19 @@ public class RumenToSLSConverter {
           Map m = i.next();
           output.write(writer.writeValueAsString(createSLSJob(m)) + EOL);
         }
+      } finally {
+        output.close();
       }
+    } finally {
+      input.close();
     }
   }
 
   @SuppressWarnings("unchecked")
   private static void generateSLSNodeFile(String outputFile)
           throws IOException {
-    try (Writer output =
-        new OutputStreamWriter(new FileOutputStream(outputFile), "UTF-8")) {
+    Writer output = new FileWriter(outputFile);
+    try {
       ObjectMapper mapper = new ObjectMapper();
       ObjectWriter writer = mapper.writerWithDefaultPrettyPrinter();
       for (Map.Entry<String, Set<String>> entry : rackNodeMap.entrySet()) {
@@ -155,6 +158,8 @@ public class RumenToSLSConverter {
         rack.put("nodes", nodes);
         output.write(writer.writeValueAsString(rack) + EOL);
       }
+    } finally {
+      output.close();
     }
   }
 

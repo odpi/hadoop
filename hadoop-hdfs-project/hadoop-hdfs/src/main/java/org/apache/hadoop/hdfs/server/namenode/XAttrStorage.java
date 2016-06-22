@@ -18,9 +18,12 @@
 
 package org.apache.hadoop.hdfs.server.namenode;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.fs.XAttr;
 import org.apache.hadoop.hdfs.protocol.QuotaExceededException;
@@ -31,32 +34,24 @@ import org.apache.hadoop.hdfs.protocol.QuotaExceededException;
 @InterfaceAudience.Private
 public class XAttrStorage {
 
-  private static final SerialNumberMap<String> NAME_MAP =
-      new SerialNumberMap<>();
-
-  public static int getNameSerialNumber(String name) {
-    return NAME_MAP.get(name);
-  }
-
-  public static String getName(int n) {
-    return NAME_MAP.get(n);
-  }
+  private static final Map<String, String> internedNames = Maps.newHashMap();
 
   /**
-   * Reads the extended attribute of an inode by name with prefix.
+   * Reads the existing extended attributes of an inode. If the 
+   * inode does not have an <code>XAttr</code>, then this method
+   * returns an empty list.
    * <p/>
+   * Must be called while holding the FSDirectory read lock.
    *
    * @param inode INode to read
    * @param snapshotId
-   * @param prefixedName xAttr name with prefix
-   * @return the xAttr
+   * @return List<XAttr> <code>XAttr</code> list. 
    */
-  public static XAttr readINodeXAttrByPrefixedName(INode inode,
-      int snapshotId, String prefixedName) {
+  public static List<XAttr> readINodeXAttrs(INode inode, int snapshotId) {
     XAttrFeature f = inode.getXAttrFeature(snapshotId);
-    return f == null ? null : f.getXAttr(prefixedName);
+    return f == null ? ImmutableList.<XAttr> of() : f.getXAttrs();
   }
-
+  
   /**
    * Reads the existing extended attributes of an inode.
    * <p/>
@@ -67,7 +62,7 @@ public class XAttrStorage {
    */
   public static List<XAttr> readINodeXAttrs(INodeAttributes inodeAttr) {
     XAttrFeature f = inodeAttr.getXAttrFeature();
-    return f == null ? new ArrayList<XAttr>(0) : f.getXAttrs();
+    return f == null ? ImmutableList.<XAttr> of() : f.getXAttrs();
   }
   
   /**
@@ -81,12 +76,33 @@ public class XAttrStorage {
    */
   public static void updateINodeXAttrs(INode inode, 
       List<XAttr> xAttrs, int snapshotId) throws QuotaExceededException {
+    if (xAttrs == null || xAttrs.isEmpty()) {
+      if (inode.getXAttrFeature() != null) {
+        inode.removeXAttrFeature(snapshotId);
+      }
+      return;
+    }
+    // Dedupe the xAttr name and save them into a new interned list
+    List<XAttr> internedXAttrs = Lists.newArrayListWithCapacity(xAttrs.size());
+    for (XAttr xAttr : xAttrs) {
+      final String name = xAttr.getName();
+      String internedName = internedNames.get(name);
+      if (internedName == null) {
+        internedName = name;
+        internedNames.put(internedName, internedName);
+      }
+      XAttr internedXAttr = new XAttr.Builder()
+          .setName(internedName)
+          .setNameSpace(xAttr.getNameSpace())
+          .setValue(xAttr.getValue())
+          .build();
+      internedXAttrs.add(internedXAttr);
+    }
+    // Save the list of interned xattrs
+    ImmutableList<XAttr> newXAttrs = ImmutableList.copyOf(internedXAttrs);
     if (inode.getXAttrFeature() != null) {
       inode.removeXAttrFeature(snapshotId);
     }
-    if (xAttrs == null || xAttrs.isEmpty()) {
-      return;
-    }
-    inode.addXAttrFeature(new XAttrFeature(xAttrs), snapshotId);
+    inode.addXAttrFeature(new XAttrFeature(newXAttrs), snapshotId);
   }
 }

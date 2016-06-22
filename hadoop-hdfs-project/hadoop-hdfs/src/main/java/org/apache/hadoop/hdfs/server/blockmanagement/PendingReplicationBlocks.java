@@ -23,7 +23,6 @@ import java.io.PrintWriter;
 import java.sql.Time;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -47,8 +46,8 @@ import org.slf4j.Logger;
 class PendingReplicationBlocks {
   private static final Logger LOG = BlockManager.LOG;
 
-  private final Map<BlockInfo, PendingBlockInfo> pendingReplications;
-  private final ArrayList<BlockInfo> timedOutItems;
+  private final Map<Block, PendingBlockInfo> pendingReplications;
+  private final ArrayList<Block> timedOutItems;
   Daemon timerThread = null;
   private volatile boolean fsRunning = true;
 
@@ -63,8 +62,8 @@ class PendingReplicationBlocks {
     if ( timeoutPeriod > 0 ) {
       this.timeout = timeoutPeriod;
     }
-    pendingReplications = new HashMap<>();
-    timedOutItems = new ArrayList<>();
+    pendingReplications = new HashMap<Block, PendingBlockInfo>();
+    timedOutItems = new ArrayList<Block>();
   }
 
   void start() {
@@ -77,7 +76,7 @@ class PendingReplicationBlocks {
    * @param block The corresponding block
    * @param targets The DataNodes where replicas of the block should be placed
    */
-  void increment(BlockInfo block, DatanodeDescriptor[] targets) {
+  void increment(Block block, DatanodeDescriptor[] targets) {
     synchronized (pendingReplications) {
       PendingBlockInfo found = pendingReplications.get(block);
       if (found == null) {
@@ -94,9 +93,9 @@ class PendingReplicationBlocks {
    * Decrement the number of pending replication requests
    * for this block.
    * 
-   * @param dn The DataNode that finishes the replication
+   * @param The DataNode that finishes the replication
    */
-  void decrement(BlockInfo block, DatanodeDescriptor dn) {
+  void decrement(Block block, DatanodeDescriptor dn) {
     synchronized (pendingReplications) {
       PendingBlockInfo found = pendingReplications.get(block);
       if (found != null) {
@@ -116,7 +115,7 @@ class PendingReplicationBlocks {
    * @param block The given block whose pending replication requests need to be
    *              removed
    */
-  void remove(BlockInfo block) {
+  void remove(Block block) {
     synchronized (pendingReplications) {
       pendingReplications.remove(block);
     }
@@ -139,7 +138,7 @@ class PendingReplicationBlocks {
   /**
    * How many copies of this block is pending replication?
    */
-  int getNumReplicas(BlockInfo block) {
+  int getNumReplicas(Block block) {
     synchronized (pendingReplications) {
       PendingBlockInfo found = pendingReplications.get(block);
       if (found != null) {
@@ -154,13 +153,13 @@ class PendingReplicationBlocks {
    * replication requests. Returns null if no blocks have
    * timed out.
    */
-  BlockInfo[] getTimedOutBlocks() {
+  Block[] getTimedOutBlocks() {
     synchronized (timedOutItems) {
       if (timedOutItems.size() <= 0) {
         return null;
       }
-      BlockInfo[] blockList = timedOutItems.toArray(
-          new BlockInfo[timedOutItems.size()]);
+      Block[] blockList = timedOutItems.toArray(
+          new Block[timedOutItems.size()]);
       timedOutItems.clear();
       return blockList;
     }
@@ -180,7 +179,7 @@ class PendingReplicationBlocks {
     PendingBlockInfo(DatanodeDescriptor[] targets) {
       this.timeStamp = monotonicNow();
       this.targets = targets == null ? new ArrayList<DatanodeDescriptor>()
-          : new ArrayList<>(Arrays.asList(targets));
+          : new ArrayList<DatanodeDescriptor>(Arrays.asList(targets));
     }
 
     long getTimeStamp() {
@@ -193,7 +192,9 @@ class PendingReplicationBlocks {
 
     void incrementReplicas(DatanodeDescriptor... newTargets) {
       if (newTargets != null) {
-        Collections.addAll(targets, newTargets);
+        for (DatanodeDescriptor dn : newTargets) {
+          targets.add(dn);
+        }
       }
     }
 
@@ -231,17 +232,17 @@ class PendingReplicationBlocks {
      */
     void pendingReplicationCheck() {
       synchronized (pendingReplications) {
-        Iterator<Map.Entry<BlockInfo, PendingBlockInfo>> iter =
+        Iterator<Map.Entry<Block, PendingBlockInfo>> iter =
                                     pendingReplications.entrySet().iterator();
         long now = monotonicNow();
         if(LOG.isDebugEnabled()) {
           LOG.debug("PendingReplicationMonitor checking Q");
         }
         while (iter.hasNext()) {
-          Map.Entry<BlockInfo, PendingBlockInfo> entry = iter.next();
+          Map.Entry<Block, PendingBlockInfo> entry = iter.next();
           PendingBlockInfo pendingBlock = entry.getValue();
           if (now > pendingBlock.getTimeStamp() + timeout) {
-            BlockInfo block = entry.getKey();
+            Block block = entry.getKey();
             synchronized (timedOutItems) {
               timedOutItems.add(block);
             }
@@ -274,14 +275,16 @@ class PendingReplicationBlocks {
     synchronized (pendingReplications) {
       out.println("Metasave: Blocks being replicated: " +
                   pendingReplications.size());
-      for (Map.Entry<BlockInfo, PendingBlockInfo> entry :
-          pendingReplications.entrySet()) {
+      Iterator<Map.Entry<Block, PendingBlockInfo>> iter =
+                                  pendingReplications.entrySet().iterator();
+      while (iter.hasNext()) {
+        Map.Entry<Block, PendingBlockInfo> entry = iter.next();
         PendingBlockInfo pendingBlock = entry.getValue();
         Block block = entry.getKey();
-        out.println(block +
-            " StartTime: " + new Time(pendingBlock.timeStamp) +
-            " NumReplicaInProgress: " +
-            pendingBlock.getNumReplicas());
+        out.println(block + 
+                    " StartTime: " + new Time(pendingBlock.timeStamp) +
+                    " NumReplicaInProgress: " + 
+                    pendingBlock.getNumReplicas());
       }
     }
   }

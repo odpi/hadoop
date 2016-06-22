@@ -27,19 +27,17 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
-import java.util.concurrent.ThreadLocalRandom;
 
 import org.apache.commons.logging.impl.Log4JLogger;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.ContentSummary;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
@@ -50,8 +48,9 @@ import org.apache.hadoop.hdfs.LogVerificationAppender;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.TestBlockStoragePolicy;
 import org.apache.hadoop.hdfs.protocol.Block;
+import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockManager.StatefulBlockInfo;
-import org.apache.hadoop.hdfs.server.common.HdfsServerConstants;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.BlockUCState;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.ReplicaState;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
@@ -62,6 +61,7 @@ import org.apache.hadoop.hdfs.server.protocol.DatanodeStorage;
 import org.apache.hadoop.net.NetworkTopology;
 import org.apache.hadoop.net.Node;
 import org.apache.hadoop.test.PathUtils;
+import org.apache.hadoop.util.Time;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.apache.log4j.spi.LoggingEvent;
@@ -75,6 +75,7 @@ public class TestReplicationPolicy {
     ((Log4JLogger)BlockPlacementPolicy.LOG).getLogger().setLevel(Level.ALL);
   }
 
+  private final Random random = DFSUtil.getRandom();
   private static final int BLOCK_SIZE = 1024;
   private static final int NUM_OF_DATANODES = 6;
   private static NetworkTopology cluster;
@@ -100,16 +101,6 @@ public class TestReplicationPolicy {
         dnCacheCapacity, dnCacheUsed, xceiverCount, volFailures, null);
   }
 
-  private static void updateHeartbeatForExtraStorage(long capacity,
-      long dfsUsed, long remaining, long blockPoolUsed) {
-    DatanodeDescriptor dn = dataNodes[5];
-    dn.getStorageInfos()[1].setUtilizationForTesting(
-        capacity, dfsUsed, remaining, blockPoolUsed);
-    dn.updateHeartbeat(
-        BlockManagerTestUtil.getStorageReportsForDatanode(dn),
-        0L, 0L, 0, 0, null);
-  }
-
   @BeforeClass
   public static void setupCluster() throws Exception {
     Configuration conf = new HdfsConfiguration();
@@ -122,16 +113,6 @@ public class TestReplicationPolicy {
         "/d2/r3"};
     storages = DFSTestUtil.createDatanodeStorageInfos(racks);
     dataNodes = DFSTestUtil.toDatanodeDescriptor(storages);
-
-    // create an extra storage for dn5.
-    DatanodeStorage extraStorage = new DatanodeStorage(
-        storages[5].getStorageID() + "-extra", DatanodeStorage.State.NORMAL,
-        StorageType.DEFAULT);
-/*    DatanodeStorageInfo si = new DatanodeStorageInfo(
-        storages[5].getDatanodeDescriptor(), extraStorage);
-*/
-    BlockManagerTestUtil.updateStorage(storages[5].getDatanodeDescriptor(),
-        extraStorage);
 
     FileSystem.setDefaultUri(conf, "hdfs://localhost:0");
     conf.set(DFSConfigKeys.DFS_NAMENODE_HTTP_ADDRESS_KEY, "0.0.0.0:0");
@@ -155,17 +136,11 @@ public class TestReplicationPolicy {
       bm.getDatanodeManager().getHeartbeatManager().addDatanode(
           dataNodes[i]);
     }
-    resetHeartbeatForStorages();
-  }
-
-  private static void resetHeartbeatForStorages() {
     for (int i=0; i < NUM_OF_DATANODES; i++) {
       updateHeartbeatWithUsage(dataNodes[i],
-          2* HdfsServerConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L,
-          2* HdfsServerConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L, 0L, 0L, 0, 0);
-    }
-    // No available space in the extra storage of dn0
-    updateHeartbeatForExtraStorage(0L, 0L, 0L, 0L);
+          2*HdfsConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L,
+          2*HdfsConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L, 0L, 0L, 0, 0);
+    }    
   }
 
   private static boolean isOnSameRack(DatanodeStorageInfo left, DatanodeStorageInfo right) {
@@ -175,55 +150,6 @@ public class TestReplicationPolicy {
   private static boolean isOnSameRack(DatanodeStorageInfo left, DatanodeDescriptor right) {
     return cluster.isOnSameRack(left.getDatanodeDescriptor(), right);
   }
-
-  /**
-   * Test whether the remaining space per storage is individually
-   * considered.
-   */
-  @Test
-  public void testChooseNodeWithMultipleStorages1() throws Exception {
-    updateHeartbeatWithUsage(dataNodes[5],
-        2* HdfsServerConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L,
-        (2*HdfsServerConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE)/3, 0L,
-        0L, 0L, 0, 0);
-
-    updateHeartbeatForExtraStorage(
-        2* HdfsServerConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L,
-        (2*HdfsServerConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE)/3, 0L);
-
-    DatanodeStorageInfo[] targets;
-    targets = chooseTarget (1, dataNodes[5],
-        new ArrayList<DatanodeStorageInfo>(), null);
-    assertEquals(1, targets.length);
-    assertEquals(storages[4], targets[0]);
-
-    resetHeartbeatForStorages();
-  }
-
-  /**
-   * Test whether all storages on the datanode are considered while
-   * choosing target to place block.
-   */
-  @Test
-  public void testChooseNodeWithMultipleStorages2() throws Exception {
-    updateHeartbeatWithUsage(dataNodes[5],
-        2* HdfsServerConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L,
-        (2*HdfsServerConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE)/3, 0L,
-        0L, 0L, 0, 0);
-
-    updateHeartbeatForExtraStorage(
-        2* HdfsServerConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L,
-        HdfsServerConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L);
-
-    DatanodeStorageInfo[] targets;
-    targets = chooseTarget (1, dataNodes[5],
-        new ArrayList<DatanodeStorageInfo>(), null);
-    assertEquals(1, targets.length);
-    assertEquals(dataNodes[5], targets[0].getDatanodeDescriptor());
-
-    resetHeartbeatForStorages();
-  }
-
   /**
    * In this testcase, client is dataNodes[0]. So the 1st replica should be
    * placed on dataNodes[0], the 2nd replica should be placed on 
@@ -236,8 +162,8 @@ public class TestReplicationPolicy {
   @Test
   public void testChooseTarget1() throws Exception {
     updateHeartbeatWithUsage(dataNodes[0],
-        2* HdfsServerConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L,
-        HdfsServerConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L,
+        2*HdfsConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L, 
+        HdfsConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L,
         0L, 0L, 4, 0); // overloaded
 
     DatanodeStorageInfo[] targets;
@@ -265,8 +191,10 @@ public class TestReplicationPolicy {
     assertTrue(isOnSameRack(targets[1], targets[2]) ||
                isOnSameRack(targets[2], targets[3]));
     assertFalse(isOnSameRack(targets[0], targets[2]));
-
-    resetHeartbeatForStorages();
+    
+    updateHeartbeatWithUsage(dataNodes[0],
+        2*HdfsConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L,
+        HdfsConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L, 0L, 0L, 0, 0);
   }
 
   private static DatanodeStorageInfo[] chooseTarget(int numOfReplicas) {
@@ -388,8 +316,8 @@ public class TestReplicationPolicy {
   public void testChooseTarget3() throws Exception {
     // make data node 0 to be not qualified to choose
     updateHeartbeatWithUsage(dataNodes[0],
-        2* HdfsServerConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L,
-        (HdfsServerConstants.MIN_BLOCKS_FOR_WRITE-1)*BLOCK_SIZE, 0L,
+        2*HdfsConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L,
+        (HdfsConstants.MIN_BLOCKS_FOR_WRITE-1)*BLOCK_SIZE, 0L,
         0L, 0L, 0, 0); // no space
         
     DatanodeStorageInfo[] targets;
@@ -421,7 +349,9 @@ public class TestReplicationPolicy {
                isOnSameRack(targets[2], targets[3]));
     assertFalse(isOnSameRack(targets[1], targets[3]));
 
-    resetHeartbeatForStorages();
+    updateHeartbeatWithUsage(dataNodes[0],
+        2*HdfsConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L,
+        HdfsConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L, 0L, 0L, 0, 0);
   }
   
   /**
@@ -437,8 +367,8 @@ public class TestReplicationPolicy {
     // make data node 0 & 1 to be not qualified to choose: not enough disk space
     for(int i=0; i<2; i++) {
       updateHeartbeatWithUsage(dataNodes[i],
-          2* HdfsServerConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L,
-          (HdfsServerConstants.MIN_BLOCKS_FOR_WRITE-1)*BLOCK_SIZE, 0L, 0L, 0L, 0, 0);
+          2*HdfsConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L,
+          (HdfsConstants.MIN_BLOCKS_FOR_WRITE-1)*BLOCK_SIZE, 0L, 0L, 0L, 0, 0);
     }
       
     DatanodeStorageInfo[] targets;
@@ -462,8 +392,12 @@ public class TestReplicationPolicy {
     assertTrue(isOnSameRack(targets[0], targets[1]) ||
                isOnSameRack(targets[1], targets[2]));
     assertFalse(isOnSameRack(targets[0], targets[2]));
-
-    resetHeartbeatForStorages();
+    
+    for(int i=0; i<2; i++) {
+      updateHeartbeatWithUsage(dataNodes[i],
+          2*HdfsConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L,
+          HdfsConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L, 0L, 0L, 0, 0);
+    }
   }
 
   /**
@@ -525,8 +459,8 @@ public class TestReplicationPolicy {
     bm.getDatanodeManager().getNetworkTopology().add(newDn);
     bm.getDatanodeManager().getHeartbeatManager().addDatanode(newDn);
     updateHeartbeatWithUsage(newDn,
-        2* HdfsServerConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L,
-        2* HdfsServerConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L, 0L, 0L, 0, 0);
+        2*HdfsConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L,
+        2*HdfsConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L, 0L, 0L, 0, 0);
 
     // Try picking three nodes. Only two should return.
     excludedNodes.clear();
@@ -541,7 +475,6 @@ public class TestReplicationPolicy {
     } finally {
       bm.getDatanodeManager().getNetworkTopology().remove(newDn);
     }
-    resetHeartbeatForStorages();
   }
 
 
@@ -573,8 +506,8 @@ public class TestReplicationPolicy {
     // make data node 0 & 1 to be not qualified to choose: not enough disk space
     for(int i=0; i<2; i++) {
       updateHeartbeatWithUsage(dataNodes[i],
-          2* HdfsServerConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L,
-          (HdfsServerConstants.MIN_BLOCKS_FOR_WRITE-1)*BLOCK_SIZE, 0L, 0L, 0L, 0, 0);
+          2*HdfsConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L,
+          (HdfsConstants.MIN_BLOCKS_FOR_WRITE-1)*BLOCK_SIZE, 0L, 0L, 0L, 0, 0);
     }
     
     final LogVerificationAppender appender = new LogVerificationAppender();
@@ -595,8 +528,12 @@ public class TestReplicationPolicy {
     // Suppose to place replicas on each node but two data nodes are not
     // available for placing replica, so here we expect a short of 2
     assertTrue(((String)lastLogEntry.getMessage()).contains("in need of 2"));
-
-    resetHeartbeatForStorages();
+    
+    for(int i=0; i<2; i++) {
+      updateHeartbeatWithUsage(dataNodes[i],
+          2*HdfsConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L,
+          HdfsConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L, 0L, 0L, 0, 0);
+    }
   }
 
   private boolean containsWithinRange(DatanodeStorageInfo target,
@@ -894,11 +831,7 @@ public class TestReplicationPolicy {
     assertEquals(targets.length, 2);
     assertTrue(isOnSameRack(targets[0], dataNodes[2]));
   }
-
-  private BlockInfo genBlockInfo(long id) {
-    return new BlockInfoContiguous(new Block(id), (short) 3);
-  }
-
+  
   /**
    * Test for the high priority blocks are processed before the low priority
    * blocks.
@@ -917,18 +850,15 @@ public class TestReplicationPolicy {
           .getNamesystem().getBlockManager().neededReplications;
       for (int i = 0; i < 100; i++) {
         // Adding the blocks directly to normal priority
-
-        neededReplications.add(genBlockInfo(ThreadLocalRandom.current().
-            nextLong()), 2, 0, 3);
+        neededReplications.add(new Block(random.nextLong()), 2, 0, 3);
       }
       // Lets wait for the replication interval, to start process normal
       // priority blocks
       Thread.sleep(DFS_NAMENODE_REPLICATION_INTERVAL);
       
       // Adding the block directly to high priority list
-      neededReplications.add(genBlockInfo(ThreadLocalRandom.current().
-          nextLong()), 1, 0, 3);
-
+      neededReplications.add(new Block(random.nextLong()), 1, 0, 3);
+      
       // Lets wait for the replication interval
       Thread.sleep(DFS_NAMENODE_REPLICATION_INTERVAL);
 
@@ -950,31 +880,25 @@ public class TestReplicationPolicy {
 
     for (int i = 0; i < 5; i++) {
       // Adding QUEUE_HIGHEST_PRIORITY block
-      underReplicatedBlocks.add(genBlockInfo(ThreadLocalRandom.current().
-          nextLong()), 1, 0, 3);
+      underReplicatedBlocks.add(new Block(random.nextLong()), 1, 0, 3);
 
       // Adding QUEUE_VERY_UNDER_REPLICATED block
-      underReplicatedBlocks.add(genBlockInfo(ThreadLocalRandom.current().
-          nextLong()), 2, 0, 7);
+      underReplicatedBlocks.add(new Block(random.nextLong()), 2, 0, 7);
 
       // Adding QUEUE_REPLICAS_BADLY_DISTRIBUTED block
-      underReplicatedBlocks.add(genBlockInfo(ThreadLocalRandom.current().
-          nextLong()), 6, 0, 6);
+      underReplicatedBlocks.add(new Block(random.nextLong()), 6, 0, 6);
 
       // Adding QUEUE_UNDER_REPLICATED block
-      underReplicatedBlocks.add(genBlockInfo(ThreadLocalRandom.current().
-          nextLong()), 5, 0, 6);
+      underReplicatedBlocks.add(new Block(random.nextLong()), 5, 0, 6);
 
       // Adding QUEUE_WITH_CORRUPT_BLOCKS block
-      underReplicatedBlocks.add(genBlockInfo(ThreadLocalRandom.current().
-          nextLong()), 0, 0, 3);
+      underReplicatedBlocks.add(new Block(random.nextLong()), 0, 0, 3);
     }
 
     // Choose 6 blocks from UnderReplicatedBlocks. Then it should pick 5 blocks
     // from
     // QUEUE_HIGHEST_PRIORITY and 1 block from QUEUE_VERY_UNDER_REPLICATED.
-    List<List<BlockInfo>> chosenBlocks =
-        underReplicatedBlocks.chooseUnderReplicatedBlocks(6);
+    List<List<Block>> chosenBlocks = underReplicatedBlocks.chooseUnderReplicatedBlocks(6);
     assertTheChosenBlocks(chosenBlocks, 5, 1, 0, 0, 0);
 
     // Choose 10 blocks from UnderReplicatedBlocks. Then it should pick 4 blocks from
@@ -984,8 +908,7 @@ public class TestReplicationPolicy {
     assertTheChosenBlocks(chosenBlocks, 0, 4, 5, 1, 0);
 
     // Adding QUEUE_HIGHEST_PRIORITY
-    underReplicatedBlocks.add(genBlockInfo(ThreadLocalRandom.current().
-        nextLong()), 1, 0, 3);
+    underReplicatedBlocks.add(new Block(random.nextLong()), 1, 0, 3);
 
     // Choose 10 blocks from UnderReplicatedBlocks. Then it should pick 1 block from
     // QUEUE_HIGHEST_PRIORITY, 4 blocks from QUEUE_REPLICAS_BADLY_DISTRIBUTED
@@ -1003,7 +926,7 @@ public class TestReplicationPolicy {
   
   /** asserts the chosen blocks with expected priority blocks */
   private void assertTheChosenBlocks(
-      List<List<BlockInfo>> chosenBlocks, int firstPrioritySize,
+      List<List<Block>> chosenBlocks, int firstPrioritySize,
       int secondPrioritySize, int thirdPrioritySize, int fourthPrioritySize,
       int fifthPrioritySize) {
     assertEquals(
@@ -1171,194 +1094,5 @@ public class TestReplicationPolicy {
         DFS_NAMENODE_REPLICATION_WORK_MULTIPLIER_PER_ITERATION,"-1");
     exception.expect(IllegalArgumentException.class);
     blocksReplWorkMultiplier = DFSUtil.getReplWorkMultiplier(conf);
-  }
-
-  @Test(timeout = 60000)
-  public void testUpdateDoesNotCauseSkippedReplication() {
-    UnderReplicatedBlocks underReplicatedBlocks = new UnderReplicatedBlocks();
-
-    BlockInfo block1 = genBlockInfo(ThreadLocalRandom.current().nextLong());
-    BlockInfo block2 = genBlockInfo(ThreadLocalRandom.current().nextLong());
-    BlockInfo block3 = genBlockInfo(ThreadLocalRandom.current().nextLong());
-
-    // Adding QUEUE_VERY_UNDER_REPLICATED block
-    final int block1CurReplicas = 2;
-    final int block1ExpectedReplicas = 7;
-    underReplicatedBlocks.add(block1, block1CurReplicas, 0,
-        block1ExpectedReplicas);
-
-    // Adding QUEUE_VERY_UNDER_REPLICATED block
-    underReplicatedBlocks.add(block2, 2, 0, 7);
-
-    // Adding QUEUE_UNDER_REPLICATED block
-    underReplicatedBlocks.add(block3, 2, 0, 6);
-
-    List<List<BlockInfo>> chosenBlocks;
-
-    // Choose 1 block from UnderReplicatedBlocks. Then it should pick 1 block
-    // from QUEUE_VERY_UNDER_REPLICATED.
-    chosenBlocks = underReplicatedBlocks.chooseUnderReplicatedBlocks(1);
-    assertTheChosenBlocks(chosenBlocks, 0, 1, 0, 0, 0);
-
-    // Increasing the replications will move the block down a
-    // priority.  This simulates a replica being completed in between checks.
-    underReplicatedBlocks.update(block1, block1CurReplicas+1, 0,
-        block1ExpectedReplicas, 1, 0);
-
-    // Choose 1 block from UnderReplicatedBlocks. Then it should pick 1 block
-    // from QUEUE_VERY_UNDER_REPLICATED.
-    // This block was moved up a priority and should not be skipped over.
-    chosenBlocks = underReplicatedBlocks.chooseUnderReplicatedBlocks(1);
-    assertTheChosenBlocks(chosenBlocks, 0, 1, 0, 0, 0);
-
-    // Choose 1 block from UnderReplicatedBlocks. Then it should pick 1 block
-    // from QUEUE_UNDER_REPLICATED.
-    chosenBlocks = underReplicatedBlocks.chooseUnderReplicatedBlocks(1);
-    assertTheChosenBlocks(chosenBlocks, 0, 0, 1, 0, 0);
-  }
-
-  @Test(timeout = 60000)
-  public void testAddStoredBlockDoesNotCauseSkippedReplication()
-      throws IOException {
-    Namesystem mockNS = mock(Namesystem.class);
-    when(mockNS.hasWriteLock()).thenReturn(true);
-    when(mockNS.hasReadLock()).thenReturn(true);
-    BlockManager bm = new BlockManager(mockNS, new HdfsConfiguration());
-    UnderReplicatedBlocks underReplicatedBlocks = bm.neededReplications;
-
-    BlockInfo block1 = genBlockInfo(ThreadLocalRandom.current().nextLong());
-    BlockInfo block2 = genBlockInfo(ThreadLocalRandom.current().nextLong());
-
-    // Adding QUEUE_UNDER_REPLICATED block
-    underReplicatedBlocks.add(block1, 0, 1, 1);
-
-    // Adding QUEUE_UNDER_REPLICATED block
-    underReplicatedBlocks.add(block2, 0, 1, 1);
-
-    List<List<BlockInfo>> chosenBlocks;
-
-    // Choose 1 block from UnderReplicatedBlocks. Then it should pick 1 block
-    // from QUEUE_VERY_UNDER_REPLICATED.
-    chosenBlocks = underReplicatedBlocks.chooseUnderReplicatedBlocks(1);
-    assertTheChosenBlocks(chosenBlocks, 1, 0, 0, 0, 0);
-
-    // Adding this block collection to the BlockManager, so that when we add the
-    // block under construction, the BlockManager will realize the expected
-    // replication has been achieved and remove it from the under-replicated
-    // queue.
-    BlockInfoContiguous info = new BlockInfoContiguous(block1, (short) 1);
-    info.convertToBlockUnderConstruction(BlockUCState.UNDER_CONSTRUCTION, null);
-    BlockCollection bc = mock(BlockCollection.class);
-    when(bc.getId()).thenReturn(1000L);
-    when(mockNS.getBlockCollection(1000L)).thenReturn(bc);
-    bm.addBlockCollection(info, bc);
-
-    // Adding this block will increase its current replication, and that will
-    // remove it from the queue.
-    bm.addStoredBlockUnderConstruction(new StatefulBlockInfo(info, info,
-              ReplicaState.FINALIZED), TestReplicationPolicy.storages[0]);
-
-    // Choose 1 block from UnderReplicatedBlocks. Then it should pick 1 block
-    // from QUEUE_VERY_UNDER_REPLICATED.
-    // This block remains and should not be skipped over.
-    chosenBlocks = underReplicatedBlocks.chooseUnderReplicatedBlocks(1);
-    assertTheChosenBlocks(chosenBlocks, 1, 0, 0, 0, 0);
-  }
-
-  @Test(timeout = 60000)
-  public void
-      testConvertLastBlockToUnderConstructionDoesNotCauseSkippedReplication()
-          throws IOException {
-    Namesystem mockNS = mock(Namesystem.class);
-    when(mockNS.hasReadLock()).thenReturn(true);
-
-    BlockManager bm = new BlockManager(mockNS, new HdfsConfiguration());
-    UnderReplicatedBlocks underReplicatedBlocks = bm.neededReplications;
-
-    BlockInfo block1 = genBlockInfo(ThreadLocalRandom.current().nextLong());
-    BlockInfo block2 = genBlockInfo(ThreadLocalRandom.current().nextLong());
-
-    // Adding QUEUE_UNDER_REPLICATED block
-    underReplicatedBlocks.add(block1, 0, 1, 1);
-
-    // Adding QUEUE_UNDER_REPLICATED block
-    underReplicatedBlocks.add(block2, 0, 1, 1);
-
-    List<List<BlockInfo>> chosenBlocks;
-
-    // Choose 1 block from UnderReplicatedBlocks. Then it should pick 1 block
-    // from QUEUE_VERY_UNDER_REPLICATED.
-    chosenBlocks = underReplicatedBlocks.chooseUnderReplicatedBlocks(1);
-    assertTheChosenBlocks(chosenBlocks, 1, 0, 0, 0, 0);
-
-    final BlockInfo info = new BlockInfoContiguous(block1, (short) 1);
-    final BlockCollection mbc = mock(BlockCollection.class);
-    when(mbc.getId()).thenReturn(1000L);
-    when(mbc.getLastBlock()).thenReturn(info);
-    when(mbc.getPreferredBlockSize()).thenReturn(block1.getNumBytes() + 1);
-    when(mbc.isUnderConstruction()).thenReturn(true);
-    ContentSummary cs = mock(ContentSummary.class);
-    when(cs.getLength()).thenReturn((long)1);
-    when(mbc.computeContentSummary(bm.getStoragePolicySuite())).thenReturn(cs);
-    info.setBlockCollectionId(1000);
-    bm.addBlockCollection(info, mbc);
-
-    DatanodeStorageInfo[] storageAry = {new DatanodeStorageInfo(
-        dataNodes[0], new DatanodeStorage("s1"))};
-    info.convertToBlockUnderConstruction(BlockUCState.UNDER_CONSTRUCTION,
-        storageAry);
-    DatanodeStorageInfo storage = mock(DatanodeStorageInfo.class);
-    DatanodeDescriptor dn = mock(DatanodeDescriptor.class);
-    when(dn.isDecommissioned()).thenReturn(true);
-    when(storage.getState()).thenReturn(DatanodeStorage.State.NORMAL);
-    when(storage.getDatanodeDescriptor()).thenReturn(dn);
-    when(storage.removeBlock(any(BlockInfo.class))).thenReturn(true);
-    when(storage.addBlock(any(BlockInfo.class))).thenReturn
-        (DatanodeStorageInfo.AddBlockResult.ADDED);
-    info.addStorage(storage);
-
-    when(mbc.getLastBlock()).thenReturn(info);
-
-    bm.convertLastBlockToUnderConstruction(mbc, 0L);
-
-    // Choose 1 block from UnderReplicatedBlocks. Then it should pick 1 block
-    // from QUEUE_VERY_UNDER_REPLICATED.
-    // This block remains and should not be skipped over.
-    chosenBlocks = underReplicatedBlocks.chooseUnderReplicatedBlocks(1);
-    assertTheChosenBlocks(chosenBlocks, 1, 0, 0, 0, 0);
-  }
-
-  @Test(timeout = 60000)
-  public void testupdateNeededReplicationsDoesNotCauseSkippedReplication()
-      throws IOException {
-    Namesystem mockNS = mock(Namesystem.class);
-    when(mockNS.hasReadLock()).thenReturn(true);
-
-    BlockManager bm = new BlockManager(mockNS, new HdfsConfiguration());
-    UnderReplicatedBlocks underReplicatedBlocks = bm.neededReplications;
-
-    BlockInfo block1 = genBlockInfo(ThreadLocalRandom.current().nextLong());
-    BlockInfo block2 = genBlockInfo(ThreadLocalRandom.current().nextLong());
-
-    // Adding QUEUE_UNDER_REPLICATED block
-    underReplicatedBlocks.add(block1, 0, 1, 1);
-
-    // Adding QUEUE_UNDER_REPLICATED block
-    underReplicatedBlocks.add(block2, 0, 1, 1);
-
-    List<List<BlockInfo>> chosenBlocks;
-
-    // Choose 1 block from UnderReplicatedBlocks. Then it should pick 1 block
-    // from QUEUE_VERY_UNDER_REPLICATED.
-    chosenBlocks = underReplicatedBlocks.chooseUnderReplicatedBlocks(1);
-    assertTheChosenBlocks(chosenBlocks, 1, 0, 0, 0, 0);
-
-    bm.setReplication((short)0, (short)1, block1);
-
-    // Choose 1 block from UnderReplicatedBlocks. Then it should pick 1 block
-    // from QUEUE_VERY_UNDER_REPLICATED.
-    // This block remains and should not be skipped over.
-    chosenBlocks = underReplicatedBlocks.chooseUnderReplicatedBlocks(1);
-    assertTheChosenBlocks(chosenBlocks, 1, 0, 0, 0, 0);
   }
 }

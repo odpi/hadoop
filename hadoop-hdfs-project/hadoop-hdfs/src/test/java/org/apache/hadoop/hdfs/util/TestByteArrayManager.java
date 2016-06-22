@@ -27,7 +27,6 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -35,7 +34,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.commons.logging.impl.Log4JLogger;
-import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.util.ByteArrayManager.Counter;
 import org.apache.hadoop.hdfs.util.ByteArrayManager.CounterMap;
 import org.apache.hadoop.hdfs.util.ByteArrayManager.FixedLengthManager;
@@ -72,7 +72,7 @@ public class TestByteArrayManager {
     final long countResetTimePeriodMs = 200L;
     final Counter c = new Counter(countResetTimePeriodMs);
 
-    final int n = ThreadLocalRandom.current().nextInt(512) + 512;
+    final int n = DFSUtil.getRandom().nextInt(512) + 512;
     final List<Future<Integer>> futures = new ArrayList<Future<Integer>>(n);
     
     final ExecutorService pool = Executors.newFixedThreadPool(32);
@@ -334,7 +334,7 @@ public class TestByteArrayManager {
       public void run() {
         LOG.info("randomRecycler start");
         for(int i = 0; shouldRun(); i++) {
-          final int j = ThreadLocalRandom.current().nextInt(runners.length);
+          final int j = DFSUtil.getRandom().nextInt(runners.length);
           try {
             runners[j].recycle();
           } catch (Exception e) {
@@ -440,7 +440,7 @@ public class TestByteArrayManager {
         public byte[] call() throws Exception {
           final int lower = maxArrayLength == ByteArrayManager.MIN_ARRAY_LENGTH?
               0: maxArrayLength >> 1;
-          final int arrayLength = ThreadLocalRandom.current().nextInt(
+          final int arrayLength = DFSUtil.getRandom().nextInt(
               maxArrayLength - lower) + lower + 1;
           final byte[] array = bam.newByteArray(arrayLength);
           try {
@@ -496,8 +496,7 @@ public class TestByteArrayManager {
     @Override
     public void run() {
       for(int i = 0; i < n; i++) {
-        final boolean isAllocate = ThreadLocalRandom.current()
-            .nextInt(NUM_RUNNERS) < p;
+        final boolean isAllocate = DFSUtil.getRandom().nextInt(NUM_RUNNERS) < p;
         if (isAllocate) {
           submitAllocate();
         } else {
@@ -574,13 +573,14 @@ public class TestByteArrayManager {
         + ", nAllocations=" + nAllocations
         + ", maxArrays=" + maxArrays);
     
+    final Random ran = DFSUtil.getRandom();
     final ByteArrayManager[] impls = {
         new ByteArrayManager.NewByteArrayWithoutLimit(),
         new NewByteArrayWithLimit(maxArrays),
         new ByteArrayManager.Impl(new ByteArrayManager.Conf(
-            HdfsClientConfigKeys.Write.ByteArrayManager.COUNT_THRESHOLD_DEFAULT,
+            DFSConfigKeys.DFS_CLIENT_WRITE_BYTE_ARRAY_MANAGER_COUNT_THRESHOLD_DEFAULT,
             maxArrays,
-            HdfsClientConfigKeys.Write.ByteArrayManager.COUNT_RESET_TIME_PERIOD_MS_DEFAULT))
+            DFSConfigKeys.DFS_CLIENT_WRITE_BYTE_ARRAY_MANAGER_COUNT_RESET_TIME_PERIOD_MS_DEFAULT))
     };
     final double[] avg = new double[impls.length];
 
@@ -590,7 +590,7 @@ public class TestByteArrayManager {
       for(int j = 0; j < nTrials; j++) {
         final int[] sleepTime = new int[nAllocations];
         for(int k = 0; k < sleepTime.length; k++) {
-          sleepTime[k] = ThreadLocalRandom.current().nextInt(100);
+          sleepTime[k] = ran.nextInt(100);
         }
       
         final long elapsed = performanceTest(arrayLength, maxArrays, nThreads,

@@ -231,6 +231,7 @@ implements ResourceUsageEmulatorPlugin {
   
   private synchronized long getCurrentCPUUsage() {
     return monitor.getCumulativeCpuTime();
+
   }
   
   @Override

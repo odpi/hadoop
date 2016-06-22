@@ -20,10 +20,7 @@ package org.apache.hadoop.yarn.server.api.protocolrecords.impl.pb;
 
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
-import org.apache.hadoop.yarn.api.records.DecommissionType;
-import org.apache.hadoop.yarn.proto.YarnServerResourceManagerServiceProtos.DecommissionTypeProto;
 import org.apache.hadoop.yarn.proto.YarnServerResourceManagerServiceProtos.RefreshNodesRequestProto;
-import org.apache.hadoop.yarn.proto.YarnServerResourceManagerServiceProtos.RefreshNodesRequestProtoOrBuilder;
 import org.apache.hadoop.yarn.server.api.protocolrecords.RefreshNodesRequest;
 
 import com.google.protobuf.TextFormat;
@@ -35,8 +32,7 @@ public class RefreshNodesRequestPBImpl extends RefreshNodesRequest {
   RefreshNodesRequestProto proto = RefreshNodesRequestProto.getDefaultInstance();
   RefreshNodesRequestProto.Builder builder = null;
   boolean viaProto = false;
-  private DecommissionType decommissionType;
-
+  
   public RefreshNodesRequestPBImpl() {
     builder = RefreshNodesRequestProto.newBuilder();
   }
@@ -46,32 +42,10 @@ public class RefreshNodesRequestPBImpl extends RefreshNodesRequest {
     viaProto = true;
   }
   
-  public synchronized RefreshNodesRequestProto getProto() {
-    mergeLocalToProto();
+  public RefreshNodesRequestProto getProto() {
     proto = viaProto ? proto : builder.build();
     viaProto = true;
     return proto;
-  }
-
-  private synchronized void mergeLocalToProto() {
-    if (viaProto)
-      maybeInitBuilder();
-    mergeLocalToBuilder();
-    proto = builder.build();
-    viaProto = true;
-  }
-
-  private void mergeLocalToBuilder() {
-    if (this.decommissionType != null) {
-      builder.setDecommissionType(convertToProtoFormat(this.decommissionType));
-    }
-  }
-
-  private synchronized void maybeInitBuilder() {
-    if (viaProto || builder == null) {
-      builder = RefreshNodesRequestProto.newBuilder(proto);
-    }
-    viaProto = false;
   }
 
   @Override
@@ -92,27 +66,5 @@ public class RefreshNodesRequestPBImpl extends RefreshNodesRequest {
   @Override
   public String toString() {
     return TextFormat.shortDebugString(getProto());
-  }
-
-  @Override
-  public synchronized void setDecommissionType(
-      DecommissionType decommissionType) {
-    maybeInitBuilder();
-    this.decommissionType = decommissionType;
-    mergeLocalToBuilder();
-  }
-
-  @Override
-  public synchronized DecommissionType getDecommissionType() {
-    RefreshNodesRequestProtoOrBuilder p = viaProto ? proto : builder;
-    return convertFromProtoFormat(p.getDecommissionType());
-  }
-
-  private DecommissionType convertFromProtoFormat(DecommissionTypeProto p) {
-    return DecommissionType.valueOf(p.name());
-  }
-
-  private DecommissionTypeProto convertToProtoFormat(DecommissionType t) {
-    return DecommissionTypeProto.valueOf(t.name());
   }
 }

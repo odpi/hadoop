@@ -32,6 +32,8 @@ import org.apache.hadoop.mapreduce.v2.api.records.JobId;
 
 public class FileNameIndexUtils {
 
+  static final int JOB_NAME_TRIM_LENGTH = 50;
+  
   // Sanitize job history file for predictable parsing
   static final String DELIMITER = "-";
   static final String DELIMITER_ESCAPE = "%2D";
@@ -58,12 +60,6 @@ public class FileNameIndexUtils {
    * @return the done job history filename.
    */
   public static String getDoneFileName(JobIndexInfo indexInfo) throws IOException {
-    return getDoneFileName(indexInfo,
-        JHAdminConfig.DEFAULT_MR_HS_JOBNAME_LIMIT);
-  }
-
-  public static String getDoneFileName(JobIndexInfo indexInfo,
-      int jobNameLimit) throws IOException {
     StringBuilder sb = new StringBuilder();
     //JobId
     sb.append(escapeDelimiters(TypeConverter.fromYarn(indexInfo.getJobId()).toString()));
@@ -78,8 +74,7 @@ public class FileNameIndexUtils {
     sb.append(DELIMITER);
     
     //JobName
-    sb.append(escapeDelimiters(trimJobName(
-        getJobName(indexInfo), jobNameLimit)));
+    sb.append(escapeDelimiters(trimJobName(getJobName(indexInfo))));
     sb.append(DELIMITER);
     
     //FinishTime
@@ -291,9 +286,9 @@ public class FileNameIndexUtils {
   /**
    * Trims the job-name if required
    */
-  private static String trimJobName(String jobName, int jobNameLimit) {
-    if (jobName.length() > jobNameLimit) {
-      jobName = jobName.substring(0, jobNameLimit);
+  private static String trimJobName(String jobName) {
+    if (jobName.length() > JOB_NAME_TRIM_LENGTH) {
+      jobName = jobName.substring(0, JOB_NAME_TRIM_LENGTH);
     }
     return jobName;
   }

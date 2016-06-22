@@ -52,7 +52,7 @@ public class TestJettyHelper implements MethodRule {
     this.keyStorePassword = keyStorePassword;
   }
 
-  private static final ThreadLocal<TestJettyHelper> TEST_JETTY_TL =
+  private static ThreadLocal<TestJettyHelper> TEST_JETTY_TL =
       new InheritableThreadLocal<TestJettyHelper>();
 
   @Override
@@ -104,7 +104,7 @@ public class TestJettyHelper implements MethodRule {
       }
       return server;
     } catch (Exception ex) {
-      throw new RuntimeException("Could not start embedded servlet container, " + ex.getMessage(), ex);
+      throw new RuntimeException("Could not stop embedded servlet container, " + ex.getMessage(), ex);
     }
   }
 

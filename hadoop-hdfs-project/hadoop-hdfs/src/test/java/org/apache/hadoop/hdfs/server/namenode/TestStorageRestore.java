@@ -275,8 +275,7 @@ public class TestStorageRestore {
       String cmd = "-fs NAMENODE -restoreFailedStorage false";
       String namenode = config.get(DFSConfigKeys.FS_DEFAULT_NAME_KEY, "file:///");
       CommandExecutor executor =
-          new CLITestCmdDFS(cmd,
-              new CLICommandDFSAdmin()).getExecutor(namenode, config);
+          new CLITestCmdDFS(cmd, new CLICommandDFSAdmin()).getExecutor(namenode);
 
       executor.executeCommand(cmd);
       restore = fsi.getStorage().getRestoreFailedStorage();

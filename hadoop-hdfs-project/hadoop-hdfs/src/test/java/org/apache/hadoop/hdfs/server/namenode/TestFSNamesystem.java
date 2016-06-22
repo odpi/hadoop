@@ -29,25 +29,17 @@ import java.util.Collection;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileUtil;
-import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
-import org.apache.hadoop.hdfs.server.blockmanagement.BlockManager;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.NamenodeRole;
-import org.apache.hadoop.hdfs.server.namenode.FSNamesystem.SafeModeInfo;
 import org.apache.hadoop.hdfs.server.namenode.ha.HAContext;
 import org.apache.hadoop.hdfs.server.namenode.ha.HAState;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.Snapshot;
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.Mockito;
 import org.mockito.internal.util.reflection.Whitebox;
-
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public class TestFSNamesystem {
 
@@ -84,7 +76,7 @@ public class TestFSNamesystem {
     DFSTestUtil.formatNameNode(conf);
     FSNamesystem fsn = FSNamesystem.loadFromDisk(conf);
     LeaseManager leaseMan = fsn.getLeaseManager();
-    leaseMan.addLease("client1", fsn.getFSDirectory().allocateNewInodeId());
+    leaseMan.addLease("client1", "importantFile");
     assertEquals(1, leaseMan.countLease());
     fsn.clear();
     leaseMan = fsn.getLeaseManager();
@@ -126,15 +118,13 @@ public class TestFSNamesystem {
 
     FSNamesystem fsNamesystem = new FSNamesystem(conf, fsImage);
     FSNamesystem fsn = Mockito.spy(fsNamesystem);
-    BlockManager bm = fsn.getBlockManager();
-    Whitebox.setInternalState(bm, "namesystem", fsn);
 
     //Make shouldPopulaeReplQueues return true
     HAContext haContext = Mockito.mock(HAContext.class);
     HAState haState = Mockito.mock(HAState.class);
     Mockito.when(haContext.getState()).thenReturn(haState);
     Mockito.when(haState.shouldPopulateReplQueues()).thenReturn(true);
-    Mockito.when(fsn.getHAContext()).thenReturn(haContext);
+    Whitebox.setInternalState(fsn, "haContext", haContext);
 
     //Make NameNode.getNameNodeMetrics() not return null
     NameNode.initMetrics(conf, NamenodeRole.NAMENODE);
@@ -142,15 +132,15 @@ public class TestFSNamesystem {
     fsn.enterSafeMode(false);
     assertTrue("FSNamesystem didn't enter safemode", fsn.isInSafeMode());
     assertTrue("Replication queues were being populated during very first "
-        + "safemode", !bm.isPopulatingReplQueues());
+        + "safemode", !fsn.isPopulatingReplQueues());
     fsn.leaveSafeMode();
     assertTrue("FSNamesystem didn't leave safemode", !fsn.isInSafeMode());
     assertTrue("Replication queues weren't being populated even after leaving "
-      + "safemode", bm.isPopulatingReplQueues());
+      + "safemode", fsn.isPopulatingReplQueues());
     fsn.enterSafeMode(false);
     assertTrue("FSNamesystem didn't enter safemode", fsn.isInSafeMode());
     assertTrue("Replication queues weren't being populated after entering "
-      + "safemode 2nd time", bm.isPopulatingReplQueues());
+      + "safemode 2nd time", fsn.isPopulatingReplQueues());
   }
   
   @Test
@@ -222,60 +212,5 @@ public class TestFSNamesystem {
     assertTrue(root.getChildrenList(Snapshot.CURRENT_STATE_ID).isEmpty());
     fsn.imageLoadComplete();
     assertTrue(fsn.isImageLoaded());
-  }
-
-  @Test
-  public void testGetEffectiveLayoutVersion() {
-    assertEquals(-63,
-        FSNamesystem.getEffectiveLayoutVersion(true, -60, -61, -63));
-    assertEquals(-61,
-        FSNamesystem.getEffectiveLayoutVersion(true, -61, -61, -63));
-    assertEquals(-62,
-        FSNamesystem.getEffectiveLayoutVersion(true, -62, -61, -63));
-    assertEquals(-63,
-        FSNamesystem.getEffectiveLayoutVersion(true, -63, -61, -63));
-    assertEquals(-63,
-        FSNamesystem.getEffectiveLayoutVersion(false, -60, -61, -63));
-    assertEquals(-63,
-        FSNamesystem.getEffectiveLayoutVersion(false, -61, -61, -63));
-    assertEquals(-63,
-        FSNamesystem.getEffectiveLayoutVersion(false, -62, -61, -63));
-    assertEquals(-63,
-        FSNamesystem.getEffectiveLayoutVersion(false, -63, -61, -63));
-  }
-
-  @Test
-  public void testFSLockGetWaiterCount() throws InterruptedException {
-    final int threadCount = 3;
-    final CountDownLatch latch = new CountDownLatch(threadCount);
-    final FSNamesystemLock rwLock = new FSNamesystemLock(true);
-    rwLock.writeLock().lock();
-    ExecutorService helper = Executors.newFixedThreadPool(threadCount);
-
-    for (int x = 0; x < threadCount; x++) {
-      helper.execute(new Runnable() {
-        @Override
-        public void run() {
-          latch.countDown();
-          rwLock.readLock().lock();
-        }
-      });
-    }
-
-    latch.await();
-    Assert.assertEquals("Expected number of blocked thread not found",
-                        threadCount, rwLock.getQueueLength());
-  }
-
-  @Test
-  public void testSafemodeReplicationConf() throws IOException {
-    Configuration conf = new Configuration();
-    FSImage fsImage = Mockito.mock(FSImage.class);
-    FSEditLog fsEditLog = Mockito.mock(FSEditLog.class);
-    Mockito.when(fsImage.getEditLog()).thenReturn(fsEditLog);
-    conf.setInt(DFSConfigKeys.DFS_NAMENODE_REPLICATION_MIN_KEY, 2);
-    FSNamesystem fsn = new FSNamesystem(conf, fsImage);
-    SafeModeInfo safemodeInfo = fsn.getSafeModeInfoForTests();
-    assertTrue(safemodeInfo.toString().contains("Minimal replication = 2"));
   }
 }

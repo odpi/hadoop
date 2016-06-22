@@ -35,8 +35,7 @@ import org.apache.hadoop.classification.InterfaceStability;
 public class MD5Hash implements WritableComparable<MD5Hash> {
   public static final int MD5_LEN = 16;
 
-  private static final ThreadLocal<MessageDigest> DIGESTER_FACTORY =
-      new ThreadLocal<MessageDigest>() {
+  private static ThreadLocal<MessageDigest> DIGESTER_FACTORY = new ThreadLocal<MessageDigest>() {
     @Override
     protected MessageDigest initialValue() {
       try {

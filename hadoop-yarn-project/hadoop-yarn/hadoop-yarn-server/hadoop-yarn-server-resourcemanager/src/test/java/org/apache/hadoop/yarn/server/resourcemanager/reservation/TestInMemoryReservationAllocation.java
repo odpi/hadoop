@@ -17,6 +17,7 @@
  *******************************************************************************/
 package org.apache.hadoop.yarn.server.resourcemanager.reservation;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
@@ -24,7 +25,11 @@ import java.util.Random;
 import org.apache.hadoop.yarn.api.records.ReservationDefinition;
 import org.apache.hadoop.yarn.api.records.ReservationId;
 import org.apache.hadoop.yarn.api.records.ReservationRequest;
+import org.apache.hadoop.yarn.api.records.ReservationRequestInterpreter;
+import org.apache.hadoop.yarn.api.records.ReservationRequests;
 import org.apache.hadoop.yarn.api.records.Resource;
+import org.apache.hadoop.yarn.api.records.impl.pb.ReservationDefinitionPBImpl;
+import org.apache.hadoop.yarn.api.records.impl.pb.ReservationRequestsPBImpl;
 import org.apache.hadoop.yarn.util.resource.DefaultResourceCalculator;
 import org.apache.hadoop.yarn.util.resource.ResourceCalculator;
 import org.junit.After;
@@ -62,10 +67,9 @@ public class TestInMemoryReservationAllocation {
     int[] alloc = { 10, 10, 10, 10, 10, 10 };
     int start = 100;
     ReservationDefinition rDef =
-        ReservationSystemTestUtil.createSimpleReservationDefinition(
-            start, start + alloc.length + 1,
+        createSimpleReservationDefinition(start, start + alloc.length + 1,
             alloc.length);
-    Map<ReservationInterval, Resource> allocations =
+    Map<ReservationInterval, ReservationRequest> allocations =
         generateAllocation(start, alloc, false, false);
     ReservationAllocation rAllocation =
         new InMemoryReservationAllocation(reservationID, rDef, user, planName,
@@ -85,10 +89,9 @@ public class TestInMemoryReservationAllocation {
     int[] alloc = { 10, 10, 10, 10, 10, 10 };
     int start = 100;
     ReservationDefinition rDef =
-        ReservationSystemTestUtil.createSimpleReservationDefinition(
-            start, start + alloc.length + 1,
+        createSimpleReservationDefinition(start, start + alloc.length + 1,
             alloc.length);
-    Map<ReservationInterval, Resource> allocations =
+    Map<ReservationInterval, ReservationRequest> allocations =
         generateAllocation(start, alloc, true, false);
     ReservationAllocation rAllocation =
         new InMemoryReservationAllocation(reservationID, rDef, user, planName,
@@ -109,10 +112,9 @@ public class TestInMemoryReservationAllocation {
     int[] alloc = { 0, 5, 10, 10, 5, 0 };
     int start = 100;
     ReservationDefinition rDef =
-        ReservationSystemTestUtil.createSimpleReservationDefinition(
-            start, start + alloc.length + 1,
+        createSimpleReservationDefinition(start, start + alloc.length + 1,
             alloc.length);
-    Map<ReservationInterval, Resource> allocations =
+    Map<ReservationInterval, ReservationRequest> allocations =
         generateAllocation(start, alloc, true, false);
     ReservationAllocation rAllocation =
         new InMemoryReservationAllocation(reservationID, rDef, user, planName,
@@ -133,11 +135,10 @@ public class TestInMemoryReservationAllocation {
     int[] alloc = {};
     long start = 0;
     ReservationDefinition rDef =
-        ReservationSystemTestUtil.createSimpleReservationDefinition(
-            start, start + alloc.length + 1,
+        createSimpleReservationDefinition(start, start + alloc.length + 1,
             alloc.length);
-    Map<ReservationInterval, Resource> allocations =
-        new HashMap<ReservationInterval, Resource>();
+    Map<ReservationInterval, ReservationRequest> allocations =
+        new HashMap<ReservationInterval, ReservationRequest>();
     ReservationAllocation rAllocation =
         new InMemoryReservationAllocation(reservationID, rDef, user, planName,
             start, start + alloc.length + 1, allocations, resCalc, minAlloc);
@@ -153,16 +154,13 @@ public class TestInMemoryReservationAllocation {
     int[] alloc = { 10, 10, 10, 10, 10, 10 };
     int start = 100;
     ReservationDefinition rDef =
-        ReservationSystemTestUtil.createSimpleReservationDefinition(
-            start, start + alloc.length + 1,
+        createSimpleReservationDefinition(start, start + alloc.length + 1,
             alloc.length);
-    boolean isGang = true;
-    Map<ReservationInterval, Resource> allocations =
-        generateAllocation(start, alloc, false, isGang);
+    Map<ReservationInterval, ReservationRequest> allocations =
+        generateAllocation(start, alloc, false, true);
     ReservationAllocation rAllocation =
         new InMemoryReservationAllocation(reservationID, rDef, user, planName,
-            start, start + alloc.length + 1, allocations, resCalc, minAlloc,
-            isGang);
+            start, start + alloc.length + 1, allocations, resCalc, minAlloc);
     doAssertions(rAllocation, reservationID, rDef, allocations, start, alloc);
     Assert.assertTrue(rAllocation.containsGangs());
     for (int i = 0; i < alloc.length; i++) {
@@ -173,7 +171,7 @@ public class TestInMemoryReservationAllocation {
 
   private void doAssertions(ReservationAllocation rAllocation,
       ReservationId reservationID, ReservationDefinition rDef,
-      Map<ReservationInterval, Resource> allocations, int start,
+      Map<ReservationInterval, ReservationRequest> allocations, int start,
       int[] alloc) {
     Assert.assertEquals(reservationID, rAllocation.getReservationId());
     Assert.assertEquals(rDef, rAllocation.getReservationDefinition());
@@ -184,10 +182,26 @@ public class TestInMemoryReservationAllocation {
     Assert.assertEquals(start + alloc.length + 1, rAllocation.getEndTime());
   }
 
-  private Map<ReservationInterval, Resource> generateAllocation(
+  private ReservationDefinition createSimpleReservationDefinition(long arrival,
+      long deadline, long duration) {
+    // create a request with a single atomic ask
+    ReservationRequest r =
+        ReservationRequest.newInstance(Resource.newInstance(1024, 1), 1, 1,
+            duration);
+    ReservationDefinition rDef = new ReservationDefinitionPBImpl();
+    ReservationRequests reqs = new ReservationRequestsPBImpl();
+    reqs.setReservationResources(Collections.singletonList(r));
+    reqs.setInterpreter(ReservationRequestInterpreter.R_ALL);
+    rDef.setReservationRequests(reqs);
+    rDef.setArrival(arrival);
+    rDef.setDeadline(deadline);
+    return rDef;
+  }
+
+  private Map<ReservationInterval, ReservationRequest> generateAllocation(
       int startTime, int[] alloc, boolean isStep, boolean isGang) {
-    Map<ReservationInterval, Resource> req =
-        new HashMap<ReservationInterval, Resource>();
+    Map<ReservationInterval, ReservationRequest> req =
+        new HashMap<ReservationInterval, ReservationRequest>();
     int numContainers = 0;
     for (int i = 0; i < alloc.length; i++) {
       if (isStep) {
@@ -201,8 +215,7 @@ public class TestInMemoryReservationAllocation {
       if (isGang) {
         rr.setConcurrency(numContainers);
       }
-      req.put(new ReservationInterval(startTime + i, startTime + i + 1),
-          ReservationSystemUtil.toResource(rr));
+      req.put(new ReservationInterval(startTime + i, startTime + i + 1), rr);
     }
     return req;
   }

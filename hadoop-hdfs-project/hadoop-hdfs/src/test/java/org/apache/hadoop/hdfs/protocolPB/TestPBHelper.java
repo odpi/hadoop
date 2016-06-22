@@ -153,8 +153,8 @@ public class TestPBHelper {
   @Test
   public void testConvertDatanodeID() {
     DatanodeID dn = DFSTestUtil.getLocalDatanodeID();
-    DatanodeIDProto dnProto = PBHelperClient.convert(dn);
-    DatanodeID dn2 = PBHelperClient.convert(dnProto);
+    DatanodeIDProto dnProto = PBHelper.convert(dn);
+    DatanodeID dn2 = PBHelper.convert(dnProto);
     compare(dn, dn2);
   }
   
@@ -176,8 +176,8 @@ public class TestPBHelper {
   @Test
   public void testConvertBlock() {
     Block b = new Block(1, 100, 3);
-    BlockProto bProto = PBHelperClient.convert(b);
-    Block b2 = PBHelperClient.convert(bProto);
+    BlockProto bProto = PBHelper.convert(b);
+    Block b2 = PBHelper.convert(bProto);
     assertEquals(b, b2);
   }
 
@@ -332,13 +332,13 @@ public class TestPBHelper {
   @Test
   public void testConvertExtendedBlock() {
     ExtendedBlock b = getExtendedBlock();
-    ExtendedBlockProto bProto = PBHelperClient.convert(b);
-    ExtendedBlock b1 = PBHelperClient.convert(bProto);
+    ExtendedBlockProto bProto = PBHelper.convert(b);
+    ExtendedBlock b1 = PBHelper.convert(bProto);
     assertEquals(b, b1);
     
     b.setBlockId(-1);
-    bProto = PBHelperClient.convert(b);
-    b1 = PBHelperClient.convert(bProto);
+    bProto = PBHelper.convert(b);
+    b1 = PBHelper.convert(bProto);
     assertEquals(b, b1);
   }
   
@@ -398,8 +398,8 @@ public class TestPBHelper {
     Token<BlockTokenIdentifier> token = new Token<BlockTokenIdentifier>(
         "identifier".getBytes(), "password".getBytes(), new Text("kind"),
         new Text("service"));
-    TokenProto tokenProto = PBHelperClient.convert(token);
-    Token<BlockTokenIdentifier> token2 = PBHelperClient.convert(tokenProto);
+    TokenProto tokenProto = PBHelper.convert(token);
+    Token<BlockTokenIdentifier> token2 = PBHelper.convert(tokenProto);
     compare(token, token2);
   }
   
@@ -478,27 +478,26 @@ public class TestPBHelper {
                                          AdminStates.NORMAL)
     };
     LocatedBlock lb = new LocatedBlock(
-        new ExtendedBlock("bp12", 12345, 10, 53), dnInfos);
+        new ExtendedBlock("bp12", 12345, 10, 53), dnInfos, 5, false);
     lb.setBlockToken(new Token<BlockTokenIdentifier>(
         "identifier".getBytes(), "password".getBytes(), new Text("kind"),
         new Text("service")));
-    lb.setStartOffset(5);
     return lb;
   }
 
   @Test
   public void testConvertLocatedBlock() {
     LocatedBlock lb = createLocatedBlock();
-    LocatedBlockProto lbProto = PBHelperClient.convert(lb);
-    LocatedBlock lb2 = PBHelperClient.convert(lbProto);
+    LocatedBlockProto lbProto = PBHelper.convert(lb);
+    LocatedBlock lb2 = PBHelper.convert(lbProto);
     compare(lb,lb2);
   }
 
   @Test
   public void testConvertLocatedBlockNoStorageMedia() {
     LocatedBlock lb = createLocatedBlockNoStorageMedia();
-    LocatedBlockProto lbProto = PBHelperClient.convert(lb);
-    LocatedBlock lb2 = PBHelperClient.convert(lbProto);
+    LocatedBlockProto lbProto = PBHelper.convert(lb);
+    LocatedBlock lb2 = PBHelper.convert(lbProto);
     compare(lb,lb2);
   }
 
@@ -508,8 +507,8 @@ public class TestPBHelper {
     for (int i=0;i<3;i++) {
       lbl.add(createLocatedBlock());
     }
-    List<LocatedBlockProto> lbpl = PBHelperClient.convertLocatedBlock2(lbl);
-    List<LocatedBlock> lbl2 = PBHelperClient.convertLocatedBlock(lbpl);
+    List<LocatedBlockProto> lbpl = PBHelper.convertLocatedBlock2(lbl);
+    List<LocatedBlock> lbl2 = PBHelper.convertLocatedBlock(lbpl);
     assertEquals(lbl.size(), lbl2.size());
     for (int i=0;i<lbl.size();i++) {
       compare(lbl.get(i), lbl2.get(2));
@@ -522,8 +521,8 @@ public class TestPBHelper {
     for (int i=0;i<3;i++) {
       lbl[i] = createLocatedBlock();
     }
-    LocatedBlockProto [] lbpl = PBHelperClient.convertLocatedBlock(lbl);
-    LocatedBlock [] lbl2 = PBHelperClient.convertLocatedBlock(lbpl);
+    LocatedBlockProto [] lbpl = PBHelper.convertLocatedBlock(lbl);
+    LocatedBlock [] lbl2 = PBHelper.convertLocatedBlock(lbpl);
     assertEquals(lbl.length, lbl2.length);
     for (int i=0;i<lbl.length;i++) {
       compare(lbl[i], lbl2[i]);
@@ -551,8 +550,8 @@ public class TestPBHelper {
     DatanodeStorage dns1 = new DatanodeStorage(
         "id1", DatanodeStorage.State.NORMAL, StorageType.SSD);
 
-    DatanodeStorageProto proto = PBHelperClient.convert(dns1);
-    DatanodeStorage dns2 = PBHelperClient.convert(proto);
+    DatanodeStorageProto proto = PBHelper.convert(dns1);
+    DatanodeStorage dns2 = PBHelper.convert(proto);
     compare(dns1, dns2);
   }
   
@@ -592,16 +591,16 @@ public class TestPBHelper {
   @Test
   public void testChecksumTypeProto() {
     assertEquals(DataChecksum.Type.NULL,
-        PBHelperClient.convert(HdfsProtos.ChecksumTypeProto.CHECKSUM_NULL));
+        PBHelper.convert(HdfsProtos.ChecksumTypeProto.CHECKSUM_NULL));
     assertEquals(DataChecksum.Type.CRC32,
-        PBHelperClient.convert(HdfsProtos.ChecksumTypeProto.CHECKSUM_CRC32));
+        PBHelper.convert(HdfsProtos.ChecksumTypeProto.CHECKSUM_CRC32));
     assertEquals(DataChecksum.Type.CRC32C,
-        PBHelperClient.convert(HdfsProtos.ChecksumTypeProto.CHECKSUM_CRC32C));
-    assertEquals(PBHelperClient.convert(DataChecksum.Type.NULL),
+        PBHelper.convert(HdfsProtos.ChecksumTypeProto.CHECKSUM_CRC32C));
+    assertEquals(PBHelper.convert(DataChecksum.Type.NULL),
         HdfsProtos.ChecksumTypeProto.CHECKSUM_NULL);
-    assertEquals(PBHelperClient.convert(DataChecksum.Type.CRC32),
+    assertEquals(PBHelper.convert(DataChecksum.Type.CRC32),
         HdfsProtos.ChecksumTypeProto.CHECKSUM_CRC32);
-    assertEquals(PBHelperClient.convert(DataChecksum.Type.CRC32C),
+    assertEquals(PBHelper.convert(DataChecksum.Type.CRC32C),
         HdfsProtos.ChecksumTypeProto.CHECKSUM_CRC32C);
   }
 
@@ -625,7 +624,7 @@ public class TestPBHelper {
             .setPermission(FsAction.NONE)
             .build() };
     AclEntry[] actual = Lists.newArrayList(
-        PBHelperClient.convertAclEntry(PBHelperClient.convertAclEntryProto(Lists
+        PBHelper.convertAclEntry(PBHelper.convertAclEntryProto(Lists
             .newArrayList(e1, e2, e3)))).toArray(new AclEntry[0]);
     Assert.assertArrayEquals(expected, actual);
   }
@@ -637,6 +636,6 @@ public class TestPBHelper {
         .setType(AclEntryType.OTHER).build();
     AclStatus s = new AclStatus.Builder().owner("foo").group("bar").addEntry(e)
         .build();
-    Assert.assertEquals(s, PBHelperClient.convert(PBHelperClient.convert(s)));
+    Assert.assertEquals(s, PBHelper.convert(PBHelper.convert(s)));
   }
 }

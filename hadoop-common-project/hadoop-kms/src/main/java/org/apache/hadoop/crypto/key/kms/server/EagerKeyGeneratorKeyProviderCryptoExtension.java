@@ -34,11 +34,11 @@ import org.apache.hadoop.crypto.key.kms.ValueQueue;
 import org.apache.hadoop.crypto.key.kms.ValueQueue.SyncGenerationPolicy;
 
 /**
- * A {@link KeyProviderCryptoExtension} that pre-generates and caches encrypted 
+ * A {@link KeyProviderCryptoExtension} that pre-generates and caches encrypted
  * keys.
  */
 @InterfaceAudience.Private
-public class EagerKeyGeneratorKeyProviderCryptoExtension 
+public class EagerKeyGeneratorKeyProviderCryptoExtension
     extends KeyProviderCryptoExtension {
 
   private static final String KEY_CACHE_PREFIX =
@@ -61,7 +61,7 @@ public class EagerKeyGeneratorKeyProviderCryptoExtension
   public static final int KMS_KEY_CACHE_NUM_REFILL_THREADS_DEFAULT = 2;
 
 
-  private static class CryptoExtension 
+  private static class CryptoExtension
       implements KeyProviderCryptoExtension.CryptoExtension {
 
     private class EncryptedQueueRefiller implements
@@ -87,7 +87,7 @@ public class EagerKeyGeneratorKeyProviderCryptoExtension
     private KeyProviderCryptoExtension keyProviderCryptoExtension;
     private final ValueQueue<EncryptedKeyVersion> encKeyVersionQueue;
 
-    public CryptoExtension(Configuration conf, 
+    public CryptoExtension(Configuration conf,
         KeyProviderCryptoExtension keyProviderCryptoExtension) {
       this.keyProviderCryptoExtension = keyProviderCryptoExtension;
       encKeyVersionQueue =
@@ -142,14 +142,14 @@ public class EagerKeyGeneratorKeyProviderCryptoExtension
    * This class is a proxy for a <code>KeyProviderCryptoExtension</code> that
    * decorates the underlying <code>CryptoExtension</code> with one that eagerly
    * caches pre-generated Encrypted Keys using a <code>ValueQueue</code>
-   * 
+   *
    * @param conf Configuration object to load parameters from
    * @param keyProviderCryptoExtension <code>KeyProviderCryptoExtension</code>
    * to delegate calls to.
    */
   public EagerKeyGeneratorKeyProviderCryptoExtension(Configuration conf,
       KeyProviderCryptoExtension keyProviderCryptoExtension) {
-    super(keyProviderCryptoExtension, 
+    super(keyProviderCryptoExtension,
         new CryptoExtension(conf, keyProviderCryptoExtension));
   }
 

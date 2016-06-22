@@ -82,7 +82,6 @@ public class MetricsLongValue extends MetricsBase{
    *
    * @param mr
    */
-  @Override
   public synchronized void pushMetric(final MetricsRecord mr) {
     if (changed) 
       mr.setMetric(getName(), value);

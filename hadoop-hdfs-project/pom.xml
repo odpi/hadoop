@@ -20,19 +20,18 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <parent>
     <groupId>org.apache.hadoop</groupId>
     <artifactId>hadoop-project</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>2.7.1-odpi</version>
     <relativePath>../hadoop-project</relativePath>
   </parent>
   <groupId>org.apache.hadoop</groupId>
   <artifactId>hadoop-hdfs-project</artifactId>
-  <version>3.0.0-SNAPSHOT</version>
+  <version>2.7.1-odpi</version>
   <description>Apache Hadoop HDFS Project</description>
   <name>Apache Hadoop HDFS Project</name>
   <packaging>pom</packaging>
 
   <modules>
     <module>hadoop-hdfs</module>
-    <module>hadoop-hdfs-client</module>
     <module>hadoop-hdfs-httpfs</module>
     <module>hadoop-hdfs/src/contrib/bkjournal</module>
     <module>hadoop-hdfs-nfs</module>

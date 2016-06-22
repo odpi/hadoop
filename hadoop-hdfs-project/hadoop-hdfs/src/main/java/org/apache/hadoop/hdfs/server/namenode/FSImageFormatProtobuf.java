@@ -42,11 +42,11 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.CacheDirectiveInfoProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.CachePoolInfoProto;
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenSecretManager;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockIdManager;
-import org.apache.hadoop.hdfs.server.common.HdfsServerConstants;
 import org.apache.hadoop.hdfs.server.namenode.FsImageProto.CacheManagerSection;
 import org.apache.hadoop.hdfs.server.namenode.FsImageProto.FileSummary;
 import org.apache.hadoop.hdfs.server.namenode.FsImageProto.NameSystemSection;
@@ -55,7 +55,6 @@ import org.apache.hadoop.hdfs.server.namenode.FsImageProto.StringTableSection;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.FSImageFormatPBSnapshot;
 import org.apache.hadoop.hdfs.server.namenode.startupprogress.Phase;
 import org.apache.hadoop.hdfs.server.namenode.startupprogress.StartupProgress;
-import org.apache.hadoop.hdfs.server.namenode.startupprogress.StartupProgress.Counter;
 import org.apache.hadoop.hdfs.server.namenode.startupprogress.Step;
 import org.apache.hadoop.hdfs.server.namenode.startupprogress.StepType;
 import org.apache.hadoop.hdfs.util.MD5FileUtils;
@@ -144,7 +143,7 @@ public final class FSImageFormatProtobuf {
     private long imgTxId;
     /**
      * Whether the image's layout version must be the same with
-     * {@link HdfsServerConstants#NAMENODE_LAYOUT_VERSION}. This is only set to true
+     * {@link HdfsConstants#NAMENODE_LAYOUT_VERSION}. This is only set to true
      * when we're doing (rollingUpgrade rollback).
      */
     private final boolean requireSameLayoutVersion;
@@ -193,10 +192,10 @@ public final class FSImageFormatProtobuf {
       }
       FileSummary summary = FSImageUtil.loadSummary(raFile);
       if (requireSameLayoutVersion && summary.getLayoutVersion() !=
-          HdfsServerConstants.NAMENODE_LAYOUT_VERSION) {
+          HdfsConstants.NAMENODE_LAYOUT_VERSION) {
         throw new IOException("Image version " + summary.getLayoutVersion() +
             " is not equal to the software version " +
-            HdfsServerConstants.NAMENODE_LAYOUT_VERSION);
+            HdfsConstants.NAMENODE_LAYOUT_VERSION);
       }
 
       FileChannel channel = fin.getChannel();
@@ -251,7 +250,7 @@ public final class FSImageFormatProtobuf {
         case INODE: {
           currentStep = new Step(StepType.INODES);
           prog.beginStep(Phase.LOADING_FSIMAGE, currentStep);
-          inodeLoader.loadINodeSection(in, prog, currentStep);
+          inodeLoader.loadINodeSection(in);
         }
           break;
         case INODE_REFERENCE:
@@ -273,14 +272,14 @@ public final class FSImageFormatProtobuf {
           prog.endStep(Phase.LOADING_FSIMAGE, currentStep);
           Step step = new Step(StepType.DELEGATION_TOKENS);
           prog.beginStep(Phase.LOADING_FSIMAGE, step);
-          loadSecretManagerSection(in, prog, step);
+          loadSecretManagerSection(in);
           prog.endStep(Phase.LOADING_FSIMAGE, step);
         }
           break;
         case CACHE_MANAGER: {
           Step step = new Step(StepType.CACHE_POOLS);
           prog.beginStep(Phase.LOADING_FSIMAGE, step);
-          loadCacheManagerSection(in, prog, step);
+          loadCacheManagerSection(in);
           prog.endStep(Phase.LOADING_FSIMAGE, step);
         }
           break;
@@ -317,8 +316,7 @@ public final class FSImageFormatProtobuf {
       }
     }
 
-    private void loadSecretManagerSection(InputStream in, StartupProgress prog,
-        Step currentStep) throws IOException {
+    private void loadSecretManagerSection(InputStream in) throws IOException {
       SecretManagerSection s = SecretManagerSection.parseDelimitedFrom(in);
       int numKeys = s.getNumKeys(), numTokens = s.getNumTokens();
       ArrayList<SecretManagerSection.DelegationKey> keys = Lists
@@ -329,30 +327,20 @@ public final class FSImageFormatProtobuf {
       for (int i = 0; i < numKeys; ++i)
         keys.add(SecretManagerSection.DelegationKey.parseDelimitedFrom(in));
 
-      prog.setTotal(Phase.LOADING_FSIMAGE, currentStep, numTokens);
-      Counter counter = prog.getCounter(Phase.LOADING_FSIMAGE, currentStep);
-      for (int i = 0; i < numTokens; ++i) {
+      for (int i = 0; i < numTokens; ++i)
         tokens.add(SecretManagerSection.PersistToken.parseDelimitedFrom(in));
-        counter.increment();
-      }
 
       fsn.loadSecretManagerState(s, keys, tokens);
     }
 
-    private void loadCacheManagerSection(InputStream in, StartupProgress prog,
-        Step currentStep) throws IOException {
+    private void loadCacheManagerSection(InputStream in) throws IOException {
       CacheManagerSection s = CacheManagerSection.parseDelimitedFrom(in);
-      int numPools = s.getNumPools();
-      ArrayList<CachePoolInfoProto> pools = Lists
-          .newArrayListWithCapacity(numPools);
+      ArrayList<CachePoolInfoProto> pools = Lists.newArrayListWithCapacity(s
+          .getNumPools());
       ArrayList<CacheDirectiveInfoProto> directives = Lists
           .newArrayListWithCapacity(s.getNumDirectives());
-      prog.setTotal(Phase.LOADING_FSIMAGE, currentStep, numPools);
-      Counter counter = prog.getCounter(Phase.LOADING_FSIMAGE, currentStep);
-      for (int i = 0; i < numPools; ++i) {
+      for (int i = 0; i < s.getNumPools(); ++i)
         pools.add(CachePoolInfoProto.parseDelimitedFrom(in));
-        counter.increment();
-      }
       for (int i = 0; i < s.getNumDirectives(); ++i)
         directives.add(CacheDirectiveInfoProto.parseDelimitedFrom(in));
       fsn.getCacheManager().loadState(
@@ -465,8 +453,7 @@ public final class FSImageFormatProtobuf {
 
       FileSummary.Builder b = FileSummary.newBuilder()
           .setOndiskVersion(FSImageUtil.FILE_VERSION)
-          .setLayoutVersion(
-              context.getSourceNamesystem().getEffectiveLayoutVersion());
+          .setLayoutVersion(NameNodeLayoutVersion.CURRENT_LAYOUT_VERSION);
 
       codec = compression.getImageCodec();
       if (codec != null) {

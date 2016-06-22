@@ -31,6 +31,7 @@ import org.apache.hadoop.mapreduce.server.tasktracker.TTConfig;
 import com.google.common.base.Charsets;
 
 class TeraScheduler {
+  static String USE = "mapreduce.terasort.use.terascheduler";
   private static final Log LOG = LogFactory.getLog(TeraScheduler.class);
   private Split[] splits;
   private List<Host> hosts = new ArrayList<Host>();

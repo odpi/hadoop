@@ -18,10 +18,8 @@
 
 package org.apache.hadoop.yarn.server.webproxy;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
@@ -36,7 +34,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import javax.servlet.ServletException;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -59,13 +56,10 @@ import org.apache.http.Header;
 import org.apache.http.HttpResponse;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpPut;
-import org.apache.http.client.methods.HttpRequestBase;
 import org.apache.http.client.params.ClientPNames;
 import org.apache.http.client.params.CookiePolicy;
 import org.apache.http.client.utils.URLEncodedUtils;
 import org.apache.http.conn.params.ConnRoutePNames;
-import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -80,26 +74,14 @@ public class WebAppProxyServlet extends HttpServlet {
         "Accept",
         "Accept-Encoding",
         "Accept-Language",
-        "Accept-Charset",
-        "Content-Type",
-        "Origin",
-        "Access-Control-Request-Method",
-        "Access-Control-Request-Headers"));
-
+        "Accept-Charset"));
+  
   public static final String PROXY_USER_COOKIE_NAME = "proxy-user";
 
   private transient List<TrackingUriPlugin> trackingUriPlugins;
   private final String rmAppPageUrlBase;
   private transient YarnConfiguration conf;
 
-  /**
-   * HTTP methods.
-   */
-  private enum HTTP { GET, POST, HEAD, PUT, DELETE };
-
-  /**
-   * Empty Hamlet class.
-   */
   private static class _ implements Hamlet._ {
     //Empty
   }
@@ -168,13 +150,11 @@ public class WebAppProxyServlet extends HttpServlet {
    * @param resp the http response
    * @param link the link to download
    * @param c the cookie to set if any
-   * @param proxyHost the proxy host
-   * @param method the http method
    * @throws IOException on any error.
    */
-  private static void proxyLink(final HttpServletRequest req,
-      final HttpServletResponse resp, final URI link, final Cookie c,
-      final String proxyHost, final HTTP method) throws IOException {
+  private static void proxyLink(HttpServletRequest req, 
+      HttpServletResponse resp, URI link, Cookie c, String proxyHost)
+      throws IOException {
     DefaultHttpClient client = new DefaultHttpClient();
     client
         .getParams()
@@ -190,28 +170,7 @@ public class WebAppProxyServlet extends HttpServlet {
     }
     client.getParams()
         .setParameter(ConnRoutePNames.LOCAL_ADDRESS, localAddress);
-
-    HttpRequestBase base = null;
-    if (method.equals(HTTP.GET)) {
-      base = new HttpGet(link);
-    } else if (method.equals(HTTP.PUT)) {
-      base = new HttpPut(link);
-
-      StringBuilder sb = new StringBuilder();
-      BufferedReader reader =
-          new BufferedReader(
-              new InputStreamReader(req.getInputStream(), "UTF-8"));
-      String line;
-      while ((line = reader.readLine()) != null) {
-        sb.append(line);
-      }
-
-      ((HttpPut) base).setEntity(new StringEntity(sb.toString()));
-    } else {
-      resp.setStatus(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
-      return;
-    }
-
+    HttpGet httpGet = new HttpGet(link);
     @SuppressWarnings("unchecked")
     Enumeration<String> names = req.getHeaderNames();
     while(names.hasMoreElements()) {
@@ -221,18 +180,18 @@ public class WebAppProxyServlet extends HttpServlet {
         if (LOG.isDebugEnabled()) {
           LOG.debug("REQ HEADER: {} : {}", name, value);
         }
-        base.setHeader(name, value);
+        httpGet.setHeader(name, value);
       }
     }
 
     String user = req.getRemoteUser();
     if (user != null && !user.isEmpty()) {
-      base.setHeader("Cookie",
+      httpGet.setHeader("Cookie",
           PROXY_USER_COOKIE_NAME + "=" + URLEncoder.encode(user, "ASCII"));
     }
     OutputStream out = resp.getOutputStream();
     try {
-      HttpResponse httpResp = client.execute(base);
+      HttpResponse httpResp = client.execute(httpGet);
       resp.setStatus(httpResp.getStatusLine().getStatusCode());
       for (Header header : httpResp.getAllHeaders()) {
         resp.setHeader(header.getName(), header.getValue());
@@ -245,7 +204,7 @@ public class WebAppProxyServlet extends HttpServlet {
         IOUtils.copyBytes(in, out, 4096, true);
       }
     } finally {
-      base.releaseConnection();
+      httpGet.releaseConnection();
     }
   }
   
@@ -278,28 +237,8 @@ public class WebAppProxyServlet extends HttpServlet {
   }
   
   @Override
-  protected void doGet(HttpServletRequest req, HttpServletResponse resp)
-      throws ServletException, IOException {
-    methodAction(req, resp, HTTP.GET);
-  }
-
-  @Override
-  protected final void doPut(final HttpServletRequest req,
-      final HttpServletResponse resp) throws ServletException, IOException {
-    methodAction(req, resp, HTTP.PUT);
-  }
-
-  /**
-   * The action against the HTTP method.
-   * @param req the HttpServletRequest
-   * @param resp the HttpServletResponse
-   * @param method the HTTP method
-   * @throws ServletException
-   * @throws IOException
-   */
-  private void methodAction(final HttpServletRequest req,
-      final HttpServletResponse resp,
-      final HTTP method) throws ServletException, IOException {
+  protected void doGet(HttpServletRequest req, HttpServletResponse resp) 
+  throws IOException{
     try {
       String userApprovedParamS = 
         req.getParameter(ProxyUriUtils.PROXY_APPROVAL_PARAM);
@@ -309,11 +248,8 @@ public class WebAppProxyServlet extends HttpServlet {
       final String remoteUser = req.getRemoteUser();
       final String pathInfo = req.getPathInfo();
 
-      String[] parts = null;
-      if (pathInfo != null) {
-        parts = pathInfo.split("/", 3);
-      }
-      if(parts == null || parts.length < 2) {
+      String[] parts = pathInfo.split("/", 3);
+      if(parts.length < 2) {
         LOG.warn("{} gave an invalid proxy path {}", remoteUser,  pathInfo);
         notFound(resp, "Your path appears to be formatted incorrectly.");
         return;
@@ -420,7 +356,7 @@ public class WebAppProxyServlet extends HttpServlet {
       if (userWasWarned && userApproved) {
         c = makeCheckCookie(id, true);
       }
-      proxyLink(req, resp, toFetch, c, getProxyHost(), method);
+      proxyLink(req, resp, toFetch, c, getProxyHost());
 
     } catch(URISyntaxException | YarnException e) {
       throw new IOException(e); 

@@ -21,7 +21,6 @@ package org.apache.hadoop.yarn.nodelabels;
 import java.io.EOFException;
 import java.io.IOException;
 import java.util.Collection;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -33,12 +32,9 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.yarn.api.records.NodeId;
-import org.apache.hadoop.yarn.api.records.NodeLabel;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
-import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.proto.YarnServerResourceManagerServiceProtos.AddToClusterNodeLabelsRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServerResourceManagerServiceProtos.RemoveFromClusterNodeLabelsRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServerResourceManagerServiceProtos.ReplaceLabelsOnNodeRequestProto;
@@ -93,7 +89,12 @@ public class FileSystemNodeLabelsStore extends NodeLabelsStore {
 
   @Override
   public void close() throws IOException {
-    IOUtils.cleanup(LOG, fs, editlogOs);
+    try {
+      fs.close();
+      editlogOs.close();
+    } catch (IOException e) {
+      LOG.warn("Exception happened whiling shutting down,", e);
+    }
   }
 
   private void setFileSystem(Configuration conf) throws IOException {
@@ -123,48 +124,35 @@ public class FileSystemNodeLabelsStore extends NodeLabelsStore {
   @Override
   public void updateNodeToLabelsMappings(
       Map<NodeId, Set<String>> nodeToLabels) throws IOException {
-    try {
-      ensureAppendEditlogFile();
-      editlogOs.writeInt(SerializedLogType.NODE_TO_LABELS.ordinal());
-      ((ReplaceLabelsOnNodeRequestPBImpl) ReplaceLabelsOnNodeRequest
-          .newInstance(nodeToLabels)).getProto().writeDelimitedTo(editlogOs);
-    } finally {
-      ensureCloseEditlogFile();
-    }
+    ensureAppendEditlogFile();
+    editlogOs.writeInt(SerializedLogType.NODE_TO_LABELS.ordinal());
+    ((ReplaceLabelsOnNodeRequestPBImpl) ReplaceLabelsOnNodeRequest
+        .newInstance(nodeToLabels)).getProto().writeDelimitedTo(editlogOs);
+    ensureCloseEditlogFile();
   }
 
   @Override
-  public void storeNewClusterNodeLabels(List<NodeLabel> labels)
+  public void storeNewClusterNodeLabels(Set<String> labels)
       throws IOException {
-    try {
-      ensureAppendEditlogFile();
-      editlogOs.writeInt(SerializedLogType.ADD_LABELS.ordinal());
-      ((AddToClusterNodeLabelsRequestPBImpl) AddToClusterNodeLabelsRequest
-          .newInstance(labels)).getProto().writeDelimitedTo(editlogOs);
-    } finally {
-      ensureCloseEditlogFile();
-    }
+    ensureAppendEditlogFile();
+    editlogOs.writeInt(SerializedLogType.ADD_LABELS.ordinal());
+    ((AddToClusterNodeLabelsRequestPBImpl) AddToClusterNodeLabelsRequest.newInstance(labels)).getProto()
+        .writeDelimitedTo(editlogOs);
+    ensureCloseEditlogFile();
   }
 
   @Override
   public void removeClusterNodeLabels(Collection<String> labels)
       throws IOException {
-    try {
-      ensureAppendEditlogFile();
-      editlogOs.writeInt(SerializedLogType.REMOVE_LABELS.ordinal());
-      ((RemoveFromClusterNodeLabelsRequestPBImpl) RemoveFromClusterNodeLabelsRequest.newInstance(Sets
-          .newHashSet(labels.iterator()))).getProto().writeDelimitedTo(editlogOs);
-    } finally {
-      ensureCloseEditlogFile();
-    }
+    ensureAppendEditlogFile();
+    editlogOs.writeInt(SerializedLogType.REMOVE_LABELS.ordinal());
+    ((RemoveFromClusterNodeLabelsRequestPBImpl) RemoveFromClusterNodeLabelsRequest.newInstance(Sets
+        .newHashSet(labels.iterator()))).getProto().writeDelimitedTo(editlogOs);
+    ensureCloseEditlogFile();
   }
 
-  /* (non-Javadoc)
-   * @see org.apache.hadoop.yarn.nodelabels.NodeLabelsStore#recover(boolean)
-   */
   @Override
-  public void recover(boolean ignoreNodeToLabelsMappings) throws YarnException,
-      IOException {
+  public void recover() throws IOException {
     /*
      * Steps of recover
      * 1) Read from last mirror (from mirror or mirror.old)
@@ -188,7 +176,7 @@ public class FileSystemNodeLabelsStore extends NodeLabelsStore {
     }
 
     if (null != is) {
-      List<NodeLabel> labels =
+      Set<String> labels =
           new AddToClusterNodeLabelsRequestPBImpl(
               AddToClusterNodeLabelsRequestProto.parseDelimitedFrom(is)).getNodeLabels();
       Map<NodeId, Set<String>> nodeToLabels =
@@ -212,11 +200,10 @@ public class FileSystemNodeLabelsStore extends NodeLabelsStore {
           
           switch (type) {
           case ADD_LABELS: {
-            List<NodeLabel> labels =
-                new AddToClusterNodeLabelsRequestPBImpl(
-                    AddToClusterNodeLabelsRequestProto.parseDelimitedFrom(is))
-                    .getNodeLabels();
-            mgr.addToCluserNodeLabels(labels);
+            Collection<String> labels =
+                AddToClusterNodeLabelsRequestProto.parseDelimitedFrom(is)
+                    .getNodeLabelsList();
+            mgr.addToCluserNodeLabels(Sets.newHashSet(labels.iterator()));
             break;
           }
           case REMOVE_LABELS: {
@@ -231,15 +218,7 @@ public class FileSystemNodeLabelsStore extends NodeLabelsStore {
                 new ReplaceLabelsOnNodeRequestPBImpl(
                     ReplaceLabelsOnNodeRequestProto.parseDelimitedFrom(is))
                     .getNodeToLabels();
-            if (!ignoreNodeToLabelsMappings) {
-              /*
-               * In case of Distributed NodeLabels setup,
-               * ignoreNodeToLabelsMappings will be set to true and recover will
-               * be invoked. As RM will collect the node labels from NM through
-               * registration/HB
-               */
-              mgr.replaceLabelsOnNode(map);
-            }
+            mgr.replaceLabelsOnNode(map);
             break;
           }
           }

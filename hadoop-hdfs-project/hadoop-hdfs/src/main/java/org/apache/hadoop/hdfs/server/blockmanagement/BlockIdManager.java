@@ -22,7 +22,6 @@ import com.google.common.base.Preconditions;
 import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.server.common.GenerationStamp;
-import org.apache.hadoop.hdfs.server.common.HdfsServerConstants;
 
 import java.io.IOException;
 
@@ -56,7 +55,7 @@ public class BlockIdManager {
   private final SequentialBlockIdGenerator blockIdGenerator;
 
   public BlockIdManager(BlockManager blockManager) {
-    this.generationStampV1Limit = HdfsConstants.GRANDFATHER_GENERATION_STAMP;
+    this.generationStampV1Limit = GenerationStamp.GRANDFATHER_GENERATION_STAMP;
     this.blockIdGenerator = new SequentialBlockIdGenerator(blockManager);
   }
 
@@ -70,7 +69,7 @@ public class BlockIdManager {
     Preconditions.checkState(generationStampV2.getCurrentValue() ==
       GenerationStamp.LAST_RESERVED_STAMP);
     generationStampV2.skipTo(generationStampV1.getCurrentValue() +
-      HdfsServerConstants.RESERVED_GENERATION_STAMPS_V1);
+      HdfsConstants.RESERVED_GENERATION_STAMPS_V1);
 
     generationStampV1Limit = generationStampV2.getCurrentValue();
     return generationStampV2.getCurrentValue();
@@ -83,7 +82,7 @@ public class BlockIdManager {
    * @param stamp set generation stamp limit to this value
    */
   public void setGenerationStampV1Limit(long stamp) {
-    Preconditions.checkState(generationStampV1Limit == HdfsConstants
+    Preconditions.checkState(generationStampV1Limit == GenerationStamp
       .GRANDFATHER_GENERATION_STAMP);
     generationStampV1Limit = stamp;
   }
@@ -204,6 +203,6 @@ public class BlockIdManager {
     generationStampV2.setCurrentValue(GenerationStamp.LAST_RESERVED_STAMP);
     getBlockIdGenerator().setCurrentValue(SequentialBlockIdGenerator
       .LAST_RESERVED_BLOCK_ID);
-    generationStampV1Limit = HdfsConstants.GRANDFATHER_GENERATION_STAMP;
+    generationStampV1Limit = GenerationStamp.GRANDFATHER_GENERATION_STAMP;
   }
 }

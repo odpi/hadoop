@@ -28,7 +28,6 @@ import org.apache.hadoop.ha.NodeFencer;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
-import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.net.NetUtils;
 
@@ -78,7 +77,7 @@ public class NNHAServiceTarget extends HAServiceTarget {
           "Unable to determine service address for namenode '" + nnId + "'");
     }
     this.addr = NetUtils.createSocketAddr(serviceAddr,
-        HdfsClientConfigKeys.DFS_NAMENODE_RPC_PORT_DEFAULT);
+        NameNode.DEFAULT_PORT);
 
     this.autoFailoverEnabled = targetConf.getBoolean(
         DFSConfigKeys.DFS_HA_AUTO_FAILOVER_ENABLED_KEY,

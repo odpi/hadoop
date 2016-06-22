@@ -58,9 +58,6 @@ class MetricsConfig extends SubsetConfiguration {
   static final String PERIOD_KEY = "period";
   static final int PERIOD_DEFAULT = 10; // seconds
 
-  // For testing, this will have the priority.
-  static final String PERIOD_MILLIS_KEY = "periodMillis";
-
   static final String QUEUE_CAPACITY_KEY = "queue.capacity";
   static final int QUEUE_CAPACITY_DEFAULT = 1;
 
@@ -117,7 +114,8 @@ class MetricsConfig extends SubsetConfiguration {
         MetricsConfig mc = new MetricsConfig(cf, prefix);
         LOG.debug(mc);
         return mc;
-      } catch (ConfigurationException e) {
+      }
+      catch (ConfigurationException e) {
         if (e.getMessage().startsWith("Cannot locate configuration")) {
           continue;
         }
@@ -200,7 +198,8 @@ class MetricsConfig extends SubsetConfiguration {
       T plugin = (T) cls.newInstance();
       plugin.init(name.isEmpty() ? this : subset(name));
       return plugin;
-    } catch (Exception e) {
+    }
+    catch (Exception e) {
       throw new MetricsConfigException("Error creating plugin: "+ clsName, e);
     }
   }
@@ -230,7 +229,8 @@ class MetricsConfig extends SubsetConfiguration {
           LOG.debug(jar);
           urls[i++] = new URL(jar);
         }
-      } catch (Exception e) {
+      }
+      catch (Exception e) {
         throw new MetricsConfigException(e);
       }
       if (LOG.isDebugEnabled()) {

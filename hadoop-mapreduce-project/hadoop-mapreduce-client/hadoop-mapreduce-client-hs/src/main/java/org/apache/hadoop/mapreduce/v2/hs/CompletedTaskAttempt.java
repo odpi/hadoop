@@ -170,7 +170,7 @@ public class CompletedTaskAttempt implements TaskAttempt {
     }
     // report.setPhase(attemptInfo.get); //TODO
     report.setStateString(attemptInfo.getState());
-    report.setRawCounters(getCounters());
+    report.setCounters(TypeConverter.toYarn(getCounters()));
     report.setContainerId(attemptInfo.getContainerId());
     if (attemptInfo.getHostname() == null) {
       report.setNodeManagerHost("UNKNOWN");

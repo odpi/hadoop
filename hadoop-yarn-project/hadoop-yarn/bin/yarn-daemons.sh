@@ -16,53 +16,23 @@
 # limitations under the License.
 
 
-function hadoop_usage
-{
-  echo "Usage: yarn-daemons.sh [--config confdir] [--hosts hostlistfile] (start|stop|status) <yarn-command> <args...>"
-}
+# Run a Yarn command on all slave hosts.
 
-this="${BASH_SOURCE-$0}"
-bin=$(cd -P -- "$(dirname -- "${this}")" >/dev/null && pwd -P)
+usage="Usage: yarn-daemons.sh [--config confdir] [--hosts hostlistfile] [start
+|stop] command args..."
 
-# let's locate libexec...
-if [[ -n "${HADOOP_PREFIX}" ]]; then
-  DEFAULT_LIBEXEC_DIR="${HADOOP_PREFIX}/libexec"
-else
-  DEFAULT_LIBEXEC_DIR="${bin}/../libexec"
-fi
-
-HADOOP_LIBEXEC_DIR="${HADOOP_LIBEXEC_DIR:-$DEFAULT_LIBEXEC_DIR}"
-# shellcheck disable=SC2034
-HADOOP_NEW_CONFIG=true
-if [[ -f "${HADOOP_LIBEXEC_DIR}/yarn-config.sh" ]]; then
-  . "${HADOOP_LIBEXEC_DIR}/yarn-config.sh"
-else
-  echo "ERROR: Cannot execute ${HADOOP_LIBEXEC_DIR}/yarn-config.sh." 2>&1
+# if no args specified, show usage
+if [ $# -le 1 ]; then
+  echo $usage
   exit 1
 fi
 
-yarnscript="${HADOOP_YARN_HOME}/bin/yarn"
+bin=`dirname "${BASH_SOURCE-$0}"`
+bin=`cd "$bin"; pwd`
 
-daemonmode=$1
-shift
+DEFAULT_LIBEXEC_DIR="$bin"/../libexec
+HADOOP_LIBEXEC_DIR=${HADOOP_LIBEXEC_DIR:-$DEFAULT_LIBEXEC_DIR}
+. $HADOOP_LIBEXEC_DIR/yarn-config.sh
 
-hadoop_error "WARNING: Use of this script to ${daemonmode} YARN daemons is deprecated."
-hadoop_error "WARNING: Attempting to execute replacement \"yarn --slaves --daemon ${daemonmode}\" instead."
-
-#
-# Original input was usually:
-#  yarn-daemons.sh (shell options) (start|stop) nodemanager (daemon options)
-# we're going to turn this into
-#  yarn --slaves --daemon (start|stop) (rest of options)
-#
-for (( i = 0; i < ${#HADOOP_USER_PARAMS[@]}; i++ ))
-do
-  if [[ "${HADOOP_USER_PARAMS[$i]}" =~ ^start$ ]] ||
-     [[ "${HADOOP_USER_PARAMS[$i]}" =~ ^stop$ ]] ||
-     [[ "${HADOOP_USER_PARAMS[$i]}" =~ ^status$ ]]; then
-    unset HADOOP_USER_PARAMS[$i]
-  fi
-done
-
-${yarnscript} --slaves --daemon "${daemonmode}" "${HADOOP_USER_PARAMS[@]}"
+exec "$bin/slaves.sh" --config $YARN_CONF_DIR cd "$HADOOP_YARN_HOME" \; "$bin/yarn-daemon.sh" --config $YARN_CONF_DIR "$@"
 

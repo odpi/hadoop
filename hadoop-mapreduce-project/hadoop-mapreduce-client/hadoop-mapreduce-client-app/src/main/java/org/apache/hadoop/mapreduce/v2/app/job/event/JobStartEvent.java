@@ -25,7 +25,7 @@ public class JobStartEvent extends JobEvent {
   long recoveredJobStartTime;
 
   public JobStartEvent(JobId jobID) {
-    this(jobID, -1L);
+    this(jobID, 0);
   }
 
   public JobStartEvent(JobId jobID, long recoveredJobStartTime) {

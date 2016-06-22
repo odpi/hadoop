@@ -39,6 +39,8 @@ import org.apache.hadoop.hdfs.server.protocol.NamespaceInfo;
 import org.apache.hadoop.hdfs.server.protocol.RemoteEditLog;
 import org.apache.hadoop.hdfs.server.protocol.RemoteEditLogManifest;
 
+import static org.apache.hadoop.util.ExitUtil.terminate;
+
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ComparisonChain;
 import com.google.common.collect.ImmutableList;
@@ -52,7 +54,6 @@ import com.google.common.collect.Sets;
  * assumed that FSEditLog methods, that use this class, use proper
  * synchronization.
  */
-@InterfaceAudience.Private
 public class JournalSet implements JournalManager {
 
   static final Log LOG = LogFactory.getLog(FSEditLog.class);
@@ -264,7 +265,7 @@ public class JournalSet implements JournalManager {
    */
   @Override
   public void selectInputStreams(Collection<EditLogInputStream> streams,
-      long fromTxId, boolean inProgressOk) {
+      long fromTxId, boolean inProgressOk) throws IOException {
     final PriorityQueue<EditLogInputStream> allStreams = 
         new PriorityQueue<EditLogInputStream>(64,
             EDIT_LOG_INPUT_STREAM_COMPARATOR);
@@ -705,6 +706,12 @@ public class JournalSet implements JournalManager {
   }
 
   @Override
+  public void discardSegments(long startTxId) throws IOException {
+    // This operation is handled by FSEditLog directly.
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
   public void doPreUpgrade() throws IOException {
     // This operation is handled by FSEditLog directly.
     throw new UnsupportedOperationException();
@@ -730,12 +737,6 @@ public class JournalSet implements JournalManager {
 
   @Override
   public void doRollback() throws IOException {
-    // This operation is handled by FSEditLog directly.
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void discardSegments(long startTxId) throws IOException {
     // This operation is handled by FSEditLog directly.
     throw new UnsupportedOperationException();
   }

@@ -52,7 +52,7 @@ public class SCMAdmin extends Configured implements Tool {
     String summary = "scmadmin is the command to execute shared cache manager" +
         "administrative commands.\n" +
         "The full syntax is: \n\n" +
-        "yarn scmadmin" +
+        "hadoop scmadmin" +
         " [-runCleanerTask]" +
         " [-help [cmd]]\n";
 

@@ -18,57 +18,15 @@
 
 package org.apache.hadoop.hdfs;
 
-import static org.apache.hadoop.fs.CreateFlag.CREATE;
-import static org.apache.hadoop.fs.CreateFlag.LAZY_PERSIST;
-import static org.apache.hadoop.fs.CreateFlag.OVERWRITE;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_NAMENODES_KEY_PREFIX;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_RPC_ADDRESS_KEY;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-
-import java.io.BufferedOutputStream;
-import java.io.BufferedReader;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.Closeable;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InterruptedIOException;
-import java.io.PrintStream;
-import java.io.RandomAccessFile;
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
-import java.net.HttpURLConnection;
-import java.net.InetSocketAddress;
-import java.net.Socket;
-import java.net.URI;
-import java.net.URL;
-import java.net.URLConnection;
-import java.nio.ByteBuffer;
-import java.security.NoSuchAlgorithmException;
-import java.security.PrivilegedExceptionAction;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicBoolean;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Charsets;
+import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Supplier;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.lang.UnhandledException;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -77,70 +35,56 @@ import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.CacheFlag;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.CreateFlag;
-import org.apache.hadoop.fs.FSDataInputStream;
-import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileContext;
-import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileSystem.Statistics;
+import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FsShell;
 import org.apache.hadoop.fs.Options.Rename;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.fs.permission.AclEntry;
 import org.apache.hadoop.fs.permission.AclEntryScope;
 import org.apache.hadoop.fs.permission.AclEntryType;
 import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.hdfs.MiniDFSCluster.NameNodeInfo;
-import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
 import org.apache.hadoop.hdfs.client.HdfsDataInputStream;
-import org.apache.hadoop.hdfs.protocol.Block;
-import org.apache.hadoop.hdfs.protocol.CacheDirectiveInfo;
-import org.apache.hadoop.hdfs.protocol.CachePoolInfo;
-import org.apache.hadoop.hdfs.protocol.DatanodeID;
-import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.hdfs.protocol.*;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo.AdminStates;
-import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
-import org.apache.hadoop.hdfs.protocol.HdfsConstants;
-import org.apache.hadoop.hdfs.protocol.LayoutVersion;
-import org.apache.hadoop.hdfs.protocol.LocatedBlock;
-import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.hdfs.protocol.datatransfer.Sender;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.BlockOpResponseProto;
 import org.apache.hadoop.hdfs.security.token.block.BlockTokenIdentifier;
 import org.apache.hadoop.hdfs.security.token.block.ExportedBlockKeys;
-import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfo;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfoContiguous;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfoContiguousUnderConstruction;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockManager;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockManagerTestUtil;
 import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeDescriptor;
 import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeManager;
 import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeStorageInfo;
-import org.apache.hadoop.hdfs.server.common.HdfsServerConstants;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.NodeType;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.StartupOption;
 import org.apache.hadoop.hdfs.server.common.StorageInfo;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.datanode.DataNodeLayoutVersion;
-import org.apache.hadoop.hdfs.server.datanode.SimulatedFSDataset;
 import org.apache.hadoop.hdfs.server.datanode.TestTransferRbw;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsDatasetSpi;
 import org.apache.hadoop.hdfs.server.namenode.FSEditLog;
 import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
 import org.apache.hadoop.hdfs.server.namenode.LeaseManager;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
-import org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider;
+import org.apache.hadoop.hdfs.server.namenode.ha
+        .ConfiguredFailoverProxyProvider;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeRegistration;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeStorage;
-import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocol;
 import org.apache.hadoop.hdfs.tools.DFSAdmin;
-import org.apache.hadoop.hdfs.tools.JMXGet;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.nativeio.NativeIO;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.net.unix.DomainSocket;
 import org.apache.hadoop.net.unix.TemporarySocketDirectory;
-import org.apache.hadoop.security.RefreshUserMappingsProtocol;
 import org.apache.hadoop.security.ShellBasedUnixGroupsMapping;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
@@ -153,13 +97,25 @@ import org.apache.log4j.Level;
 import org.junit.Assume;
 import org.mockito.internal.util.reflection.Whitebox;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Charsets;
-import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Supplier;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import java.io.*;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.net.*;
+import java.nio.ByteBuffer;
+import java.security.NoSuchAlgorithmException;
+import java.security.PrivilegedExceptionAction;
+import java.util.*;
+import java.util.concurrent.TimeoutException;
+
+import static org.apache.hadoop.hdfs.DFSConfigKeys.*;
+import static org.apache.hadoop.fs.CreateFlag.CREATE;
+import static org.apache.hadoop.fs.CreateFlag.LAZY_PERSIST;
+import static org.apache.hadoop.fs.CreateFlag.OVERWRITE;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_RPC_ADDRESS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 /** Utilities for HDFS tests */
 public class DFSTestUtil {
@@ -240,9 +196,9 @@ public class DFSTestUtil {
     } else { // append the nsid
       conf.set(DFSConfigKeys.DFS_NAMESERVICES, nsIds + "," + logicalName);
     }
-    conf.set(DFSUtil.addKeySuffixes(HdfsClientConfigKeys.DFS_HA_NAMENODES_KEY_PREFIX,
+    conf.set(DFSUtil.addKeySuffixes(DFSConfigKeys.DFS_HA_NAMENODES_KEY_PREFIX,
             logicalName), "nn1,nn2");
-    conf.set(HdfsClientConfigKeys.Failover.PROXY_PROVIDER_KEY_PREFIX +
+    conf.set(DFSConfigKeys.DFS_CLIENT_FAILOVER_PROXY_PROVIDER_KEY_PREFIX + "" +
             "." + logicalName,
             ConfiguredFailoverProxyProvider.class.getName());
     conf.setInt(DFSConfigKeys.DFS_REPLICATION_KEY, 1);
@@ -301,12 +257,6 @@ public class DFSTestUtil {
   public void createFiles(FileSystem fs, String topdir) throws IOException {
     createFiles(fs, topdir, (short)3);
   }
-
-  public static byte[] readFileAsBytes(FileSystem fs, Path fileName) throws IOException {
-    ByteArrayOutputStream os = new ByteArrayOutputStream();
-    IOUtils.copyBytes(fs.open(fileName), os, 1024, true);
-    return os.toByteArray();
-  }
   
   /** create nFiles with random names and directory hierarchies
    *  with random (but reproducible) data in them.
@@ -351,12 +301,32 @@ public class DFSTestUtil {
   
   public static void createFile(FileSystem fs, Path fileName, long fileLen, 
       short replFactor, long seed) throws IOException {
-    createFile(fs, fileName, 1024, fileLen, fs.getDefaultBlockSize(fileName),
-        replFactor, seed);
+    if (!fs.mkdirs(fileName.getParent())) {
+      throw new IOException("Mkdirs failed to create " + 
+                            fileName.getParent().toString());
+    }
+    FSDataOutputStream out = null;
+    try {
+      out = fs.create(fileName, replFactor);
+      byte[] toWrite = new byte[1024];
+      Random rb = new Random(seed);
+      long bytesToWrite = fileLen;
+      while (bytesToWrite>0) {
+        rb.nextBytes(toWrite);
+        int bytesToWriteNext = (1024<bytesToWrite)?1024:(int)bytesToWrite;
+
+        out.write(toWrite, 0, bytesToWriteNext);
+        bytesToWrite -= bytesToWriteNext;
+      }
+      out.close();
+      out = null;
+    } finally {
+      IOUtils.closeStream(out);
+    }
   }
-  
+
   public static void createFile(FileSystem fs, Path fileName, int bufferLen,
-      long fileLen, long blockSize, short replFactor, long seed)
+                                long fileLen, long blockSize, short replFactor, long seed)
       throws IOException {
     createFile(fs, fileName, false, bufferLen, fileLen, blockSize, replFactor,
       seed, false);
@@ -526,30 +496,6 @@ public class DFSTestUtil {
           + " Replicas = "+replicas+" Cur replicas = "+curReplicas
           + " Racks = "+racks+" Cur racks = "+curRacks);
     }
-  }
-
-  public static void waitForReplication(final DistributedFileSystem dfs,
-      final Path file, final short replication, int waitForMillis)
-      throws TimeoutException, InterruptedException {
-    GenericTestUtils.waitFor(new Supplier<Boolean>() {
-      @Override
-      public Boolean get() {
-        try {
-          FileStatus stat = dfs.getFileStatus(file);
-          BlockLocation[] locs = dfs.getFileBlockLocations(stat, 0, stat
-              .getLen());
-          for (BlockLocation loc : locs) {
-            if (replication != loc.getHosts().length) {
-              return false;
-            }
-          }
-          return true;
-        } catch (IOException e) {
-          LOG.info("getFileStatus on path " + file + " failed!", e);
-          return false;
-        }
-      }
-    }, 100, waitForMillis);
   }
 
   /**
@@ -803,12 +749,6 @@ public class DFSTestUtil {
     return b.toString();
   }
 
-  public static byte[] readFileAsBytes(File f) throws IOException {
-    ByteArrayOutputStream os = new ByteArrayOutputStream();
-    IOUtils.copyBytes(new FileInputStream(f), os, 1024, true);
-    return os.toByteArray();
-  }
-
   /* Write the given string to the given file */
   public static void writeFile(FileSystem fs, Path p, String s) 
       throws IOException {
@@ -977,12 +917,12 @@ public class DFSTestUtil {
   public static BlockOpResponseProto transferRbw(final ExtendedBlock b, 
       final DFSClient dfsClient, final DatanodeInfo... datanodes) throws IOException {
     assertEquals(2, datanodes.length);
-    final Socket s = DataStreamer.createSocketForPipeline(datanodes[0],
+    final Socket s = DFSOutputStream.createSocketForPipeline(datanodes[0],
         datanodes.length, dfsClient);
     final long writeTimeout = dfsClient.getDatanodeWriteTimeout(datanodes.length);
     final DataOutputStream out = new DataOutputStream(new BufferedOutputStream(
         NetUtils.getOutputStream(s, writeTimeout),
-        DFSUtil.getSmallBufferSize(dfsClient.getConfiguration())));
+        HdfsConstants.SMALL_BUFFER_SIZE));
     final DataInputStream in = new DataInputStream(NetUtils.getInputStream(s));
 
     // send the request
@@ -1035,8 +975,8 @@ public class DFSTestUtil {
     for (Map.Entry<String, List<String>> entry : nameservices.entrySet()) {
       conf.set(DFSUtil.addKeySuffixes(DFS_HA_NAMENODES_KEY_PREFIX,
           entry.getKey()), Joiner.on(",").join(entry.getValue()));
-      conf.set(HdfsClientConfigKeys.Failover.PROXY_PROVIDER_KEY_PREFIX + "."
-          + entry.getKey(), ConfiguredFailoverProxyProvider.class.getName());
+      conf.set(DFS_CLIENT_FAILOVER_PROXY_PROVIDER_KEY_PREFIX + "." + entry
+          .getKey(), ConfiguredFailoverProxyProvider.class.getName());
     }
     conf.set(DFSConfigKeys.DFS_NAMESERVICES, Joiner.on(",")
         .join(nameservices.keySet()));
@@ -1494,7 +1434,7 @@ public class DFSTestUtil {
     
     public Configuration newConfiguration() {
       Configuration conf = new Configuration();
-      conf.setBoolean(HdfsClientConfigKeys.Read.ShortCircuit.KEY, true);
+      conf.setBoolean(DFSConfigKeys.DFS_CLIENT_READ_SHORTCIRCUIT_KEY, true);
       conf.set(DFSConfigKeys.DFS_DOMAIN_SOCKET_PATH_KEY,
           new File(sockDir.getDir(),
             testName + "._PORT.sock").getAbsolutePath());
@@ -1635,13 +1575,15 @@ public class DFSTestUtil {
   public static DatanodeDescriptor getExpectedPrimaryNode(NameNode nn,
       ExtendedBlock blk) {
     BlockManager bm0 = nn.getNamesystem().getBlockManager();
-    BlockInfo storedBlock = bm0.getStoredBlock(blk.getLocalBlock());
+    BlockInfoContiguous storedBlock = bm0.getStoredBlock(blk.getLocalBlock());
     assertTrue("Block " + blk + " should be under construction, " +
-        "got: " + storedBlock, !storedBlock.isComplete());
+        "got: " + storedBlock,
+        storedBlock instanceof BlockInfoContiguousUnderConstruction);
+    BlockInfoContiguousUnderConstruction ucBlock =
+      (BlockInfoContiguousUnderConstruction)storedBlock;
     // We expect that the replica with the most recent heart beat will be
     // the one to be in charge of the synchronization / recovery protocol.
-    final DatanodeStorageInfo[] storages = storedBlock
-        .getUnderConstructionFeature().getExpectedStorageLocations();
+    final DatanodeStorageInfo[] storages = ucBlock.getExpectedStorageLocations();
     DatanodeStorageInfo expectedPrimary = storages[0];
     long mostRecentLastUpdate = expectedPrimary.getDatanodeDescriptor()
         .getLastUpdateMonotonic();
@@ -1719,7 +1661,8 @@ public class DFSTestUtil {
     modifiersField.setInt(field, field.getModifiers() & ~Modifier.FINAL);
     field.setInt(null, lv);
 
-    field = HdfsServerConstants.class.getField("DATANODE_LAYOUT_VERSION");
+    // Override {@link HdfsConstants#DATANODE_LAYOUT_VERSION}
+    field = HdfsConstants.class.getField("DATANODE_LAYOUT_VERSION");
     field.setAccessible(true);
     modifiersField.setInt(field, field.getModifiers() & ~Modifier.FINAL);
     field.setInt(null, lv);
@@ -1759,6 +1702,15 @@ public class DFSTestUtil {
     }, 100, waitTime);
   }
 
+  public static void setNameNodeLogLevel(Level level) {
+    GenericTestUtils.setLogLevel(FSNamesystem.LOG, level);
+    GenericTestUtils.setLogLevel(BlockManager.LOG, level);
+    GenericTestUtils.setLogLevel(LeaseManager.LOG, level);
+    GenericTestUtils.setLogLevel(NameNode.LOG, level);
+    GenericTestUtils.setLogLevel(NameNode.stateChangeLog, level);
+    GenericTestUtils.setLogLevel(NameNode.blockStateChangeLog, level);
+  }
+
  /**
    * Change the length of a block at datanode dnIndex
    */
@@ -1775,50 +1727,6 @@ public class DFSTestUtil {
     return false;
   }
 
-  public static void setNameNodeLogLevel(Level level) {
-    GenericTestUtils.setLogLevel(FSNamesystem.LOG, level);
-    GenericTestUtils.setLogLevel(BlockManager.LOG, level);
-    GenericTestUtils.setLogLevel(LeaseManager.LOG, level);
-    GenericTestUtils.setLogLevel(NameNode.LOG, level);
-    GenericTestUtils.setLogLevel(NameNode.stateChangeLog, level);
-    GenericTestUtils.setLogLevel(NameNode.blockStateChangeLog, level);
-  }
-
-  /**
-   * Get the NamenodeProtocol RPC proxy for the NN associated with this
-   * DFSClient object
-   *
-   * @param nameNodeUri the URI of the NN to get a proxy for.
-   *
-   * @return the Namenode RPC proxy associated with this DFSClient object
-   */
-  @VisibleForTesting
-  public static NamenodeProtocol getNamenodeProtocolProxy(Configuration conf,
-      URI nameNodeUri, UserGroupInformation ugi)
-      throws IOException {
-    return NameNodeProxies.createNonHAProxy(conf,
-        DFSUtilClient.getNNAddress(nameNodeUri), NamenodeProtocol.class, ugi,
-        false).getProxy();
-  }
-
-  /**
-   * Get the RefreshUserMappingsProtocol RPC proxy for the NN associated with
-   * this DFSClient object
-   *
-   * @param nameNodeUri the URI of the NN to get a proxy for.
-   *
-   * @return the RefreshUserMappingsProtocol RPC proxy associated with this
-   * DFSClient object
-   */
-  @VisibleForTesting
-  public static RefreshUserMappingsProtocol getRefreshUserMappingsProtocolProxy(
-      Configuration conf, URI nameNodeUri) throws IOException {
-    final AtomicBoolean nnFallbackToSimpleAuth = new AtomicBoolean(false);
-    return NameNodeProxies.createProxy(conf,
-        nameNodeUri, RefreshUserMappingsProtocol.class,
-        nnFallbackToSimpleAuth).getProxy();
-  }
-
   /**
    * Set the datanode dead
    */
@@ -1833,46 +1741,5 @@ public class DFSTestUtil {
   public static void resetLastUpdatesWithOffset(DatanodeInfo dn, long offset) {
     dn.setLastUpdate(Time.now() + offset);
     dn.setLastUpdateMonotonic(Time.monotonicNow() + offset);
-  }
-
-  /**
-   * This method takes a set of block locations and fills the provided buffer
-   * with expected bytes based on simulated content from
-   * {@link SimulatedFSDataset}.
-   *
-   * @param lbs The block locations of a file
-   * @param expected The buffer to be filled with expected bytes on the above
-   *                 locations.
-   */
-  public static void fillExpectedBuf(LocatedBlocks lbs, byte[] expected) {
-    Block[] blks = new Block[lbs.getLocatedBlocks().size()];
-    for (int i = 0; i < lbs.getLocatedBlocks().size(); i++) {
-      blks[i] = lbs.getLocatedBlocks().get(i).getBlock().getLocalBlock();
-    }
-    int bufPos = 0;
-    for (Block b : blks) {
-      for (long blkPos = 0; blkPos < b.getNumBytes(); blkPos++) {
-        assert bufPos < expected.length;
-        expected[bufPos++] = SimulatedFSDataset.simulatedByte(b, blkPos);
-      }
-    }
-  }
-
-  public static void waitForMetric(final JMXGet jmx, final String metricName, final int expectedValue)
-      throws TimeoutException, InterruptedException {
-    GenericTestUtils.waitFor(new Supplier<Boolean>() {
-      @Override
-      public Boolean get() {
-        try {
-          final int currentValue = Integer.parseInt(jmx.getValue(metricName));
-          LOG.info("Waiting for " + metricName +
-                       " to reach value " + expectedValue +
-                       ", current value = " + currentValue);
-          return currentValue == expectedValue;
-        } catch (Exception e) {
-          throw new UnhandledException("Test failed due to unexpected exception", e);
-        }
-      }
-    }, 1000, Integer.MAX_VALUE);
   }
 }

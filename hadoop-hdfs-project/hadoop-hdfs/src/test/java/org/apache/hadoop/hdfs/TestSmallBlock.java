@@ -25,10 +25,11 @@ import java.util.Random;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.hdfs.server.datanode.SimulatedFSDataset;
 import org.junit.Test;
 
@@ -41,6 +42,18 @@ public class TestSmallBlock {
   static final int blockSize = 1;
   static final int fileSize = 20;
   boolean simulatedStorage = false;
+
+  private void writeFile(FileSystem fileSys, Path name) throws IOException {
+    // create and write a file that contains three blocks of data
+    FSDataOutputStream stm = fileSys.create(name, true, fileSys.getConf()
+        .getInt(CommonConfigurationKeys.IO_FILE_BUFFER_SIZE_KEY, 4096),
+        (short) 1, blockSize);
+    byte[] buffer = new byte[fileSize];
+    Random rand = new Random(seed);
+    rand.nextBytes(buffer);
+    stm.write(buffer);
+    stm.close();
+  }
   
   private void checkAndEraseData(byte[] actual, int from, byte[] expected, String message) {
     for (int idx = 0; idx < actual.length; idx++) {
@@ -51,17 +64,16 @@ public class TestSmallBlock {
     }
   }
   
-  private void checkFile(DistributedFileSystem fileSys, Path name)
-      throws IOException {
+  private void checkFile(FileSystem fileSys, Path name) throws IOException {
     BlockLocation[] locations = fileSys.getFileBlockLocations(
         fileSys.getFileStatus(name), 0, fileSize);
     assertEquals("Number of blocks", fileSize, locations.length);
     FSDataInputStream stm = fileSys.open(name);
     byte[] expected = new byte[fileSize];
     if (simulatedStorage) {
-      LocatedBlocks lbs = fileSys.getClient().getLocatedBlocks(name.toString(),
-          0, fileSize);
-      DFSTestUtil.fillExpectedBuf(lbs, expected);
+      for (int i = 0; i < expected.length; ++i) {  
+        expected[i] = SimulatedFSDataset.DEFAULT_DATABYTE;
+      }
     } else {
       Random rand = new Random(seed);
       rand.nextBytes(expected);
@@ -90,11 +102,10 @@ public class TestSmallBlock {
     }
     conf.set(DFSConfigKeys.DFS_BYTES_PER_CHECKSUM_KEY, "1");
     MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).build();
-    DistributedFileSystem fileSys = cluster.getFileSystem();
+    FileSystem fileSys = cluster.getFileSystem();
     try {
-      Path file1 = new Path("/smallblocktest.dat");
-      DFSTestUtil.createFile(fileSys, file1, fileSize, fileSize, blockSize,
-          (short) 1, seed);
+      Path file1 = new Path("smallblocktest.dat");
+      writeFile(fileSys, file1);
       checkFile(fileSys, file1);
       cleanupFile(fileSys, file1);
     } finally {

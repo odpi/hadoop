@@ -20,11 +20,12 @@ package org.apache.hadoop.hdfs.server.namenode;
 import static org.junit.Assert.assertTrue;
 
 import java.lang.management.ManagementFactory;
-import java.io.File;
+
+import javax.management.MBeanServer;
+import javax.management.ObjectName;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileSystem;
@@ -35,9 +36,6 @@ import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.junit.Test;
-
-import javax.management.MBeanServer;
-import javax.management.ObjectName;
 
 /**
  * DFS_HOSTS and DFS_HOSTS_EXCLUDE tests
@@ -120,20 +118,15 @@ public class TestHostsFiles {
 
       // Check the block still has sufficient # replicas across racks
       DFSTestUtil.waitForReplication(cluster, b, 2, REPLICATION_FACTOR, 0);
-
+      
       MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
-      ObjectName mxbeanName = new ObjectName(
-              "Hadoop:service=NameNode,name=NameNodeInfo");
+      ObjectName mxbeanName =
+          new ObjectName("Hadoop:service=NameNode,name=NameNodeInfo");
       String nodes = (String) mbs.getAttribute(mxbeanName, "LiveNodes");
       assertTrue("Live nodes should contain the decommissioned node",
-              nodes.contains("Decommissioned"));
+          nodes.contains("Decommissioned"));
     } finally {
-      if (cluster != null) {
-        cluster.shutdown();
-      }
-      if (localFileSys.exists(dir)) {
-        FileUtils.deleteQuietly(new File(dir.toUri().getPath()));
-      }
+      cluster.shutdown();
     }
   }
 
@@ -173,9 +166,6 @@ public class TestHostsFiles {
     } finally {
       if (cluster != null) {
         cluster.shutdown();
-      }
-      if (localFileSys.exists(dir)) {
-        FileUtils.deleteQuietly(new File(dir.toUri().getPath()));
       }
     }
   }

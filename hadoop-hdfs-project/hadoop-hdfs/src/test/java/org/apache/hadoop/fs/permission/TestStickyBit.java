@@ -140,9 +140,6 @@ public class TestStickyBit {
     } catch (IOException ioe) {
       assertTrue(ioe instanceof AccessControlException);
       assertTrue(ioe.getMessage().contains("sticky bit"));
-      assertTrue(ioe.getMessage().contains("user="+user2.getUserName()));
-      assertTrue(ioe.getMessage().contains("path=\"" + file + "\""));
-      assertTrue(ioe.getMessage().contains("parent=\"" + file.getParent() + "\""));
     }
   }
 

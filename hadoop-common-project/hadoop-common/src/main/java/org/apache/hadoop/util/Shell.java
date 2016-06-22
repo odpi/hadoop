@@ -22,7 +22,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.InputStream;
-import java.io.InterruptedIOException;
 import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.Map;
@@ -212,26 +211,19 @@ abstract public class Shell {
   public static String[] getCheckProcessIsAliveCommand(String pid) {
     return Shell.WINDOWS ?
       new String[] { Shell.WINUTILS, "task", "isAlive", pid } :
-      isSetsidAvailable ?
-        new String[] { "kill", "-0", "--", "-" + pid } :
-        new String[] { "kill", "-0", pid };
+      new String[] { "kill", "-0", isSetsidAvailable ? "-" + pid : pid };
   }
 
   /** Return a command to send a signal to a given pid */
   public static String[] getSignalKillCommand(int code, String pid) {
-    return Shell.WINDOWS ?
-      new String[] { Shell.WINUTILS, "task", "kill", pid } :
-      isSetsidAvailable ?
-        new String[] { "kill", "-" + code, "--", "-" + pid } :
-        new String[] { "kill", "-" + code, pid };
+    return Shell.WINDOWS ? new String[] { Shell.WINUTILS, "task", "kill", pid } :
+      new String[] { "kill", "-" + code, isSetsidAvailable ? "-" + pid : pid };
   }
 
-  public static final String ENV_NAME_REGEX = "[A-Za-z_][A-Za-z0-9_]*";
   /** Return a regular expression string that match environment variables */
   public static String getEnvironmentVariableRegex() {
-    return (WINDOWS)
-        ? "%(" + ENV_NAME_REGEX + "?)%"
-        : "\\$(" + ENV_NAME_REGEX + ")";
+    return (WINDOWS) ? "%([A-Za-z_][A-Za-z0-9_]*?)%" :
+      "\\$([A-Za-z_][A-Za-z0-9_]*)";
   }
   
   /**
@@ -400,16 +392,7 @@ abstract public class Shell {
     } catch (IOException ioe) {
       LOG.debug("setsid is not available on this machine. So not using it.");
       setsidSupported = false;
-    }  catch (Error err) {
-      if (err.getMessage().contains("posix_spawn is not " +
-          "a supported process launch mechanism")
-          && (Shell.FREEBSD || Shell.MAC)) {
-        // HADOOP-11924: This is a workaround to avoid failure of class init
-        // by JDK issue on TR locale(JDK-8047340).
-        LOG.info("Avoiding JDK-8047340 on BSD-based systems.", err);
-        setsidSupported = false;
-      }
-    }  finally { // handle the exit code
+    } finally { // handle the exit code
       if (LOG.isDebugEnabled()) {
         LOG.debug("setsid exited with exit code "
                  + (shexec != null ? shexec.getExitCode() : "(null executor)"));
@@ -562,9 +545,7 @@ abstract public class Shell {
         throw new ExitCodeException(exitCode, errMsg.toString());
       }
     } catch (InterruptedException ie) {
-      InterruptedIOException iie = new InterruptedIOException(ie.toString());
-      iie.initCause(ie);
-      throw iie;
+      throw new IOException(ie.toString());
     } finally {
       if (timeOutTimer != null) {
         timeOutTimer.cancel();

@@ -44,7 +44,6 @@ public class ClusterMetrics {
   @Metric("# of lost NMs") MutableGaugeInt numLostNMs;
   @Metric("# of unhealthy NMs") MutableGaugeInt numUnhealthyNMs;
   @Metric("# of Rebooted NMs") MutableGaugeInt numRebootedNMs;
-  @Metric("# of Shutdown NMs") MutableGaugeInt numShutdownNMs;
   @Metric("AM container launch delay") MutableRate aMLaunchDelay;
   @Metric("AM register delay") MutableRate aMRegisterDelay;
 
@@ -141,19 +140,6 @@ public class ClusterMetrics {
   
   public void decrNumRebootedNMs() {
     numRebootedNMs.decr();
-  }
-
-  // Shutdown NMs
-  public int getNumShutdownNMs() {
-    return numShutdownNMs.value();
-  }
-
-  public void incrNumShutdownNMs() {
-    numShutdownNMs.incr();
-  }
-
-  public void decrNumShutdownNMs() {
-    numShutdownNMs.decr();
   }
 
   public void incrNumActiveNodes() {

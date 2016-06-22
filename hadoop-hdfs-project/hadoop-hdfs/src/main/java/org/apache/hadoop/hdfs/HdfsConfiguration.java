@@ -18,9 +18,9 @@
 
 package org.apache.hadoop.hdfs;
 
-import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
+
+import org.apache.hadoop.classification.InterfaceAudience;
 
 /**
  * Adds deprecated keys into the configuration.
@@ -85,7 +85,7 @@ public class HdfsConfiguration extends Configuration {
       new DeprecationDelta("dfs.name.edits.dir",
         DFSConfigKeys.DFS_NAMENODE_EDITS_DIR_KEY),
       new DeprecationDelta("dfs.read.prefetch.size",
-        HdfsClientConfigKeys.Read.PREFETCH_SIZE_KEY),
+        DFSConfigKeys.DFS_CLIENT_READ_PREFETCH_SIZE_KEY),
       new DeprecationDelta("dfs.safemode.extension",
         DFSConfigKeys.DFS_NAMENODE_SAFEMODE_EXTENSION_KEY),
       new DeprecationDelta("dfs.safemode.threshold.pct",
@@ -93,7 +93,7 @@ public class HdfsConfiguration extends Configuration {
       new DeprecationDelta("dfs.secondary.http.address",
         DFSConfigKeys.DFS_NAMENODE_SECONDARY_HTTP_ADDRESS_KEY),
       new DeprecationDelta("dfs.socket.timeout",
-        HdfsClientConfigKeys.DFS_CLIENT_SOCKET_TIMEOUT_KEY),
+        DFSConfigKeys.DFS_CLIENT_SOCKET_TIMEOUT_KEY),
       new DeprecationDelta("fs.checkpoint.dir",
         DFSConfigKeys.DFS_NAMENODE_CHECKPOINT_DIR_KEY),
       new DeprecationDelta("fs.checkpoint.edits.dir",
@@ -127,19 +127,19 @@ public class HdfsConfiguration extends Configuration {
       new DeprecationDelta("dfs.permissions.supergroup",
         DFSConfigKeys.DFS_PERMISSIONS_SUPERUSERGROUP_KEY),
       new DeprecationDelta("dfs.write.packet.size",
-        HdfsClientConfigKeys.DFS_CLIENT_WRITE_PACKET_SIZE_KEY),
+        DFSConfigKeys.DFS_CLIENT_WRITE_PACKET_SIZE_KEY),
       new DeprecationDelta("dfs.block.size",
         DFSConfigKeys.DFS_BLOCK_SIZE_KEY),
       new DeprecationDelta("dfs.datanode.max.xcievers",
         DFSConfigKeys.DFS_DATANODE_MAX_RECEIVER_THREADS_KEY),
       new DeprecationDelta("io.bytes.per.checksum",
-        HdfsClientConfigKeys.DFS_BYTES_PER_CHECKSUM_KEY),
+        DFSConfigKeys.DFS_BYTES_PER_CHECKSUM_KEY),
       new DeprecationDelta("dfs.federation.nameservices",
         DFSConfigKeys.DFS_NAMESERVICES),
       new DeprecationDelta("dfs.federation.nameservice.id",
         DFSConfigKeys.DFS_NAMESERVICE_ID),
       new DeprecationDelta("dfs.client.file-block-storage-locations.timeout",
-        HdfsClientConfigKeys.DFS_CLIENT_FILE_BLOCK_STORAGE_LOCATIONS_TIMEOUT_MS),
+        DFSConfigKeys.DFS_CLIENT_FILE_BLOCK_STORAGE_LOCATIONS_TIMEOUT_MS),
     });
   }
 

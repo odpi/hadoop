@@ -68,13 +68,12 @@ public class FSSchedulerNode extends SchedulerNode {
             " on node " + this);
       }
 
-      LOG.info("Updated reserved container " + container.getContainer().getId()
-          + " on node " + this + " for application "
-          + application.getApplicationId());
+      LOG.info("Updated reserved container " + 
+          container.getContainer().getId() + " on node " + 
+          this + " for application " + application);
     } else {
-      LOG.info("Reserved container " + container.getContainer().getId()
-          + " on node " + this + " for application "
-          + application.getApplicationId());
+      LOG.info("Reserved container " + container.getContainer().getId() + 
+          " on node " + this + " for application " + application);
     }
     setReservedContainer(container);
     this.reservedAppSchedulable = (FSAppAttempt) application;

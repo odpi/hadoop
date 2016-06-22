@@ -22,7 +22,6 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -40,8 +39,6 @@ import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.service.CompositeService;
 import org.apache.hadoop.util.ExitUtil;
 import org.apache.hadoop.util.GenericOptionsParser;
-import org.apache.hadoop.util.JvmPauseMonitor;
-import org.apache.hadoop.util.NodeHealthScriptRunner;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.ShutdownHookManager;
 import org.apache.hadoop.util.StringUtils;
@@ -56,14 +53,11 @@ import org.apache.hadoop.yarn.event.Dispatcher;
 import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.exceptions.YarnRuntimeException;
 import org.apache.hadoop.yarn.factory.providers.RecordFactoryProvider;
-import org.apache.hadoop.yarn.server.api.protocolrecords.LogAggregationReport;
 import org.apache.hadoop.yarn.server.api.records.NodeHealthStatus;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.ContainerManagerImpl;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.application.Application;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Container;
 import org.apache.hadoop.yarn.server.nodemanager.metrics.NodeManagerMetrics;
-import org.apache.hadoop.yarn.server.nodemanager.nodelabels.ConfigurationNodeLabelsProvider;
-import org.apache.hadoop.yarn.server.nodemanager.nodelabels.NodeLabelsProvider;
 import org.apache.hadoop.yarn.server.nodemanager.recovery.NMLeveldbStateStoreService;
 import org.apache.hadoop.yarn.server.nodemanager.recovery.NMNullStateStoreService;
 import org.apache.hadoop.yarn.server.nodemanager.recovery.NMStateStoreService;
@@ -83,19 +77,15 @@ public class NodeManager extends CompositeService
   public static final int SHUTDOWN_HOOK_PRIORITY = 30;
 
   private static final Log LOG = LogFactory.getLog(NodeManager.class);
-  private static long nmStartupTime = System.currentTimeMillis();
   protected final NodeManagerMetrics metrics = NodeManagerMetrics.create();
-  private JvmPauseMonitor pauseMonitor;
   private ApplicationACLsManager aclsManager;
   private NodeHealthCheckerService nodeHealthChecker;
-  private NodeLabelsProvider nodeLabelsProvider;
   private LocalDirsHandlerService dirsHandler;
   private Context context;
   private AsyncDispatcher dispatcher;
   private ContainerManagerImpl containerManager;
   private NodeStatusUpdater nodeStatusUpdater;
-  private NodeResourceMonitor nodeResourceMonitor;
-  private static CompositeServiceShutdownHook nodeManagerShutdownHook;
+  private static CompositeServiceShutdownHook nodeManagerShutdownHook; 
   private NMStateStoreService nmStore = null;
   
   private AtomicBoolean isStopping = new AtomicBoolean(false);
@@ -106,55 +96,10 @@ public class NodeManager extends CompositeService
     super(NodeManager.class.getName());
   }
 
-  public static long getNMStartupTime() {
-    return nmStartupTime;
-  }
-
   protected NodeStatusUpdater createNodeStatusUpdater(Context context,
       Dispatcher dispatcher, NodeHealthCheckerService healthChecker) {
     return new NodeStatusUpdaterImpl(context, dispatcher, healthChecker,
-        metrics, nodeLabelsProvider);
-  }
-
-  protected NodeStatusUpdater createNodeStatusUpdater(Context context,
-      Dispatcher dispatcher, NodeHealthCheckerService healthChecker,
-      NodeLabelsProvider nodeLabelsProvider) {
-    return new NodeStatusUpdaterImpl(context, dispatcher, healthChecker,
-        metrics, nodeLabelsProvider);
-  }
-
-  protected NodeLabelsProvider createNodeLabelsProvider(Configuration conf)
-      throws IOException {
-    NodeLabelsProvider provider = null;
-    String providerString =
-        conf.get(YarnConfiguration.NM_NODE_LABELS_PROVIDER_CONFIG, null);
-    if (providerString == null || providerString.trim().length() == 0) {
-      // Seems like Distributed Node Labels configuration is not enabled
-      return provider;
-    }
-    switch (providerString.trim().toLowerCase()) {
-    case YarnConfiguration.CONFIG_NODE_LABELS_PROVIDER:
-      provider = new ConfigurationNodeLabelsProvider();
-      break;
-    default:
-      try {
-        Class<? extends NodeLabelsProvider> labelsProviderClass =
-            conf.getClass(YarnConfiguration.NM_NODE_LABELS_PROVIDER_CONFIG, null,
-                NodeLabelsProvider.class);
-        provider = labelsProviderClass.newInstance();
-      } catch (InstantiationException | IllegalAccessException
-          | RuntimeException e) {
-        LOG.error("Failed to create NodeLabelsProvider based on Configuration",
-            e);
-        throw new IOException("Failed to create NodeLabelsProvider : "
-            + e.getMessage(), e);
-      }
-    }
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("Distributed Node Labels is enabled"
-          + " with provider class as : " + provider.getClass().toString());
-    }
-    return provider;
+      metrics);
   }
 
   protected NodeResourceMonitor createNodeResourceMonitor() {
@@ -166,7 +111,7 @@ public class NodeManager extends CompositeService
       NodeStatusUpdater nodeStatusUpdater, ApplicationACLsManager aclsManager,
       LocalDirsHandlerService dirsHandler) {
     return new ContainerManagerImpl(context, exec, del, nodeStatusUpdater,
-      metrics, dirsHandler);
+      metrics, aclsManager, dirsHandler);
   }
 
   protected WebServer createWebServer(Context nmContext,
@@ -243,27 +188,6 @@ public class NodeManager extends CompositeService
     }
   }
 
-  public static NodeHealthScriptRunner getNodeHealthScriptRunner(Configuration conf) {
-    String nodeHealthScript = 
-        conf.get(YarnConfiguration.NM_HEALTH_CHECK_SCRIPT_PATH);
-    if(!NodeHealthScriptRunner.shouldRun(nodeHealthScript)) {
-      LOG.info("Node Manager health check script is not available "
-          + "or doesn't have execute permission, so not "
-          + "starting the node health script runner.");
-      return null;
-    }
-    long nmCheckintervalTime = conf.getLong(
-        YarnConfiguration.NM_HEALTH_CHECK_INTERVAL_MS,
-        YarnConfiguration.DEFAULT_NM_HEALTH_CHECK_INTERVAL_MS);
-    long scriptTimeout = conf.getLong(
-        YarnConfiguration.NM_HEALTH_CHECK_SCRIPT_TIMEOUT_MS,
-        YarnConfiguration.DEFAULT_NM_HEALTH_CHECK_SCRIPT_TIMEOUT_MS);
-    String[] scriptArgs = conf.getStrings(
-        YarnConfiguration.NM_HEALTH_CHECK_SCRIPT_OPTS, new String[] {});
-    return new NodeHealthScriptRunner(nodeHealthScript,
-        nmCheckintervalTime, scriptTimeout, scriptArgs);
-  }
-
   @Override
   protected void serviceInit(Configuration conf) throws Exception {
 
@@ -299,30 +223,18 @@ public class NodeManager extends CompositeService
     // NodeManager level dispatcher
     this.dispatcher = new AsyncDispatcher();
 
-    dirsHandler = new LocalDirsHandlerService(metrics);
-    nodeHealthChecker =
-        new NodeHealthCheckerService(
-            getNodeHealthScriptRunner(conf), dirsHandler);
+    nodeHealthChecker = new NodeHealthCheckerService();
     addService(nodeHealthChecker);
+    dirsHandler = nodeHealthChecker.getDiskHandler();
 
     this.context = createNMContext(containerTokenSecretManager,
         nmTokenSecretManager, nmStore);
+    
+    nodeStatusUpdater =
+        createNodeStatusUpdater(context, dispatcher, nodeHealthChecker);
 
-    nodeLabelsProvider = createNodeLabelsProvider(conf);
-
-    if (null == nodeLabelsProvider) {
-      nodeStatusUpdater =
-          createNodeStatusUpdater(context, dispatcher, nodeHealthChecker);
-    } else {
-      addService(nodeLabelsProvider);
-      nodeStatusUpdater =
-          createNodeStatusUpdater(context, dispatcher, nodeHealthChecker,
-              nodeLabelsProvider);
-    }
-
-    nodeResourceMonitor = createNodeResourceMonitor();
+    NodeResourceMonitor nodeResourceMonitor = createNodeResourceMonitor();
     addService(nodeResourceMonitor);
-    ((NMContext) context).setNodeResourceMonitor(nodeResourceMonitor);
 
     containerManager =
         createContainerManager(context, exec, del, nodeStatusUpdater,
@@ -338,16 +250,13 @@ public class NodeManager extends CompositeService
     dispatcher.register(ContainerManagerEventType.class, containerManager);
     dispatcher.register(NodeManagerEventType.class, this);
     addService(dispatcher);
-
-    pauseMonitor = new JvmPauseMonitor(conf);
-    metrics.getJvmMetrics().setPauseMonitor(pauseMonitor);
-
+    
     DefaultMetricsSystem.initialize("NodeManager");
 
     // StatusUpdater should be added last so that it get started last 
     // so that we make sure everything is up before registering with RM. 
     addService(nodeStatusUpdater);
-
+    
     super.serviceInit(conf);
     // TODO add local dirs to del
   }
@@ -359,7 +268,6 @@ public class NodeManager extends CompositeService
     } catch (IOException e) {
       throw new YarnRuntimeException("Failed NodeManager login", e);
     }
-    pauseMonitor.start();
     super.serviceStart();
   }
 
@@ -371,9 +279,6 @@ public class NodeManager extends CompositeService
     try {
       super.serviceStop();
       DefaultMetricsSystem.shutdown();
-      if (pauseMonitor != null) {
-        pauseMonitor.stop();
-      }
     } finally {
       // YARN-3641: NM's services stop get failed shouldn't block the
       // release of NMLevelDBStore.
@@ -442,7 +347,6 @@ public class NodeManager extends CompositeService
     private final NMContainerTokenSecretManager containerTokenSecretManager;
     private final NMTokenSecretManagerInNM nmTokenSecretManager;
     private ContainerManagementProtocol containerManager;
-    private NodeResourceMonitor nodeResourceMonitor;
     private final LocalDirsHandlerService dirsHandler;
     private final ApplicationACLsManager aclsManager;
     private WebServer webServer;
@@ -450,8 +354,6 @@ public class NodeManager extends CompositeService
         .getRecordFactory(null).newRecordInstance(NodeHealthStatus.class);
     private final NMStateStoreService stateStore;
     private boolean isDecommissioned = false;
-    private final ConcurrentLinkedQueue<LogAggregationReport>
-        logAggregationReportForApps;
 
     public NMContext(NMContainerTokenSecretManager containerTokenSecretManager,
         NMTokenSecretManagerInNM nmTokenSecretManager,
@@ -465,8 +367,6 @@ public class NodeManager extends CompositeService
       this.nodeHealthStatus.setHealthReport("Healthy");
       this.nodeHealthStatus.setLastHealthReportTime(System.currentTimeMillis());
       this.stateStore = stateStore;
-      this.logAggregationReportForApps = new ConcurrentLinkedQueue<
-          LogAggregationReport>();
     }
 
     /**
@@ -505,15 +405,6 @@ public class NodeManager extends CompositeService
     @Override
     public NodeHealthStatus getNodeHealthStatus() {
       return this.nodeHealthStatus;
-    }
-
-    @Override
-    public NodeResourceMonitor getNodeResourceMonitor() {
-      return this.nodeResourceMonitor;
-    }
-
-    public void setNodeResourceMonitor(NodeResourceMonitor nodeResourceMonitor) {
-      this.nodeResourceMonitor = nodeResourceMonitor;
     }
 
     @Override
@@ -566,12 +457,6 @@ public class NodeManager extends CompositeService
     public void setSystemCrendentialsForApps(
         Map<ApplicationId, Credentials> systemCredentials) {
       this.systemCredentials = systemCredentials;
-    }
-
-    @Override
-    public ConcurrentLinkedQueue<LogAggregationReport>
-        getLogAggregationStatusForApps() {
-      return this.logAggregationReportForApps;
     }
   }
 

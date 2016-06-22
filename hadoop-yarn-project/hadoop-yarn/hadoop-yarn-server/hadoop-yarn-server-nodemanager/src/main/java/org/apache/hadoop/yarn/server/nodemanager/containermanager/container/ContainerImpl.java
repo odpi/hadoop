@@ -71,7 +71,7 @@ import org.apache.hadoop.yarn.server.nodemanager.metrics.NodeManagerMetrics;
 import org.apache.hadoop.yarn.server.nodemanager.recovery.NMStateStoreService;
 import org.apache.hadoop.yarn.server.nodemanager.recovery.NMStateStoreService.RecoveredContainerStatus;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
-import org.apache.hadoop.yarn.state.InvalidStateTransitionException;
+import org.apache.hadoop.yarn.state.InvalidStateTransitonException;
 import org.apache.hadoop.yarn.state.MultipleArcTransition;
 import org.apache.hadoop.yarn.state.SingleArcTransition;
 import org.apache.hadoop.yarn.state.StateMachine;
@@ -96,7 +96,6 @@ public class ContainerImpl implements Container {
   private int exitCode = ContainerExitStatus.INVALID;
   private final StringBuilder diagnostics;
   private boolean wasLaunched;
-  private long containerLocalizationStartTime;
   private long containerLaunchStartTime;
   private static Clock clock = new SystemClock();
 
@@ -435,10 +434,9 @@ public class ContainerImpl implements Container {
     this.readLock.lock();
     try {
       return NMContainerStatus.newInstance(this.containerId, getCurrentState(),
-          getResource(), diagnostics.toString(), exitCode,
-          containerTokenIdentifier.getPriority(),
-          containerTokenIdentifier.getCreationTime(),
-          containerTokenIdentifier.getNodeLabelExpression());
+        getResource(), diagnostics.toString(), exitCode,
+        containerTokenIdentifier.getPriority(),
+        containerTokenIdentifier.getCreationTime());
     } finally {
       this.readLock.unlock();
     }
@@ -494,21 +492,16 @@ public class ContainerImpl implements Container {
   // resource usage.
   @SuppressWarnings("unchecked") // dispatcher not typed
   private void sendContainerMonitorStartEvent() {
-    long launchDuration = clock.getTime() - containerLaunchStartTime;
-    metrics.addContainerLaunchDuration(launchDuration);
+      long pmemBytes = getResource().getMemory() * 1024 * 1024L;
+      float pmemRatio = daemonConf.getFloat(
+          YarnConfiguration.NM_VMEM_PMEM_RATIO,
+          YarnConfiguration.DEFAULT_NM_VMEM_PMEM_RATIO);
+      long vmemBytes = (long) (pmemRatio * pmemBytes);
+      int cpuVcores = getResource().getVirtualCores();
 
-    long pmemBytes = getResource().getMemory() * 1024 * 1024L;
-    float pmemRatio = daemonConf.getFloat(
-        YarnConfiguration.NM_VMEM_PMEM_RATIO,
-        YarnConfiguration.DEFAULT_NM_VMEM_PMEM_RATIO);
-    long vmemBytes = (long) (pmemRatio * pmemBytes);
-    int cpuVcores = getResource().getVirtualCores();
-    long localizationDuration = containerLaunchStartTime -
-        containerLocalizationStartTime;
-    dispatcher.getEventHandler().handle(
-        new ContainerStartMonitoringEvent(containerId,
-        vmemBytes, pmemBytes, cpuVcores, launchDuration,
-        localizationDuration));
+      dispatcher.getEventHandler().handle(
+          new ContainerStartMonitoringEvent(containerId,
+              vmemBytes, pmemBytes, cpuVcores));
   }
 
   private void addDiagnostics(String... diags) {
@@ -607,7 +600,6 @@ public class ContainerImpl implements Container {
         }
       }
 
-      container.containerLocalizationStartTime = clock.getTime();
       // Send requests for public, private resources
       Map<String,LocalResource> cntrRsrc = ctxt.getLocalResources();
       if (!cntrRsrc.isEmpty()) {
@@ -763,6 +755,8 @@ public class ContainerImpl implements Container {
       container.sendContainerMonitorStartEvent();
       container.metrics.runningContainer();
       container.wasLaunched  = true;
+      long duration = clock.getTime() - container.containerLaunchStartTime;
+      container.metrics.addContainerLaunchDuration(duration);
 
       if (container.recoveredAsKilled) {
         LOG.info("Killing " + container.containerId
@@ -1105,6 +1099,13 @@ public class ContainerImpl implements Container {
       ContainerDiagnosticsUpdateEvent updateEvent =
           (ContainerDiagnosticsUpdateEvent) event;
       container.addDiagnostics(updateEvent.getDiagnosticsUpdate(), "\n");
+      try {
+        container.stateStore.storeContainerDiagnostics(container.containerId,
+            container.diagnostics);
+      } catch (IOException e) {
+        LOG.warn("Unable to update state store diagnostics for "
+            + container.containerId, e);
+      }
     }
   }
 
@@ -1121,7 +1122,7 @@ public class ContainerImpl implements Container {
       try {
         newState =
             stateMachine.doTransition(event.getType(), event);
-      } catch (InvalidStateTransitionException e) {
+      } catch (InvalidStateTransitonException e) {
         LOG.warn("Can't handle this event at current state: Current: ["
             + oldState + "], eventType: [" + event.getType() + "]", e);
       }

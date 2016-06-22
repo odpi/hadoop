@@ -18,22 +18,26 @@
 package org.apache.hadoop.hdfs;
 
 import static org.mockito.Matchers.anyBoolean;
+import static org.mockito.Matchers.anyList;
 import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.anyShort;
 import static org.mockito.Matchers.anyLong;
 import static org.mockito.Matchers.anyObject;
+import static org.mockito.Matchers.anyShort;
+import static org.mockito.Matchers.anyString;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.spy;
 
 import java.io.DataOutputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
+import java.util.List;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.crypto.CipherSuite;
 import org.apache.hadoop.crypto.CryptoProtocolVersion;
 import org.apache.hadoop.fs.CreateFlag;
 import org.apache.hadoop.fs.FSDataOutputStream;
@@ -41,17 +45,15 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Options;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
-import org.apache.hadoop.hdfs.client.impl.LeaseRenewer;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
-import org.apache.hadoop.hdfs.server.common.HdfsServerConstants;
 import org.apache.hadoop.hdfs.server.namenode.NameNodeAdapter;
 import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocols;
 import org.apache.hadoop.io.EnumSetWritable;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
-import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.util.Time;
 import org.junit.Assert;
 import org.junit.Test;
@@ -59,8 +61,8 @@ import org.mockito.Mockito;
 
 public class TestLease {
   static boolean hasLease(MiniDFSCluster cluster, Path src) {
-    return NameNodeAdapter.getLeaseForPath(cluster.getNameNode(),
-            src.toString()) != null;
+    return NameNodeAdapter.getLeaseManager(cluster.getNamesystem()
+        ).getLeaseByPath(src.toString()) != null;
   }
 
   static int leaseCount(MiniDFSCluster cluster) {
@@ -100,7 +102,7 @@ public class TestLease {
       // make it look like the soft limit has been exceeded.
       LeaseRenewer originalRenewer = dfs.getLeaseRenewer();
       dfs.lastLeaseRenewal = Time.monotonicNow()
-      - HdfsServerConstants.LEASE_SOFTLIMIT_PERIOD - 1000;
+      - HdfsConstants.LEASE_SOFTLIMIT_PERIOD - 1000;
       try {
         dfs.renewLease();
       } catch (IOException e) {}
@@ -116,7 +118,7 @@ public class TestLease {
 
       // make it look like the hard limit has been exceeded.
       dfs.lastLeaseRenewal = Time.monotonicNow()
-      - HdfsServerConstants.LEASE_HARDLIMIT_PERIOD - 1000;
+      - HdfsConstants.LEASE_HARDLIMIT_PERIOD - 1000;
       dfs.renewLease();
 
       // this should not work.
@@ -323,20 +325,8 @@ public class TestLease {
 
       Assert.assertTrue(!hasLease(cluster, a));
       Assert.assertTrue(!hasLease(cluster, b));
-
-      Path fileA = new Path(dir, "fileA");
-      FSDataOutputStream fileA_out = fs.create(fileA);
-      fileA_out.writeBytes("something");
-      Assert.assertTrue("Failed to get the lease!", hasLease(cluster, fileA));
-
+      
       fs.delete(dir, true);
-      try {
-        fileA_out.hflush();
-        Assert.fail("Should validate file existence!");
-      } catch (FileNotFoundException e) {
-        // expected
-        GenericTestUtils.assertExceptionContains("File does not exist", e);
-      }
     } finally {
       if (cluster != null) {cluster.shutdown();}
     }

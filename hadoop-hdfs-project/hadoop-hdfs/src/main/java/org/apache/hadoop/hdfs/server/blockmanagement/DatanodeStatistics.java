@@ -17,9 +17,6 @@
  */
 package org.apache.hadoop.hdfs.server.blockmanagement;
 
-import java.util.Map;
-
-import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 
 /** Datanode statistics */
@@ -74,7 +71,4 @@ public interface DatanodeStatistics {
 
   /** @return the expired heartbeats */
   public int getExpiredHeartbeats();
-
-  /** @return Storage Tier statistics*/
-  Map<StorageType, StorageTypeStats> getStorageTypeStats();
 }

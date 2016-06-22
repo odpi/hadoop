@@ -18,7 +18,6 @@
 
 package org.apache.hadoop.yarn.server.nodemanager;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
@@ -32,7 +31,6 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileContext;
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocalDirAllocator;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
@@ -40,8 +38,6 @@ import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnRuntimeException;
-import org.apache.hadoop.yarn.server.nodemanager.DirectoryCollection.DirsChangeListener;
-import org.apache.hadoop.yarn.server.nodemanager.metrics.NodeManagerMetrics;
 
 /**
  * The class which provides functionality of checking the health of the local
@@ -88,8 +84,6 @@ public class LocalDirsHandlerService extends AbstractService {
   
   private static String FILE_SCHEME = "file";
 
-  private NodeManagerMetrics nodeManagerMetrics = null;
-
   /**
    * Class which is used by the {@link Timer} class to periodically execute the
    * disks' health checker code.
@@ -125,12 +119,7 @@ public class LocalDirsHandlerService extends AbstractService {
   }
 
   public LocalDirsHandlerService() {
-    this(null);
-  }
-
-  public LocalDirsHandlerService(NodeManagerMetrics nodeManagerMetrics) {
     super(LocalDirsHandlerService.class.getName());
-    this.nodeManagerMetrics = nodeManagerMetrics;
   }
 
   /**
@@ -193,22 +182,6 @@ public class LocalDirsHandlerService extends AbstractService {
       dirsHandlerScheduler.cancel();
     }
     super.serviceStop();
-  }
-
-  public void registerLocalDirsChangeListener(DirsChangeListener listener) {
-    localDirs.registerDirsChangeListener(listener);
-  }
-
-  public void registerLogDirsChangeListener(DirsChangeListener listener) {
-    logDirs.registerDirsChangeListener(listener);
-  }
-
-  public void deregisterLocalDirsChangeListener(DirsChangeListener listener) {
-    localDirs.deregisterDirsChangeListener(listener);
-  }
-
-  public void deregisterLogDirsChangeListener(DirsChangeListener listener) {
-    logDirs.deregisterDirsChangeListener(listener);
   }
 
   /**
@@ -440,8 +413,6 @@ public class LocalDirsHandlerService extends AbstractService {
       updateDirsAfterTest();
     }
 
-    updateMetrics();
-
     lastDisksCheckTime = System.currentTimeMillis();
   }
 
@@ -469,35 +440,6 @@ public class LocalDirsHandlerService extends AbstractService {
     return disksTurnedGood;
   }
 
-  private Path getPathToRead(String pathStr, List<String> dirs)
-      throws IOException {
-    // remove the leading slash from the path (to make sure that the uri
-    // resolution results in a valid path on the dir being checked)
-    if (pathStr.startsWith("/")) {
-      pathStr = pathStr.substring(1);
-    }
-
-    FileSystem localFS = FileSystem.getLocal(getConfig());
-    for (String dir : dirs) {
-      try {
-        Path tmpDir = new Path(dir);
-        File tmpFile = tmpDir.isAbsolute()
-            ? new File(localFS.makeQualified(tmpDir).toUri())
-            : new File(dir);
-        Path file = new Path(tmpFile.getPath(), pathStr);
-        if (localFS.exists(file)) {
-          return file;
-        }
-      } catch (IOException ie) {
-        // ignore
-        LOG.warn("Failed to find " + pathStr + " at " + dir, ie);
-      }
-    }
-
-    throw new IOException("Could not find " + pathStr + " in any of" +
-        " the directories");
-  }
-
   public Path getLocalPathForWrite(String pathStr) throws IOException {
     return localDirsAllocator.getLocalPathForWrite(pathStr, getConfig());
   }
@@ -515,9 +457,9 @@ public class LocalDirsHandlerService extends AbstractService {
   }
 
   public Path getLogPathToRead(String pathStr) throws IOException {
-    return getPathToRead(pathStr, getLogDirsForRead());
+    return logDirsAllocator.getLocalPathToRead(pathStr, getConfig());
   }
-
+  
   public static String[] validatePaths(String[] paths) {
     ArrayList<String> validPaths = new ArrayList<String>();
     for (int i = 0; i < paths.length; ++i) {
@@ -543,16 +485,5 @@ public class LocalDirsHandlerService extends AbstractService {
     String[] arrValidPaths = new String[validPaths.size()];
     validPaths.toArray(arrValidPaths);
     return arrValidPaths;
-  }
-
-  protected void updateMetrics() {
-    if (nodeManagerMetrics != null) {
-      nodeManagerMetrics.setBadLocalDirs(localDirs.getFailedDirs().size());
-      nodeManagerMetrics.setBadLogDirs(logDirs.getFailedDirs().size());
-      nodeManagerMetrics.setGoodLocalDirsDiskUtilizationPerc(
-          localDirs.getGoodDirsDiskUtilizationPercentage());
-      nodeManagerMetrics.setGoodLogDirsDiskUtilizationPerc(
-          logDirs.getGoodDirsDiskUtilizationPercentage());
-    }
   }
 }

@@ -56,8 +56,6 @@ public class LightWeightLinkedSet<T> extends LightWeightHashSet<T> {
   private DoubleLinkedElement<T> head;
   private DoubleLinkedElement<T> tail;
 
-  private LinkedSetIterator bookmark;
-
   /**
    * @param initCapacity
    *          Recommended size of the internal array.
@@ -71,7 +69,6 @@ public class LightWeightLinkedSet<T> extends LightWeightHashSet<T> {
     super(initCapacity, maxLoadFactor, minLoadFactor);
     head = null;
     tail = null;
-    bookmark = new LinkedSetIterator();
   }
 
   public LightWeightLinkedSet() {
@@ -114,12 +111,6 @@ public class LightWeightLinkedSet<T> extends LightWeightHashSet<T> {
     tail = le;
     if (head == null) {
       head = le;
-      bookmark.next = head;
-    }
-
-    // Update bookmark, if necessary.
-    if (bookmark.next == null) {
-      bookmark.next = le;
     }
     return true;
   }
@@ -149,11 +140,6 @@ public class LightWeightLinkedSet<T> extends LightWeightHashSet<T> {
     }
     if (tail == found) {
       tail = tail.before;
-    }
-
-    // Update bookmark, if necessary.
-    if (found == this.bookmark.next) {
-      this.bookmark.next = found.after;
     }
     return found;
   }
@@ -276,25 +262,5 @@ public class LightWeightLinkedSet<T> extends LightWeightHashSet<T> {
     super.clear();
     this.head = null;
     this.tail = null;
-    this.resetBookmark();
-  }
-
-  /**
-   * Returns a new iterator starting at the bookmarked element.
-   *
-   * @return the iterator to the bookmarked element.
-   */
-  public Iterator<T> getBookmark() {
-    LinkedSetIterator toRet = new LinkedSetIterator();
-    toRet.next = this.bookmark.next;
-    this.bookmark = toRet;
-    return toRet;
-  }
-
-  /**
-   * Resets the bookmark to the beginning of the list.
-   */
-  public void resetBookmark() {
-    this.bookmark.next = this.head;
   }
 }

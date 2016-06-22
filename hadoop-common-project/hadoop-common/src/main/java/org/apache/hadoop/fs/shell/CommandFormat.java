@@ -31,7 +31,6 @@ import java.util.Set;
 public class CommandFormat {
   final int minPar, maxPar;
   final Map<String, Boolean> options = new HashMap<String, Boolean>();
-  final Map<String, String> optionsWithValue = new HashMap<String, String>();
   boolean ignoreUnknownOpts = false;
   
   /**
@@ -43,7 +42,7 @@ public class CommandFormat {
    * @see #CommandFormat(int, int, String...)
    */
   @Deprecated
-  public CommandFormat(String name, int min, int max, String ... possibleOpt) {
+  public CommandFormat(String n, int min, int max, String ... possibleOpt) {
     this(min, max, possibleOpt);
   }
   
@@ -63,18 +62,6 @@ public class CommandFormat {
         options.put(opt, Boolean.FALSE);
       }
     }
-  }
-
-  /**
-   * add option with value
-   *
-   * @param option option name
-   */
-  public void addOptionWithValue(String option) {
-    if (options.containsKey(option)) {
-      throw new DuplicatedOptionException(option);
-    }
-    optionsWithValue.put(option, null);
   }
 
   /** Parse parameters starting from the given position
@@ -112,18 +99,6 @@ public class CommandFormat {
       if (options.containsKey(opt)) {
         args.remove(pos);
         options.put(opt, Boolean.TRUE);
-      } else if (optionsWithValue.containsKey(opt)) {
-        args.remove(pos);
-        if (pos < args.size() && (args.size() > minPar)
-                && !args.get(pos).startsWith("-")) {
-          arg = args.get(pos);
-          args.remove(pos);
-        } else {
-          arg = "";
-        }
-        if (!arg.startsWith("-") || arg.equals("-")) {
-          optionsWithValue.put(opt, arg);
-        }
       } else if (ignoreUnknownOpts) {
         pos++;
       } else {
@@ -147,19 +122,7 @@ public class CommandFormat {
   public boolean getOpt(String option) {
     return options.containsKey(option) ? options.get(option) : false;
   }
-
-  /**
-   * get the option's value
-   *
-   * @param option option name
-   * @return option value
-   * if option exists, but no value assigned, return ""
-   * if option not exists, return null
-   */
-  public String getOptValue(String option) {
-    return optionsWithValue.get(option);
-  }
-
+  
   /** Returns all the options that are set
    * 
    * @return Set<String> of the enabled options
@@ -238,17 +201,6 @@ public class CommandFormat {
     
     public String getOption() {
       return option;
-    }
-  }
-
-  /**
-   * Used when a duplicated option is supplied to a command.
-   */
-  public static class DuplicatedOptionException extends IllegalArgumentException {
-    private static final long serialVersionUID = 0L;
-
-    public DuplicatedOptionException(String duplicatedOption) {
-      super("option " + duplicatedOption + " already exsits!");
     }
   }
 }

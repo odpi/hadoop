@@ -73,7 +73,7 @@ public abstract class KeyProvider {
       this.versionName = versionName;
       this.material = material;
     }
-    
+
     public String getName() {
       return name;
     }

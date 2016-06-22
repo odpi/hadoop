@@ -303,9 +303,8 @@ public class HistoryFileManager extends AbstractService {
     private JobIndexInfo jobIndexInfo;
     private HistoryInfoState state;
 
-    @VisibleForTesting
-    protected HistoryFileInfo(Path historyFile, Path confFile,
-        Path summaryFile, JobIndexInfo jobIndexInfo, boolean isInDone) {
+    private HistoryFileInfo(Path historyFile, Path confFile, Path summaryFile,
+        JobIndexInfo jobIndexInfo, boolean isInDone) {
       this.historyFile = historyFile;
       this.confFile = confFile;
       this.summaryFile = summaryFile;
@@ -338,8 +337,7 @@ public class HistoryFileManager extends AbstractService {
              + " historyFile = " + historyFile;
     }
 
-    @VisibleForTesting
-    synchronized void moveToDone() throws IOException {
+    private synchronized void moveToDone() throws IOException {
       if (LOG.isDebugEnabled()) {
         LOG.debug("moveToDone: " + historyFile);
       }
@@ -370,8 +368,7 @@ public class HistoryFileManager extends AbstractService {
           paths.add(confFile);
         }
 
-        if (summaryFile == null || !intermediateDoneDirFc.util().exists(
-            summaryFile)) {
+        if (summaryFile == null) {
           LOG.info("No summary file for job: " + jobId);
         } else {
           String jobSummaryString = getJobSummary(intermediateDoneDirFc,
@@ -1078,9 +1075,8 @@ public class HistoryFileManager extends AbstractService {
     return doneDirFc.delete(doneDirFc.makeQualified(serialDir.getPath()), true);
   }
 
-  // for test
   @VisibleForTesting
-  void setMaxHistoryAge(long newValue){
+  protected void setMaxHistoryAge(long newValue){
     maxHistoryAge=newValue;
   } 
 }

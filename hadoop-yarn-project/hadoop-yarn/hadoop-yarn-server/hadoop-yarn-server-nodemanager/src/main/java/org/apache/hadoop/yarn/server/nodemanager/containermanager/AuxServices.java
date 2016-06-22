@@ -225,8 +225,7 @@ public class AuxServices extends AbstractService
           try {
             serv.initializeContainer(new ContainerInitializationContext(
                 event.getUser(), event.getContainer().getContainerId(),
-                event.getContainer().getResource(), event.getContainer()
-                .getContainerTokenIdentifier().getContainerType()));
+                event.getContainer().getResource()));
           } catch (Throwable th) {
             logWarningWhenAuxServiceThrowExceptions(serv,
                 AuxServicesEventType.CONTAINER_INIT, th);
@@ -238,8 +237,7 @@ public class AuxServices extends AbstractService
           try {
             serv.stopContainer(new ContainerTerminationContext(
                 event.getUser(), event.getContainer().getContainerId(),
-                event.getContainer().getResource(), event.getContainer()
-                .getContainerTokenIdentifier().getContainerType()));
+                event.getContainer().getResource()));
           } catch (Throwable th) {
             logWarningWhenAuxServiceThrowExceptions(serv,
                 AuxServicesEventType.CONTAINER_STOP, th);

@@ -212,11 +212,11 @@ public class TestRMAppTransitions {
           renewer, new AMRMTokenSecretManager(conf, this.rmContext),
           new RMContainerTokenSecretManager(conf),
           new NMTokenSecretManagerInRM(conf),
-          new ClientToAMTokenSecretManagerInRM());
+          new ClientToAMTokenSecretManagerInRM(),
+          writer);
     ((RMContextImpl)realRMContext).setStateStore(store);
     publisher = mock(SystemMetricsPublisher.class);
-    realRMContext.setSystemMetricsPublisher(publisher);
-    realRMContext.setRMApplicationHistoryWriter(writer);
+    ((RMContextImpl)realRMContext).setSystemMetricsPublisher(publisher);
 
     this.rmContext = spy(realRMContext);
 
@@ -261,9 +261,10 @@ public class TestRMAppTransitions {
     // but applicationId is still set for safety
     submissionContext.setApplicationId(applicationId);
 
-    RMApp application = new RMAppImpl(applicationId, rmContext, conf, name,
-        user, queue, submissionContext, scheduler, masterService,
-        System.currentTimeMillis(), "YARN", null, mock(ResourceRequest.class));
+    RMApp application =
+        new RMAppImpl(applicationId, rmContext, conf, name, user, queue,
+          submissionContext, scheduler, masterService,
+          System.currentTimeMillis(), "YARN", null, null);
 
     testAppStartState(applicationId, user, name, queue, application);
     this.rmContext.getRMApps().putIfAbsent(application.getApplicationId(),
@@ -969,7 +970,7 @@ public class TestRMAppTransitions {
             appState.getApplicationSubmissionContext().getApplicationId(),
             rmContext, conf,
             submissionContext.getApplicationName(), null,
-            submissionContext.getQueue(), submissionContext, scheduler, null,
+            submissionContext.getQueue(), submissionContext, null, null,
             appState.getSubmitTime(), submissionContext.getApplicationType(),
             submissionContext.getApplicationTags(),
             BuilderUtils.newResourceRequest(

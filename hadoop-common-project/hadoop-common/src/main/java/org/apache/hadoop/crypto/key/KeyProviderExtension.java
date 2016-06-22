@@ -44,11 +44,11 @@ public abstract class KeyProviderExtension
     this.keyProvider = keyProvider;
     this.extension = extensions;
   }
-  
+
   protected E getExtension() {
     return extension;
   }
-  
+
   protected KeyProvider getKeyProvider() {
     return keyProvider;
   }

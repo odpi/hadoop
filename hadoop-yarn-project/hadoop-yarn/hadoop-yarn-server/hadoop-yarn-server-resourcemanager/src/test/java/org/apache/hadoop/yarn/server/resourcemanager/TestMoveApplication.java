@@ -52,7 +52,8 @@ public class TestMoveApplication {
         FifoSchedulerWithMove.class);
     conf.set(YarnConfiguration.YARN_ADMIN_ACL, " ");
     conf.setBoolean(YarnConfiguration.YARN_ACL_ENABLE, true);
-    resourceManager = new MockRM(conf);
+    resourceManager = new ResourceManager();
+    resourceManager.init(conf);
     resourceManager.getRMContext().getContainerTokenSecretManager().rollMasterKey();
     resourceManager.getRMContext().getNMTokenSecretManager().rollMasterKey();
     resourceManager.start();

@@ -45,7 +45,7 @@ public class TestGridmixSummary {
   /**
    * Test {@link DataStatistics}.
    */
-  @Test
+  @Test (timeout=20000)
   public void testDataStatistics() throws Exception {
     // test data-statistics getters with compression enabled
     DataStatistics stats = new DataStatistics(10, 2, true);
@@ -166,7 +166,7 @@ public class TestGridmixSummary {
   /**
    * Test {@link ExecutionSummarizer}.
    */
-  @Test
+  @Test  (timeout=20000)
   @SuppressWarnings({ "unchecked", "rawtypes" })
   public void testExecutionSummarizer() throws IOException {
     Configuration conf = new Configuration();
@@ -359,7 +359,7 @@ public class TestGridmixSummary {
   /**
    * Test {@link ClusterSummarizer}.
    */
-  @Test
+  @Test  (timeout=20000)
   public void testClusterSummarizer() throws IOException {
     ClusterSummarizer cs = new ClusterSummarizer();
     Configuration conf = new Configuration();

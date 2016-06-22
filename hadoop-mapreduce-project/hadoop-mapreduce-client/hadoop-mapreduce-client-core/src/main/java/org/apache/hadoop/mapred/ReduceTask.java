@@ -436,7 +436,7 @@ public class ReduceTask extends Task {
               comparator, keyClass, valueClass, 
               job, reporter, umbilical) :
           new ReduceValuesIterator<INKEY,INVALUE>(rIter, 
-          comparator, keyClass, valueClass,
+          job.getOutputValueGroupingComparator(), keyClass, valueClass, 
           job, reporter);
       values.informReduceProgress();
       while (values.more()) {

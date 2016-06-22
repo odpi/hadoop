@@ -104,22 +104,23 @@ public class TestHostFileManager {
     BlockManager bm = mock(BlockManager.class);
     FSNamesystem fsn = mock(FSNamesystem.class);
     Configuration conf = new Configuration();
-    HostFileManager hm = new HostFileManager();
+    HostFileManager hm = mock(HostFileManager.class);
     HostFileManager.HostSet includedNodes = new HostFileManager.HostSet();
     HostFileManager.HostSet excludedNodes = new HostFileManager.HostSet();
 
     includedNodes.add(entry("127.0.0.1:12345"));
     includedNodes.add(entry("localhost:12345"));
     includedNodes.add(entry("127.0.0.1:12345"));
-    includedNodes.add(entry("127.0.0.2"));
 
+    includedNodes.add(entry("127.0.0.2"));
     excludedNodes.add(entry("127.0.0.1:12346"));
     excludedNodes.add(entry("127.0.30.1:12346"));
 
     Assert.assertEquals(2, includedNodes.size());
     Assert.assertEquals(2, excludedNodes.size());
 
-    hm.refresh(includedNodes, excludedNodes);
+    doReturn(includedNodes).when(hm).getIncludes();
+    doReturn(excludedNodes).when(hm).getExcludes();
 
     DatanodeManager dm = new DatanodeManager(bm, fsn, conf);
     Whitebox.setInternalState(dm, "hostFileManager", hm);

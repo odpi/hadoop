@@ -41,11 +41,4 @@ public class ContainerTerminationContext extends ContainerContext {
     super(user, containerId, resource);
   }
 
-  @Private
-  @Unstable
-  public ContainerTerminationContext(String user, ContainerId containerId,
-      Resource resource, ContainerType containerType) {
-    super(user, containerId, resource, containerType);
-  }
-
 }

@@ -28,7 +28,6 @@ import java.io.Writer;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileUtil;
-import org.apache.hadoop.util.NodeHealthScriptRunner;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerId;
@@ -78,13 +77,7 @@ public class TestNMWebServer {
     FileUtil.fullyDelete(testRootDir);
     FileUtil.fullyDelete(testLogDir);
   }
-
-  private NodeHealthCheckerService createNodeHealthCheckerService(Configuration conf) {
-    NodeHealthScriptRunner scriptRunner = NodeManager.getNodeHealthScriptRunner(conf);
-    LocalDirsHandlerService dirsHandler = new LocalDirsHandlerService();
-    return new NodeHealthCheckerService(scriptRunner, dirsHandler);
-  }
-
+  
   private int startNMWebAppServer(String webAddr) {
     Context nmContext = new NodeManager.NMContext(null, null, null, null,
         null);
@@ -113,7 +106,7 @@ public class TestNMWebServer {
     Configuration conf = new Configuration();
     conf.set(YarnConfiguration.NM_LOCAL_DIRS, testRootDir.getAbsolutePath());
     conf.set(YarnConfiguration.NM_LOG_DIRS, testLogDir.getAbsolutePath());
-    NodeHealthCheckerService healthChecker = createNodeHealthCheckerService(conf);
+    NodeHealthCheckerService healthChecker = new NodeHealthCheckerService();
     healthChecker.init(conf);
     LocalDirsHandlerService dirsHandler = healthChecker.getDiskHandler();
     conf.set(YarnConfiguration.NM_WEBAPP_ADDRESS, webAddr);
@@ -176,7 +169,7 @@ public class TestNMWebServer {
     Configuration conf = new Configuration();
     conf.set(YarnConfiguration.NM_LOCAL_DIRS, testRootDir.getAbsolutePath());
     conf.set(YarnConfiguration.NM_LOG_DIRS, testLogDir.getAbsolutePath());
-    NodeHealthCheckerService healthChecker = createNodeHealthCheckerService(conf);
+    NodeHealthCheckerService healthChecker = new NodeHealthCheckerService();
     healthChecker.init(conf);
     LocalDirsHandlerService dirsHandler = healthChecker.getDiskHandler();
 

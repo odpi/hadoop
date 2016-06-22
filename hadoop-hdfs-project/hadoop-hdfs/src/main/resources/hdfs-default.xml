@@ -470,18 +470,6 @@
 </property>
 
 <property>
-  <name>dfs.namenode.safemode.replication.min</name>
-  <value></value>
-  <description>
-      a separate minimum replication factor for calculating safe block count.
-      This is an expert level setting.
-      Setting this lower than the dfs.namenode.replication.min
-      is not recommend and/or dangerous for production setups.
-      When it's not set it takes value from dfs.namenode.replication.min
-  </description>
-</property>
-
-<property>
   <name>dfs.blocksize</name>
   <value>134217728</value>
   <description>
@@ -590,27 +578,6 @@
 </property>
 
 <property>
-  <name>dfs.namenode.max.full.block.report.leases</name>
-  <value>6</value>
-  <description>The maximum number of leases for full block reports that the
-    NameNode will issue at any given time.  This prevents the NameNode from
-    being flooded with full block reports that use up all the RPC handler
-    threads.  This number should never be more than the number of RPC handler
-    threads or less than 1.
-  </description>
-</property>
-
-<property>
-  <name>dfs.namenode.full.block.report.lease.length.ms</name>
-  <value>300000</value>
-  <description>
-    The number of milliseconds that the NameNode will wait before invalidating
-    a full block report lease.  This prevents a crashed DataNode from
-    permanently using up a full block report lease.
-  </description>
-</property>
-
-<property>
   <name>dfs.datanode.directoryscan.interval</name>
   <value>21600</value>
   <description>Interval in seconds for Datanode to scan data directories and
@@ -635,21 +602,7 @@
 <property>
   <name>dfs.namenode.handler.count</name>
   <value>10</value>
-  <description>The number of Namenode RPC server threads that listen to
-  requests from clients.
-  If dfs.namenode.servicerpc-address is not configured then
-  Namenode RPC server threads listen to requests from all nodes.
-  </description>
-</property>
-
-<property>
-  <name>dfs.namenode.service.handler.count</name>
-  <value>10</value>
-  <description>The number of Namenode RPC server threads that listen to
-  requests from DataNodes and from all other non-client nodes.
-  dfs.namenode.service.handler.count will be valid only if
-  dfs.namenode.servicerpc-address is configured.
-  </description>
+  <description>The number of server threads for the namenode.</description>
 </property>
 
 <property>
@@ -922,18 +875,6 @@
   <description>The SecondaryNameNode retries failed checkpointing. If the 
   failure occurs while loading fsimage or replaying edits, the number of
   retries is limited by this variable. 
-  </description>
-</property>
-
-<property>
-  <name>dfs.namenode.checkpoint.check.quiet-multiplier</name>
-  <value>1.5</value>
-  <description>
-    Used to calculate the amount of time between retries when in the 'quiet' period
-    for creating checkpoints (active namenode already has an up-to-date image from another
-    checkpointer), so we wait a multiplier of the dfs.namenode.checkpoint.check.period before
-    retrying the checkpoint because another node likely is already managing the checkpoints,
-    allowing us to save bandwidth to transfer checkpoints that don't need to be used.
   </description>
 </property>
 
@@ -1315,14 +1256,6 @@
 </property>
 
 <property>
-  <name>dfs.ha.tail-edits.namenode-retries</name>
-  <value>3</value>
-  <description>
-    Number of retries to use when contacting the namenode when tailing the log.
-  </description>
-</property>
-
-<property>
   <name>dfs.ha.automatic-failover.enabled</name>
   <value>false</value>
   <description>
@@ -1567,6 +1500,14 @@
 </property>
 
 <property>
+  <name>dfs.webhdfs.enabled</name>
+  <value>true</value>
+  <description>
+    Enable WebHDFS (REST API) in Namenodes and Datanodes.
+  </description>
+</property>
+
+<property>
   <name>hadoop.fuse.connection.timeout</name>
   <value>300</value>
   <description>
@@ -1584,30 +1525,6 @@
     The number of seconds between cache expiry checks in fuse_dfs. Lower values
     will result in fuse_dfs noticing changes to Kerberos ticket caches more
     quickly.
-  </description>
-</property>
-
-<property>
-  <name>dfs.namenode.metrics.logger.period.seconds</name>
-  <value>600</value>
-  <description>
-    This setting controls how frequently the NameNode logs its metrics. The
-    logging configuration must also define one or more appenders for
-    NameNodeMetricsLog for the metrics to be logged.
-    NameNode metrics logging is disabled if this value is set to zero or
-    less than zero.
-  </description>
-</property>
-
-<property>
-  <name>dfs.datanode.metrics.logger.period.seconds</name>
-  <value>600</value>
-  <description>
-    This setting controls how frequently the DataNode logs its metrics. The
-    logging configuration must also define one or more appenders for
-    DataNodeMetricsLog for the metrics to be logged.
-    DataNode metrics logging is disabled if this value is set to zero or
-    less than zero.
   </description>
 </property>
 
@@ -1718,6 +1635,30 @@
     SaslPropertiesResolver used to resolve the QOP used for a connection to the
     DataNode when reading or writing block data. If not specified, the value of
     hadoop.security.saslproperties.resolver.class is used as the default value.
+  </description>
+</property>
+
+<property>
+  <name>dfs.datanode.hdfs-blocks-metadata.enabled</name>
+  <value>false</value>
+  <description>
+    Boolean which enables backend datanode-side support for the experimental DistributedFileSystem#getFileVBlockStorageLocations API.
+  </description>
+</property>
+
+<property>
+  <name>dfs.client.file-block-storage-locations.num-threads</name>
+  <value>10</value>
+  <description>
+    Number of threads used for making parallel RPCs in DistributedFileSystem#getFileBlockStorageLocations().
+  </description>
+</property>
+
+<property>
+  <name>dfs.client.file-block-storage-locations.timeout.millis</name>
+  <value>1000</value>
+  <description>
+    Timeout (in milliseconds) for the parallel RPCs made in DistributedFileSystem#getFileBlockStorageLocations().
   </description>
 </property>
 
@@ -2125,7 +2066,7 @@
   <value>256</value>
   <description>
     The DFSClient maintains a cache of recently opened file descriptors.
-    This parameter controls the maximum number of file descriptors in the cache.
+    This parameter controls the size of that cache.
     Setting this higher will use more file descriptors,
     but potentially provide better performance on workloads
     involving lots of seeks.
@@ -2151,15 +2092,6 @@
     The client and the DataNode exchange information via
     this shared memory segment.
     It tries paths in order until creation of shared memory segment succeeds.
-  </description>
-</property>
-
-<property>
-  <name>dfs.namenode.audit.log.debug.cmdlist</name>
-  <value></value>
-  <description>
-    A comma separated list of NameNode commands that are written to the HDFS
-    namenode audit log only if the audit log level is debug.
   </description>
 </property>
 
@@ -2210,6 +2142,24 @@
 </property>
 
 <property>
+  <name>dfs.client.slow.io.warning.threshold.ms</name>
+  <value>30000</value>
+  <description>The threshold in milliseconds at which we will log a slow
+    io warning in a dfsclient. By default, this parameter is set to 30000
+    milliseconds (30 seconds).
+  </description>
+</property>
+
+<property>
+  <name>dfs.datanode.slow.io.warning.threshold.ms</name>
+  <value>300</value>
+  <description>The threshold in milliseconds at which we will log a slow
+    io warning in a datanode. By default, this parameter is set to 300
+    milliseconds.
+  </description>
+</property>
+
+<property>
   <name>dfs.namenode.xattrs.enabled</name>
   <value>true</value>
   <description>
@@ -2229,27 +2179,7 @@
   <name>dfs.namenode.fs-limits.max-xattr-size</name>
   <value>16384</value>
   <description>
-    The maximum combined size of the name and value of an extended attribute
-    in bytes. It should be larger than 0, and less than or equal to maximum
-    size hard limit which is 32768.
-  </description>
-</property>
-
-<property>
-  <name>dfs.client.slow.io.warning.threshold.ms</name>
-  <value>30000</value>
-  <description>The threshold in milliseconds at which we will log a slow
-    io warning in a dfsclient. By default, this parameter is set to 30000
-    milliseconds (30 seconds).
-  </description>
-</property>
-
-<property>
-  <name>dfs.datanode.slow.io.warning.threshold.ms</name>
-  <value>300</value>
-  <description>The threshold in milliseconds at which we will log a slow
-    io warning in a datanode. By default, this parameter is set to 300
-    milliseconds.
+    The maximum combined size of the name and value of an extended attribute in bytes.
   </description>
 </property>
 
@@ -2263,14 +2193,6 @@
     to notice large number of pending deletion blocks and take corrective
     action.
   </description>
-</property>
-
-<property>
-  <name>dfs.datanode.block.id.layout.upgrade.threads</name>
-  <value>12</value>
-  <description>The number of threads to use when creating hard links from
-    current to previous blocks during upgrade of a DataNode to block ID-based
-    block layout (see HDFS-6482 for details on the layout).</description>
 </property>
 
 <property>
@@ -2319,6 +2241,14 @@
   <description>How often the DataNode should poll to see if the clients have
     stopped using a replica that the DataNode wants to uncache.
   </description>
+</property>
+
+<property>
+  <name>dfs.datanode.block.id.layout.upgrade.threads</name>
+  <value>12</value>
+  <description>The number of threads to use when creating hard links from
+    current to previous blocks during upgrade of a DataNode to block ID-based
+    block layout (see HDFS-6482 for details on the layout).</description>
 </property>
 
 <property>
@@ -2389,73 +2319,5 @@
     <value>false</value>
     <description>Whether pin blocks on favored DataNode.</description>
   </property>
-
-<property>
-  <name>dfs.client.block.write.locateFollowingBlock.initial.delay.ms</name>
-  <value>400</value>
-  <description>The initial delay (unit is ms) for locateFollowingBlock,
-    the delay time will increase exponentially(double) for each retry.
-  </description>
-</property>
-
-<property>
-  <name>dfs.htrace.spanreceiver.classes</name>
-  <value></value>
-  <description>
-    The class name of the HTrace SpanReceiver for the NameNode and DataNode.
-  </description>
-</property>
-
-<property>
-  <name>dfs.client.htrace.spanreceiver.classes</name>
-  <value></value>
-  <description>
-    The class name of the HTrace SpanReceiver for the HDFS client. You do not
-    need to enable this if your client program has been modified to use HTrace.
-  </description>
-</property>
-
-<property>
-  <name>dfs.ha.zkfc.nn.http.timeout.ms</name>
-  <value>20000</value>
-  <description>
-    The HTTP connection and read timeout value (unit is ms ) when DFS ZKFC
-    tries to get local NN thread dump after local NN becomes
-    SERVICE_NOT_RESPONDING or SERVICE_UNHEALTHY.
-    If it is set to zero, DFS ZKFC won't get local NN thread dump.
-  </description>
-</property>
-
-<property>
-  <name>dfs.namenode.quota.init-threads</name>
-  <value>4</value>
-  <description>
-    The number of concurrent threads to be used in quota initialization. The
-    speed of quota initialization also affects the namenode fail-over latency.
-    If the size of name space is big, try increasing this.
-  </description>
-</property>
-
-<property>
-  <name>dfs.datanode.transfer.socket.send.buffer.size</name>
-  <value>131072</value>
-  <description>
-    Socket send buffer size for DataXceiver (mirroring packets to downstream
-    in pipeline). This may affect TCP connection throughput.
-    If it is set to zero or negative value, no buffer size will be set
-    explicitly, thus enable tcp auto-tuning on some system.
-  </description>
-</property>
-
-<property>
-  <name>dfs.datanode.transfer.socket.recv.buffer.size</name>
-  <value>131072</value>
-  <description>
-    Socket receive buffer size for DataXceiver (receiving packets from client
-    during block writing). This may affect TCP connection throughput.
-    If it is set to zero or negative value, no buffer size will be set
-    explicitly, thus enable tcp auto-tuning on some system.
-  </description>
-</property>
 
 </configuration>

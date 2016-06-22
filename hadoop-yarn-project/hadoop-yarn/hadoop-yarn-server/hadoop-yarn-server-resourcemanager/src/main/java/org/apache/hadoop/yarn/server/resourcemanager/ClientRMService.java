@@ -93,8 +93,6 @@ import org.apache.hadoop.yarn.api.protocolrecords.ReservationSubmissionRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ReservationSubmissionResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ReservationUpdateRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ReservationUpdateResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.UpdateApplicationPriorityRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.UpdateApplicationPriorityResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.SubmitApplicationRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.SubmitApplicationResponse;
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType;
@@ -107,7 +105,6 @@ import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerReport;
 import org.apache.hadoop.yarn.api.records.NodeReport;
 import org.apache.hadoop.yarn.api.records.NodeState;
-import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.QueueACL;
 import org.apache.hadoop.yarn.api.records.QueueInfo;
 import org.apache.hadoop.yarn.api.records.ReservationDefinition;
@@ -154,7 +151,6 @@ import org.apache.hadoop.yarn.util.UTCClock;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.SettableFuture;
-
 
 /**
  * The client interface to the Resource Manager. This module handles all the rpc
@@ -315,9 +311,6 @@ public class ClientRMService extends AbstractService implements
   public GetApplicationReportResponse getApplicationReport(
       GetApplicationReportRequest request) throws YarnException {
     ApplicationId applicationId = request.getApplicationId();
-    if (applicationId == null) {
-      throw new ApplicationNotFoundException("Invalid application id: null");
-    }
 
     UserGroupInformation callerUGI;
     try {
@@ -666,13 +659,6 @@ public class ClientRMService extends AbstractService implements
     YarnClusterMetrics ymetrics = recordFactory
         .newRecordInstance(YarnClusterMetrics.class);
     ymetrics.setNumNodeManagers(this.rmContext.getRMNodes().size());
-    ClusterMetrics clusterMetrics = ClusterMetrics.getMetrics();
-    ymetrics.setNumDecommissionedNodeManagers(clusterMetrics
-      .getNumDecommisionedNMs());
-    ymetrics.setNumActiveNodeManagers(clusterMetrics.getNumActiveNMs());
-    ymetrics.setNumLostNodeManagers(clusterMetrics.getNumLostNMs());
-    ymetrics.setNumUnhealthyNodeManagers(clusterMetrics.getUnhealthyNMs());
-    ymetrics.setNumRebootedNodeManagers(clusterMetrics.getNumRebootedNMs());
     response.setClusterMetrics(ymetrics);
     return response;
   }
@@ -758,8 +744,12 @@ public class ClientRMService extends AbstractService implements
       RMApp application = appsIter.next();
 
       // Check if current application falls under the specified scope
+      boolean allowAccess = checkAccess(callerUGI, application.getUser(),
+          ApplicationAccessType.VIEW_APP, application);
       if (scope == ApplicationsRequestScope.OWN &&
           !callerUGI.getUserName().equals(application.getUser())) {
+        continue;
+      } else if (scope == ApplicationsRequestScope.VIEWABLE && !allowAccess) {
         continue;
       }
 
@@ -807,13 +797,6 @@ public class ClientRMService extends AbstractService implements
         if (!match) {
           continue;
         }
-      }
-
-      // checkAccess can grab the scheduler lock so call it last
-      boolean allowAccess = checkAccess(callerUGI, application.getUser(),
-          ApplicationAccessType.VIEW_APP, application);
-      if (scope == ApplicationsRequestScope.VIEWABLE && !allowAccess) {
-        continue;
       }
 
       reports.add(application.createAndGetApplicationReport(
@@ -1100,7 +1083,7 @@ public class ClientRMService extends AbstractService implements
           .contains(UserGroupInformation.getCurrentUser()
                   .getRealAuthenticationMethod());
     } else {
-      return false;
+      return true;
     }
   }
 
@@ -1236,7 +1219,7 @@ public class ClientRMService extends AbstractService implements
       GetNodesToLabelsRequest request) throws YarnException, IOException {
     RMNodeLabelsManager labelsMgr = rmContext.getNodeLabelManager();
     GetNodesToLabelsResponse response =
-        GetNodesToLabelsResponse.newInstance(labelsMgr.getNodeLabelsInfo());
+        GetNodesToLabelsResponse.newInstance(labelsMgr.getNodeLabels());
     return response;
   }
 
@@ -1246,10 +1229,10 @@ public class ClientRMService extends AbstractService implements
     RMNodeLabelsManager labelsMgr = rmContext.getNodeLabelManager();
     if (request.getNodeLabels() == null || request.getNodeLabels().isEmpty()) {
       return GetLabelsToNodesResponse.newInstance(
-          labelsMgr.getLabelsInfoToNodes());
+          labelsMgr.getLabelsToNodes());
     } else {
       return GetLabelsToNodesResponse.newInstance(
-          labelsMgr.getLabelsInfoToNodes(request.getNodeLabels()));
+          labelsMgr.getLabelsToNodes(request.getNodeLabels()));
     }
   }
 
@@ -1310,74 +1293,4 @@ public class ClientRMService extends AbstractService implements
     }
     return callerUGI.getShortUserName();
   }
-
-  @Override
-  public UpdateApplicationPriorityResponse updateApplicationPriority(
-      UpdateApplicationPriorityRequest request) throws YarnException,
-      IOException {
-
-    ApplicationId applicationId = request.getApplicationId();
-    Priority newAppPriority = request.getApplicationPriority();
-    UserGroupInformation callerUGI;
-    try {
-      callerUGI = UserGroupInformation.getCurrentUser();
-    } catch (IOException ie) {
-      LOG.info("Error getting UGI ", ie);
-      RMAuditLogger.logFailure("UNKNOWN", AuditConstants.UPDATE_APP_PRIORITY,
-          "UNKNOWN", "ClientRMService", "Error getting UGI", applicationId);
-      throw RPCUtil.getRemoteException(ie);
-    }
-
-    RMApp application = this.rmContext.getRMApps().get(applicationId);
-    if (application == null) {
-      RMAuditLogger.logFailure(callerUGI.getUserName(),
-          AuditConstants.UPDATE_APP_PRIORITY, "UNKNOWN", "ClientRMService",
-          "Trying to update priority of an absent application", applicationId);
-      throw new ApplicationNotFoundException(
-          "Trying to update priority o an absent application " + applicationId);
-    }
-
-    if (!checkAccess(callerUGI, application.getUser(),
-        ApplicationAccessType.MODIFY_APP, application)) {
-      RMAuditLogger.logFailure(callerUGI.getShortUserName(),
-          AuditConstants.UPDATE_APP_PRIORITY,
-          "User doesn't have permissions to "
-              + ApplicationAccessType.MODIFY_APP.toString(), "ClientRMService",
-          AuditConstants.UNAUTHORIZED_USER, applicationId);
-      throw RPCUtil.getRemoteException(new AccessControlException("User "
-          + callerUGI.getShortUserName() + " cannot perform operation "
-          + ApplicationAccessType.MODIFY_APP.name() + " on " + applicationId));
-    }
-
-    // Update priority only when app is tracked by the scheduler
-    if (!EnumSet.of(RMAppState.ACCEPTED, RMAppState.RUNNING).contains(
-        application.getState())) {
-      String msg =
-          "Application in " + application.getState()
-              + " state cannot be update priority.";
-      RMAuditLogger
-          .logFailure(callerUGI.getShortUserName(),
-              AuditConstants.UPDATE_APP_PRIORITY, "UNKNOWN", "ClientRMService",
-              msg);
-      throw new YarnException(msg);
-    }
-
-    try {
-      rmContext.getScheduler().updateApplicationPriority(newAppPriority,
-          applicationId);
-    } catch (YarnException ex) {
-      RMAuditLogger.logFailure(callerUGI.getShortUserName(),
-          AuditConstants.UPDATE_APP_PRIORITY, "UNKNOWN", "ClientRMService",
-          ex.getMessage());
-      throw ex;
-    }
-
-    RMAuditLogger.logSuccess(callerUGI.getShortUserName(),
-        AuditConstants.UPDATE_APP_PRIORITY, "ClientRMService", applicationId);
-    UpdateApplicationPriorityResponse response =
-        recordFactory
-            .newRecordInstance(UpdateApplicationPriorityResponse.class);
-    return response;
-  }
-
 }

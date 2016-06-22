@@ -21,10 +21,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 
 import org.apache.commons.logging.Log;
@@ -35,7 +31,6 @@ import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.net.Node;
 import org.apache.hadoop.security.authorize.PolicyProvider;
 import org.apache.hadoop.service.AbstractService;
-import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.VersionUtil;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
@@ -43,8 +38,6 @@ import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerState;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
 import org.apache.hadoop.yarn.api.records.NodeId;
-import org.apache.hadoop.yarn.api.records.NodeLabel;
-import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnException;
@@ -58,8 +51,6 @@ import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatRequest;
 import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatResponse;
 import org.apache.hadoop.yarn.server.api.protocolrecords.RegisterNodeManagerRequest;
 import org.apache.hadoop.yarn.server.api.protocolrecords.RegisterNodeManagerResponse;
-import org.apache.hadoop.yarn.server.api.protocolrecords.UnRegisterNodeManagerRequest;
-import org.apache.hadoop.yarn.server.api.protocolrecords.UnRegisterNodeManagerResponse;
 import org.apache.hadoop.yarn.server.api.records.MasterKey;
 import org.apache.hadoop.yarn.server.api.records.NodeAction;
 import org.apache.hadoop.yarn.server.api.records.NodeStatus;
@@ -101,10 +92,19 @@ public class ResourceTrackerService extends AbstractService implements
   private InetSocketAddress resourceTrackerAddress;
   private String minimumNodeManagerVersion;
 
+  private static final NodeHeartbeatResponse resync = recordFactory
+      .newRecordInstance(NodeHeartbeatResponse.class);
+  private static final NodeHeartbeatResponse shutDown = recordFactory
+  .newRecordInstance(NodeHeartbeatResponse.class);
+  
   private int minAllocMb;
   private int minAllocVcores;
 
-  private boolean isDistributedNodeLabelsConf;
+  static {
+    resync.setNodeAction(NodeAction.RESYNC);
+
+    shutDown.setNodeAction(NodeAction.SHUTDOWN);
+  }
 
   public ResourceTrackerService(RMContext rmContext,
       NodesListManager nodesListManager,
@@ -148,9 +148,6 @@ public class ResourceTrackerService extends AbstractService implements
     minimumNodeManagerVersion = conf.get(
         YarnConfiguration.RM_NODEMANAGER_MINIMUM_VERSION,
         YarnConfiguration.DEFAULT_RM_NODEMANAGER_MINIMUM_VERSION);
-
-    isDistributedNodeLabelsConf =
-        YarnConfiguration.isDistributedNodeLabelConfiguration(conf);
 
     super.serviceInit(conf);
   }
@@ -241,17 +238,6 @@ public class ResourceTrackerService extends AbstractService implements
     }
   }
 
-  static Set<String> convertToStringSet(Set<NodeLabel> nodeLabels) {
-    if (null == nodeLabels) {
-      return null;
-    }
-    Set<String> labels = new HashSet<String>();
-    for (NodeLabel label : nodeLabels) {
-      labels.add(label.getName());
-    }
-    return labels;
-  }
-
   @SuppressWarnings("unchecked")
   @Override
   public RegisterNodeManagerResponse registerNodeManager(
@@ -326,8 +312,6 @@ public class ResourceTrackerService extends AbstractService implements
     } else {
       LOG.info("Reconnect from the node at: " + host);
       this.nmLivelinessMonitor.unregister(nodeId);
-      // Reset heartbeat ID since node just restarted.
-      oldNode.resetLastNodeHeartBeatResponse();
       this.rmContext
           .getDispatcher()
           .getEventHandler()
@@ -352,31 +336,11 @@ public class ResourceTrackerService extends AbstractService implements
       }
     }
 
-    // Update node's labels to RM's NodeLabelManager.
-    Set<String> nodeLabels = convertToStringSet(request.getNodeLabels());
-    if (isDistributedNodeLabelsConf && nodeLabels != null) {
-      try {
-        updateNodeLabelsFromNMReport(nodeLabels, nodeId);
-        response.setAreNodeLabelsAcceptedByRM(true);
-      } catch (IOException ex) {
-        // Ensure the exception is captured in the response
-        response.setDiagnosticsMessage(ex.getMessage());
-        response.setAreNodeLabelsAcceptedByRM(false);
-      }
-    }
-
-    StringBuilder message = new StringBuilder();
-    message.append("NodeManager from node ").append(host).append("(cmPort: ")
-        .append(cmPort).append(" httpPort: ");
-    message.append(httpPort).append(") ")
-        .append("registered with capability: ").append(capability);
-    message.append(", assigned nodeId ").append(nodeId);
-    if (response.getAreNodeLabelsAcceptedByRM()) {
-      message.append(", node labels { ").append(
-          StringUtils.join(",", nodeLabels) + " } ");
-    }
-
-    LOG.info(message.toString());
+    String message =
+        "NodeManager from node " + host + "(cmPort: " + cmPort + " httpPort: "
+            + httpPort + ") " + "registered with capability: " + capability
+            + ", assigned nodeId " + nodeId;
+    LOG.info(message);
     response.setNodeAction(NodeAction.NORMAL);
     response.setRMIdentifier(ResourceManager.getClusterTimeStamp());
     response.setRMVersion(YarnVersionInfo.getVersion());
@@ -395,21 +359,18 @@ public class ResourceTrackerService extends AbstractService implements
      * 2. Check if it's a registered node
      * 3. Check if it's a 'fresh' heartbeat i.e. not duplicate heartbeat
      * 4. Send healthStatus to RMNode
-     * 5. Update node's labels if distributed Node Labels configuration is enabled
      */
 
     NodeId nodeId = remoteNodeStatus.getNodeId();
 
-    // 1. Check if it's a valid (i.e. not excluded) node, if not, see if it is
-    // in decommissioning.
-    if (!this.nodesListManager.isValidNode(nodeId.getHost())
-        && !isNodeInDecommissioning(nodeId)) {
+    // 1. Check if it's a valid (i.e. not excluded) node
+    if (!this.nodesListManager.isValidNode(nodeId.getHost())) {
       String message =
           "Disallowed NodeManager nodeId: " + nodeId + " hostname: "
               + nodeId.getHost();
       LOG.info(message);
-      return YarnServerBuilderUtils.newNodeHeartbeatResponse(
-          NodeAction.SHUTDOWN, message);
+      shutDown.setDiagnosticsMessage(message);
+      return shutDown;
     }
 
     // 2. Check if it's a registered node
@@ -418,8 +379,8 @@ public class ResourceTrackerService extends AbstractService implements
       /* node does not exist */
       String message = "Node not found resyncing " + remoteNodeStatus.getNodeId();
       LOG.info(message);
-      return YarnServerBuilderUtils.newNodeHeartbeatResponse(NodeAction.RESYNC,
-          message);
+      resync.setDiagnosticsMessage(message);
+      return resync;
     }
 
     // Send ping
@@ -439,11 +400,11 @@ public class ResourceTrackerService extends AbstractService implements
               + lastNodeHeartbeatResponse.getResponseId() + " nm response id:"
               + remoteNodeStatus.getResponseId();
       LOG.info(message);
+      resync.setDiagnosticsMessage(message);
       // TODO: Just sending reboot is not enough. Think more.
       this.rmContext.getDispatcher().getEventHandler().handle(
           new RMNodeEvent(nodeId, RMNodeEventType.REBOOTING));
-      return YarnServerBuilderUtils.newNodeHeartbeatResponse(NodeAction.RESYNC,
-          message);
+      return resync;
     }
 
     // Heartbeat response
@@ -462,88 +423,12 @@ public class ResourceTrackerService extends AbstractService implements
     }
 
     // 4. Send status to RMNode, saving the latest response.
-    RMNodeStatusEvent nodeStatusEvent =
+    this.rmContext.getDispatcher().getEventHandler().handle(
         new RMNodeStatusEvent(nodeId, remoteNodeStatus.getNodeHealthStatus(),
-          remoteNodeStatus.getContainersStatuses(),
-          remoteNodeStatus.getKeepAliveApplications(), nodeHeartBeatResponse);
-    if (request.getLogAggregationReportsForApps() != null
-        && !request.getLogAggregationReportsForApps().isEmpty()) {
-      nodeStatusEvent.setLogAggregationReportsForApps(request
-        .getLogAggregationReportsForApps());
-    }
-    this.rmContext.getDispatcher().getEventHandler().handle(nodeStatusEvent);
-
-    // 5. Update node's labels to RM's NodeLabelManager.
-    if (isDistributedNodeLabelsConf && request.getNodeLabels() != null) {
-      try {
-        updateNodeLabelsFromNMReport(
-            convertToStringSet(request.getNodeLabels()), nodeId);
-        nodeHeartBeatResponse.setAreNodeLabelsAcceptedByRM(true);
-      } catch (IOException ex) {
-        //ensure the error message is captured and sent across in response
-        nodeHeartBeatResponse.setDiagnosticsMessage(ex.getMessage());
-        nodeHeartBeatResponse.setAreNodeLabelsAcceptedByRM(false);
-      }
-    }
+            remoteNodeStatus.getContainersStatuses(), 
+            remoteNodeStatus.getKeepAliveApplications(), nodeHeartBeatResponse));
 
     return nodeHeartBeatResponse;
-  }
-
-  /**
-   * Check if node in decommissioning state.
-   * @param nodeId
-   */
-  private boolean isNodeInDecommissioning(NodeId nodeId) {
-    RMNode rmNode = this.rmContext.getRMNodes().get(nodeId);
-    if (rmNode != null &&
-        rmNode.getState().equals(NodeState.DECOMMISSIONING)) {
-      return true;
-    }
-    return false;
-  }
-
-  @SuppressWarnings("unchecked")
-  @Override
-  public UnRegisterNodeManagerResponse unRegisterNodeManager(
-      UnRegisterNodeManagerRequest request) throws YarnException, IOException {
-    UnRegisterNodeManagerResponse response = recordFactory
-        .newRecordInstance(UnRegisterNodeManagerResponse.class);
-    NodeId nodeId = request.getNodeId();
-    RMNode rmNode = this.rmContext.getRMNodes().get(nodeId);
-    if (rmNode == null) {
-      LOG.info("Node not found, ignoring the unregister from node id : "
-          + nodeId);
-      return response;
-    }
-    LOG.info("Node with node id : " + nodeId
-        + " has shutdown, hence unregistering the node.");
-    this.nmLivelinessMonitor.unregister(nodeId);
-    this.rmContext.getDispatcher().getEventHandler()
-        .handle(new RMNodeEvent(nodeId, RMNodeEventType.SHUTDOWN));
-    return response;
-  }
-
-  private void updateNodeLabelsFromNMReport(Set<String> nodeLabels,
-      NodeId nodeId) throws IOException {
-    try {
-      Map<NodeId, Set<String>> labelsUpdate =
-          new HashMap<NodeId, Set<String>>();
-      labelsUpdate.put(nodeId, nodeLabels);
-      this.rmContext.getNodeLabelManager().replaceLabelsOnNode(labelsUpdate);
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("Node Labels {" + StringUtils.join(",", nodeLabels)
-            + "} from Node " + nodeId + " were Accepted from RM");
-      }
-    } catch (IOException ex) {
-      StringBuilder errorMessage = new StringBuilder();
-      errorMessage.append("Node Labels {")
-          .append(StringUtils.join(",", nodeLabels))
-          .append("} reported from NM with ID ").append(nodeId)
-          .append(" was rejected from RM with exception message as : ")
-          .append(ex.getMessage());
-      LOG.error(errorMessage, ex);
-      throw new IOException(errorMessage.toString(), ex);
-    }
   }
 
   private void populateKeys(NodeHeartbeatRequest request,

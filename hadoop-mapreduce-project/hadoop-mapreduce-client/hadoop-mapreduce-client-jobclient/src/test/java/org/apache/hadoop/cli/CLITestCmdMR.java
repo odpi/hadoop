@@ -20,7 +20,6 @@ package org.apache.hadoop.cli;
 import org.apache.hadoop.cli.util.CLICommandTypes;
 import org.apache.hadoop.cli.util.CLITestCmd;
 import org.apache.hadoop.cli.util.CommandExecutor;
-import org.apache.hadoop.conf.Configuration;
 
 public class CLITestCmdMR extends CLITestCmd {
   public CLITestCmdMR(String str, CLICommandTypes type) {
@@ -35,7 +34,7 @@ public class CLITestCmdMR extends CLITestCmd {
    * of the test method.
    */
   @Override
-  public CommandExecutor getExecutor(String tag, Configuration conf)
+  public CommandExecutor getExecutor(String tag)
       throws IllegalArgumentException {
     throw new IllegalArgumentException("Method isn't supported");
   }

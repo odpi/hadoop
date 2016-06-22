@@ -43,7 +43,6 @@ public class ClusterInfo {
   protected String hadoopVersion;
   protected String hadoopBuildVersion;
   protected String hadoopVersionBuiltOn;
-  protected String haZooKeeperConnectionState;
 
   public ClusterInfo() {
   } // JAXB needs this
@@ -63,8 +62,6 @@ public class ClusterInfo {
     this.hadoopVersion = VersionInfo.getVersion();
     this.hadoopBuildVersion = VersionInfo.getBuildVersion();
     this.hadoopVersionBuiltOn = VersionInfo.getDate();
-    this.haZooKeeperConnectionState =
-        rm.getRMContext().getRMAdminService().getHAZookeeperConnectionState();
   }
 
   public String getState() {
@@ -111,7 +108,4 @@ public class ClusterInfo {
     return this.startedOn;
   }
 
-  public String getHAZookeeperConnectionState() {
-    return this.haZooKeeperConnectionState;
-  }
 }

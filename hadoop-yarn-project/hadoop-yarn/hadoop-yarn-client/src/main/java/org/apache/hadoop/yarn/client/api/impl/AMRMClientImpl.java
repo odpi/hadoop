@@ -748,7 +748,7 @@ public class AMRMClientImpl<T extends ContainerRequest> extends AMRMClient<T> {
     }
 
     if (LOG.isDebugEnabled()) {
-      LOG.debug("AFTER decResourceRequest:" + " applicationId="
+      LOG.info("AFTER decResourceRequest:" + " applicationId="
           + " priority=" + priority.getPriority()
           + " resourceName=" + resourceName + " numContainers="
           + resourceRequestInfo.remoteRequest.getNumContainers() 
