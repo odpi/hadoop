@@ -22,9 +22,7 @@ import java.security.PrivilegedExceptionAction;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.security.SaslRpcServer.AuthMethod;
@@ -98,7 +96,6 @@ public class TestApplicationHistoryManagerOnTimelineStore {
     TimelineACLsManager aclsManager = new TimelineACLsManager(new YarnConfiguration());
     TimelineDataManager dataManager =
         new TimelineDataManager(store, aclsManager);
-    dataManager.init(conf);
     ApplicationACLsManager appAclsManager = new ApplicationACLsManager(conf);
     historyManager =
         new ApplicationHistoryManagerOnTimelineStore(dataManager, appAclsManager);
@@ -183,14 +180,9 @@ public class TestApplicationHistoryManagerOnTimelineStore {
       Assert.assertEquals("test app type", app.getApplicationType());
       Assert.assertEquals("user1", app.getUser());
       Assert.assertEquals("test queue", app.getQueue());
-      Assert.assertEquals(Integer.MAX_VALUE + 2L
-          + app.getApplicationId().getId(), app.getStartTime());
-      Assert.assertEquals(Integer.MAX_VALUE + 3L
-          + +app.getApplicationId().getId(), app.getFinishTime());
+      Assert.assertEquals(Integer.MAX_VALUE + 2L, app.getStartTime());
+      Assert.assertEquals(Integer.MAX_VALUE + 3L, app.getFinishTime());
       Assert.assertTrue(Math.abs(app.getProgress() - 1.0F) < 0.0001);
-      Assert.assertEquals(2, app.getApplicationTags().size());
-      Assert.assertTrue(app.getApplicationTags().contains("Test_APP_TAGS_1"));
-      Assert.assertTrue(app.getApplicationTags().contains("Test_APP_TAGS_2"));
       // App 2 doesn't have the ACLs, such that the default ACLs " " will be used.
       // Nobody except admin and owner has access to the details of the app.
       if ((i ==  1 && callerUGI != null &&
@@ -343,21 +335,13 @@ public class TestApplicationHistoryManagerOnTimelineStore {
   @Test
   public void testGetApplications() throws Exception {
     Collection<ApplicationReport> apps =
-        historyManager.getApplications(Long.MAX_VALUE, 0L, Long.MAX_VALUE)
-          .values();
+        historyManager.getAllApplications().values();
     Assert.assertNotNull(apps);
     Assert.assertEquals(SCALE + 1, apps.size());
     ApplicationId ignoredAppId = ApplicationId.newInstance(0, SCALE + 2);
     for (ApplicationReport app : apps) {
       Assert.assertNotEquals(ignoredAppId, app.getApplicationId());
     }
-
-    // Get apps by given appStartedTime period
-    apps =
-        historyManager.getApplications(Long.MAX_VALUE, 2147483653L,
-          Long.MAX_VALUE).values();
-    Assert.assertNotNull(apps);
-    Assert.assertEquals(2, apps.size());
   }
 
   @Test
@@ -475,10 +459,6 @@ public class TestApplicationHistoryManagerOnTimelineStore {
         "test app type");
     entityInfo.put(ApplicationMetricsConstants.USER_ENTITY_INFO, "user1");
     entityInfo.put(ApplicationMetricsConstants.QUEUE_ENTITY_INFO, "test queue");
-    entityInfo.put(
-        ApplicationMetricsConstants.UNMANAGED_APPLICATION_ENTITY_INFO, "false");
-    entityInfo.put(ApplicationMetricsConstants.APPLICATION_PRIORITY_INFO,
-        Priority.newInstance(0));
     entityInfo.put(ApplicationMetricsConstants.SUBMITTED_TIME_ENTITY_INFO,
         Integer.MAX_VALUE + 1L);
     entityInfo.put(ApplicationMetricsConstants.APP_MEM_METRICS,123);
@@ -489,19 +469,15 @@ public class TestApplicationHistoryManagerOnTimelineStore {
       entityInfo.put(ApplicationMetricsConstants.APP_VIEW_ACLS_ENTITY_INFO,
           "user2");
     }
-    Set<String> appTags = new HashSet<String>();
-    appTags.add("Test_APP_TAGS_1");
-    appTags.add("Test_APP_TAGS_2");
-    entityInfo.put(ApplicationMetricsConstants.APP_TAGS_INFO, appTags);
     entity.setOtherInfo(entityInfo);
     TimelineEvent tEvent = new TimelineEvent();
     tEvent.setEventType(ApplicationMetricsConstants.CREATED_EVENT_TYPE);
-    tEvent.setTimestamp(Integer.MAX_VALUE + 2L + appId.getId());
+    tEvent.setTimestamp(Integer.MAX_VALUE + 2L);
     entity.addEvent(tEvent);
     tEvent = new TimelineEvent();
     tEvent.setEventType(
         ApplicationMetricsConstants.FINISHED_EVENT_TYPE);
-    tEvent.setTimestamp(Integer.MAX_VALUE + 3L + appId.getId());
+    tEvent.setTimestamp(Integer.MAX_VALUE + 3L);
     Map<String, Object> eventInfo = new HashMap<String, Object>();
     eventInfo.put(ApplicationMetricsConstants.DIAGNOSTICS_INFO_EVENT_INFO,
         "test diagnostics info");

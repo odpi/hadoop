@@ -33,11 +33,10 @@ import java.util.concurrent.ConcurrentMap;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.security.UserGroupInformation;
-import org.apache.hadoop.service.Service;
 import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.nodelabels.CommonNodeLabelsManager;
-import org.apache.hadoop.yarn.nodelabels.RMNodeLabel;
+import org.apache.hadoop.yarn.nodelabels.NodeLabel;
 import org.apache.hadoop.yarn.security.YarnAuthorizationProvider;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.NodeLabelsUpdateSchedulerEvent;
@@ -46,12 +45,13 @@ import org.apache.hadoop.yarn.util.resource.Resources;
 import com.google.common.collect.ImmutableSet;
 
 public class RMNodeLabelsManager extends CommonNodeLabelsManager {
+  
   protected static class Queue {
-    protected Set<String> accessibleNodeLabels;
+    protected Set<String> acccessibleNodeLabels;
     protected Resource resource;
 
     protected Queue() {
-      accessibleNodeLabels =
+      acccessibleNodeLabels =
           Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
       resource = Resource.newInstance(0, 0);
     }
@@ -99,7 +99,7 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
       // check if any queue contains this label
       for (Entry<String, Queue> entry : queueCollections.entrySet()) {
         String queueName = entry.getKey();
-        Set<String> queueLabels = entry.getValue().accessibleNodeLabels;
+        Set<String> queueLabels = entry.getValue().acccessibleNodeLabels;
         if (queueLabels.contains(label)) {
           throw new IOException("Cannot remove label=" + label
               + ", because queue=" + queueName + " is using this label. "
@@ -114,15 +114,9 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
       throws IOException {
     try {
       writeLock.lock();
-      if (getServiceState() == Service.STATE.STARTED) {
-        // We cannot remove node labels from collection when some queue(s) are
-        // using any of them.
-        // We will only do this check when service starting finished. Before
-        // service starting, we will replay edit logs and recover state. It is
-        // possible that a history operation removed some labels which were being
-        // used by some queues in the past but not used by current queues.
-        checkRemoveFromClusterNodeLabelsOfQueue(labelsToRemove);
-      }
+
+      checkRemoveFromClusterNodeLabelsOfQueue(labelsToRemove);
+
       // copy before NMs
       Map<String, Host> before = cloneNodeMap();
 
@@ -162,7 +156,7 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
       throws IOException {
     try {
       writeLock.lock();
-
+      
       // get nodesCollection before edition
       Map<String, Host> before = cloneNodeMap(replaceLabelsToNode.keySet());
 
@@ -177,6 +171,7 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
       writeLock.unlock();
     }
   }
+  
 
   /*
    * Following methods are used for setting if a node is up and running, and it
@@ -206,7 +201,7 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
       Set<String> labelsForNode = getLabelsByNode(nodeId);
       if (labelsForNode != null) {
         for (String label : labelsForNode) {
-          RMNodeLabel labelInfo = labelCollections.get(label);
+          NodeLabel labelInfo = labelCollections.get(label);
           if(labelInfo != null) {
             labelInfo.addNodeId(nodeId);
           }
@@ -261,7 +256,7 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
     }
   }
 
-  public void updateNodeResource(NodeId node, Resource newResource) {
+  public void updateNodeResource(NodeId node, Resource newResource) throws IOException {
     deactivateNode(node);
     activateNode(node, newResource);
   }
@@ -282,7 +277,7 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
           continue;
         }
 
-        q.accessibleNodeLabels.addAll(labels);
+        q.acccessibleNodeLabels.addAll(labels);
         for (Host host : nodeCollections.values()) {
           for (Entry<NodeId, Node> nentry : host.nms.entrySet()) {
             NodeId nodeId = nentry.getKey();
@@ -388,7 +383,7 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
         // no label in the past
         if (oldLabels.isEmpty()) {
           // update labels
-          RMNodeLabel label = labelCollections.get(NO_LABEL);
+          NodeLabel label = labelCollections.get(NO_LABEL);
           label.removeNode(oldNM.resource);
 
           // update queues, all queue can access this node
@@ -398,7 +393,7 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
         } else {
           // update labels
           for (String labelName : oldLabels) {
-            RMNodeLabel label = labelCollections.get(labelName);
+            NodeLabel label = labelCollections.get(labelName);
             if (null == label) {
               continue;
             }
@@ -423,7 +418,7 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
         // no label in the past
         if (newLabels.isEmpty()) {
           // update labels
-          RMNodeLabel label = labelCollections.get(NO_LABEL);
+          NodeLabel label = labelCollections.get(NO_LABEL);
           label.addNode(newNM.resource);
 
           // update queues, all queue can access this node
@@ -433,7 +428,7 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
         } else {
           // update labels
           for (String labelName : newLabels) {
-            RMNodeLabel label = labelCollections.get(labelName);
+            NodeLabel label = labelCollections.get(labelName);
             label.addNode(newNM.resource);
           }
 
@@ -475,7 +470,7 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
     }
 
     for (String label : nodeLabels) {
-      if (q.accessibleNodeLabels.contains(label)) {
+      if (q.acccessibleNodeLabels.contains(label)) {
         return true;
       }
     }
@@ -504,13 +499,13 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
     this.rmContext = rmContext;
   }
 
-  public List<RMNodeLabel> pullRMNodeLabelsInfo() {
+  public List<NodeLabel> pullRMNodeLabelsInfo() {
     try {
       readLock.lock();
-      List<RMNodeLabel> infos = new ArrayList<RMNodeLabel>();
+      List<NodeLabel> infos = new ArrayList<NodeLabel>();
 
-      for (Entry<String, RMNodeLabel> entry : labelCollections.entrySet()) {
-        RMNodeLabel label = entry.getValue();
+      for (Entry<String, NodeLabel> entry : labelCollections.entrySet()) {
+        NodeLabel label = entry.getValue();
         infos.add(label.getCopy());
       }
 

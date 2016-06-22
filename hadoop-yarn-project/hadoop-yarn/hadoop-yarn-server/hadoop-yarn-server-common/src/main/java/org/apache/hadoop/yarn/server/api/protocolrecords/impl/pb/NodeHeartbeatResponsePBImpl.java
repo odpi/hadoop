@@ -483,18 +483,5 @@ public class NodeHeartbeatResponsePBImpl extends
   private MasterKeyProto convertToProtoFormat(MasterKey t) {
     return ((MasterKeyPBImpl) t).getProto();
   }
-
-  @Override
-  public boolean getAreNodeLabelsAcceptedByRM() {
-    NodeHeartbeatResponseProtoOrBuilder p =
-        this.viaProto ? this.proto : this.builder;
-    return p.getAreNodeLabelsAcceptedByRM();
-  }
-
-  @Override
-  public void setAreNodeLabelsAcceptedByRM(boolean areNodeLabelsAcceptedByRM) {
-    maybeInitBuilder();
-    this.builder.setAreNodeLabelsAcceptedByRM(areNodeLabelsAcceptedByRM);
-  }
 }
 

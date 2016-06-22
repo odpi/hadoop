@@ -20,7 +20,6 @@ package org.apache.hadoop.yarn.server.resourcemanager.webapp.dao;
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlRootElement;
-import javax.xml.bind.annotation.XmlTransient;
 
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.LeafQueue;
 
@@ -40,17 +39,12 @@ public class CapacitySchedulerLeafQueueInfo extends CapacitySchedulerQueueInfo {
   protected ResourceInfo usedAMResource;
   protected ResourceInfo userAMResourceLimit;
   protected boolean preemptionDisabled;
-  protected String defaultNodeLabelExpression;
-  protected int defaultPriority;
-
-  @XmlTransient
-  protected String orderingPolicyInfo;
 
   CapacitySchedulerLeafQueueInfo() {
   };
 
-  CapacitySchedulerLeafQueueInfo(LeafQueue q, String nodeLabel) {
-    super(q, nodeLabel);
+  CapacitySchedulerLeafQueueInfo(LeafQueue q) {
+    super(q);
     numActiveApplications = q.getNumActiveApplications();
     numPendingApplications = q.getNumPendingApplications();
     numContainers = q.getNumContainers();
@@ -63,9 +57,6 @@ public class CapacitySchedulerLeafQueueInfo extends CapacitySchedulerQueueInfo {
     usedAMResource = new ResourceInfo(q.getQueueResourceUsage().getAMUsed());
     userAMResourceLimit = new ResourceInfo(q.getUserAMResourceLimit());
     preemptionDisabled = q.getPreemptionDisabled();
-    orderingPolicyInfo = q.getOrderingPolicy().getInfo();
-    defaultNodeLabelExpression = q.getDefaultNodeLabelExpression();
-    defaultPriority = q.getDefaultApplicationPriority().getPriority();
   }
 
   public int getNumActiveApplications() {
@@ -115,17 +106,5 @@ public class CapacitySchedulerLeafQueueInfo extends CapacitySchedulerQueueInfo {
 
   public boolean getPreemptionDisabled() {
     return preemptionDisabled;
-  }
-  
-  public String getOrderingPolicyInfo() {
-    return orderingPolicyInfo;
-  }
-
-  public String getDefaultNodeLabelExpression() {
-    return defaultNodeLabelExpression;
-  }
-
-  public int getDefaultApplicationPriority() {
-    return defaultPriority;
   }
 }

@@ -36,7 +36,6 @@ import org.apache.hadoop.security.authorize.ProxyUsers;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenSecretManager;
-import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -45,10 +44,10 @@ import javax.servlet.http.HttpServletRequest;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 
+import org.junit.Assert;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
-
 
 public class TestJspHelper {
 
@@ -134,6 +133,7 @@ public class TestJspHelper {
         .next();
     Assert.assertEquals(expected, tokenInUgi.getService().toString());
   }
+  
 
   @Test
   public void testGetUgiFromToken() throws IOException {

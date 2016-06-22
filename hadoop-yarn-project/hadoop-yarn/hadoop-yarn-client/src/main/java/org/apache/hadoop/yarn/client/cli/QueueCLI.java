@@ -32,7 +32,6 @@ import org.apache.commons.cli.Options;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.util.ToolRunner;
-import org.apache.hadoop.yarn.api.records.NodeLabel;
 import org.apache.hadoop.yarn.api.records.QueueInfo;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 
@@ -136,11 +135,11 @@ public class QueueCLI extends YarnCLI {
     writer.print("\tMaximum Capacity : ");
     writer.println(df.format(queueInfo.getMaximumCapacity() * 100) + "%");
     writer.print("\tDefault Node Label expression : ");
-    String nodeLabelExpression = queueInfo.getDefaultNodeLabelExpression();
-    nodeLabelExpression =
-        (nodeLabelExpression == null || nodeLabelExpression.trim().isEmpty())
-            ? NodeLabel.DEFAULT_NODE_LABEL_PARTITION : nodeLabelExpression;
-    writer.println(nodeLabelExpression);
+    if (null != queueInfo.getDefaultNodeLabelExpression()) {
+      writer.println(queueInfo.getDefaultNodeLabelExpression());
+    } else {
+      writer.println();
+    }
 
     Set<String> nodeLabels = queueInfo.getAccessibleNodeLabels();
     StringBuilder labelList = new StringBuilder();

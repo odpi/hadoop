@@ -42,6 +42,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
+import org.apache.hadoop.io.DataInputByteBuffer;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.net.NetUtils;
@@ -50,6 +51,7 @@ import org.apache.hadoop.security.SaslRpcServer;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authorize.PolicyProvider;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
+import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.service.CompositeService;
 import org.apache.hadoop.service.Service;
@@ -90,7 +92,6 @@ import org.apache.hadoop.yarn.proto.YarnProtos.ApplicationACLMapProto;
 import org.apache.hadoop.yarn.proto.YarnServerNodemanagerRecoveryProtos.ContainerManagerApplicationProto;
 import org.apache.hadoop.yarn.security.ContainerTokenIdentifier;
 import org.apache.hadoop.yarn.security.NMTokenIdentifier;
-import org.apache.hadoop.yarn.server.api.ContainerType;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrCompletedAppsEvent;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrCompletedContainersEvent;
 import org.apache.hadoop.yarn.server.nodemanager.ContainerExecutor;
@@ -102,7 +103,6 @@ import org.apache.hadoop.yarn.server.nodemanager.NMAuditLogger;
 import org.apache.hadoop.yarn.server.nodemanager.NMAuditLogger.AuditConstants;
 import org.apache.hadoop.yarn.server.nodemanager.NodeManager;
 import org.apache.hadoop.yarn.server.nodemanager.NodeStatusUpdater;
-import org.apache.hadoop.yarn.server.nodemanager.amrmproxy.AMRMProxyService;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.application.Application;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.application.ApplicationContainerInitEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.application.ApplicationEvent;
@@ -134,8 +134,8 @@ import org.apache.hadoop.yarn.server.nodemanager.recovery.NMStateStoreService.Re
 import org.apache.hadoop.yarn.server.nodemanager.recovery.NMStateStoreService.RecoveredContainerState;
 import org.apache.hadoop.yarn.server.nodemanager.recovery.NMStateStoreService.RecoveredContainerStatus;
 import org.apache.hadoop.yarn.server.nodemanager.security.authorize.NMPolicyProvider;
+import org.apache.hadoop.yarn.server.security.ApplicationACLsManager;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
-import org.apache.hadoop.yarn.server.utils.YarnServerSecurityUtils;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.ByteString;
@@ -151,10 +151,6 @@ public class ContainerManagerImpl extends CompositeService implements
 
   private static final Log LOG = LogFactory.getLog(ContainerManagerImpl.class);
 
-  static final String INVALID_NMTOKEN_MSG = "Invalid NMToken";
-  static final String INVALID_CONTAINERTOKEN_MSG =
-      "Invalid ContainerToken";
-
   final Context context;
   private final ContainersMonitor containersMonitor;
   private Server server;
@@ -167,20 +163,20 @@ public class ContainerManagerImpl extends CompositeService implements
 
   protected LocalDirsHandlerService dirsHandler;
   protected final AsyncDispatcher dispatcher;
+  private final ApplicationACLsManager aclsManager;
 
   private final DeletionService deletionService;
   private AtomicBoolean blockNewContainerRequests = new AtomicBoolean(false);
   private boolean serviceStopped = false;
   private final ReadLock readLock;
   private final WriteLock writeLock;
-  private AMRMProxyService amrmProxyService;
-  private boolean amrmProxyEnabled = false;
 
   private long waitForContainersOnShutdownMillis;
 
   public ContainerManagerImpl(Context context, ContainerExecutor exec,
       DeletionService deletionContext, NodeStatusUpdater nodeStatusUpdater,
-      NodeManagerMetrics metrics, LocalDirsHandlerService dirsHandler) {
+      NodeManagerMetrics metrics, ApplicationACLsManager aclsManager,
+      LocalDirsHandlerService dirsHandler) {
     super(ContainerManagerImpl.class.getName());
     this.context = context;
     this.dirsHandler = dirsHandler;
@@ -198,6 +194,7 @@ public class ContainerManagerImpl extends CompositeService implements
     addService(containersLauncher);
 
     this.nodeStatusUpdater = nodeStatusUpdater;
+    this.aclsManager = aclsManager;
 
     // Start configurable services
     auxiliaryServices = new AuxServices();
@@ -238,20 +235,6 @@ public class ContainerManagerImpl extends CompositeService implements
     addService(sharedCacheUploader);
     dispatcher.register(SharedCacheUploadEventType.class, sharedCacheUploader);
 
-    amrmProxyEnabled =
-        conf.getBoolean(YarnConfiguration.AMRM_PROXY_ENABLED,
-            YarnConfiguration.DEFAULT_AMRM_PROXY_ENABLED);
-
-    if (amrmProxyEnabled) {
-      LOG.info("AMRMProxyService is enabled. "
-          + "All the AM->RM requests will be intercepted by the proxy");
-      this.amrmProxyService =
-          new AMRMProxyService(this.context, this.dispatcher);
-      addService(this.amrmProxyService);
-    } else {
-      LOG.info("AMRMProxyService is disabled");
-    }
-
     waitForContainersOnShutdownMillis =
         conf.getLong(YarnConfiguration.NM_SLEEP_DELAY_BEFORE_SIGKILL_MS,
             YarnConfiguration.DEFAULT_NM_SLEEP_DELAY_BEFORE_SIGKILL_MS) +
@@ -261,10 +244,6 @@ public class ContainerManagerImpl extends CompositeService implements
 
     super.serviceInit(conf);
     recover();
-  }
-
-  public boolean isARMRMProxyEnabled() {
-    return amrmProxyEnabled;
   }
 
   @SuppressWarnings("unchecked")
@@ -335,8 +314,7 @@ public class ContainerManagerImpl extends CompositeService implements
         + " with exit code " + rcs.getExitCode());
 
     if (context.getApplications().containsKey(appId)) {
-      Credentials credentials =
-          YarnServerSecurityUtils.parseCredentials(launchContext);
+      Credentials credentials = parseCredentials(launchContext);
       Container container = new ContainerImpl(getConfig(), dispatcher,
           context.getNMStateStore(), req.getContainerLaunchContext(),
           credentials, metrics, token, rcs.getStatus(), rcs.getExitCode(),
@@ -548,11 +526,8 @@ public class ContainerManagerImpl extends CompositeService implements
 
     if (this.context.getNMStateStore().canRecover()
         && !this.context.getDecommissioned()) {
-      if (getConfig().getBoolean(YarnConfiguration.NM_RECOVERY_SUPERVISED,
-          YarnConfiguration.DEFAULT_NM_RECOVERY_SUPERVISED)) {
-        // do not cleanup apps as they can be recovered on restart
-        return;
-      }
+      // do not cleanup apps as they can be recovered on restart
+      return;
     }
 
     List<ApplicationId> appIds =
@@ -666,9 +641,6 @@ public class ContainerManagerImpl extends CompositeService implements
 
   protected void authorizeUser(UserGroupInformation remoteUgi,
       NMTokenIdentifier nmTokenIdentifier) throws YarnException {
-    if (nmTokenIdentifier == null) {
-      throw RPCUtil.getRemoteException(INVALID_NMTOKEN_MSG);
-    }
     if (!remoteUgi.getUserName().equals(
       nmTokenIdentifier.getApplicationAttemptId().toString())) {
       throw RPCUtil.getRemoteException("Expected applicationAttemptId: "
@@ -686,12 +658,7 @@ public class ContainerManagerImpl extends CompositeService implements
   @VisibleForTesting
   protected void authorizeStartRequest(NMTokenIdentifier nmTokenIdentifier,
       ContainerTokenIdentifier containerTokenIdentifier) throws YarnException {
-    if (nmTokenIdentifier == null) {
-      throw RPCUtil.getRemoteException(INVALID_NMTOKEN_MSG);
-    }
-    if (containerTokenIdentifier == null) {
-      throw RPCUtil.getRemoteException(INVALID_CONTAINERTOKEN_MSG);
-    }
+
     ContainerId containerId = containerTokenIdentifier.getContainerID();
     String containerIDStr = containerId.toString();
     boolean unauthorized = false;
@@ -750,26 +717,13 @@ public class ContainerManagerImpl extends CompositeService implements
     for (StartContainerRequest request : requests.getStartContainerRequests()) {
       ContainerId containerId = null;
       try {
-        if (request.getContainerToken() == null ||
-            request.getContainerToken().getIdentifier() == null) {
-          throw new IOException(INVALID_CONTAINERTOKEN_MSG);
-        }
         ContainerTokenIdentifier containerTokenIdentifier =
             BuilderUtils.newContainerTokenIdentifier(request.getContainerToken());
         verifyAndGetContainerTokenIdentifier(request.getContainerToken(),
           containerTokenIdentifier);
         containerId = containerTokenIdentifier.getContainerID();
-
-        // Initialize the AMRMProxy service instance only if the container is of
-        // type AM and if the AMRMProxy service is enabled
-        if (isARMRMProxyEnabled()
-            && containerTokenIdentifier.getContainerType().equals(
-                ContainerType.APPLICATION_MASTER)) {
-          this.amrmProxyService.processApplicationStartRequest(request);
-        }
-
-        startContainerInternal(nmTokenIdentifier,
-            containerTokenIdentifier, request);
+        startContainerInternal(nmTokenIdentifier, containerTokenIdentifier,
+          request);
         succeededContainers.add(containerId);
       } catch (YarnException e) {
         failedContainers.put(containerId, SerializedException.newInstance(e));
@@ -782,7 +736,7 @@ public class ContainerManagerImpl extends CompositeService implements
     }
 
     return StartContainersResponse.newInstance(getAuxServiceMetaData(),
-        succeededContainers, failedContainers);
+      succeededContainers, failedContainers);
   }
 
   private ContainerManagerApplicationProto buildAppProto(ApplicationId appId,
@@ -875,8 +829,7 @@ public class ContainerManagerImpl extends CompositeService implements
       }
     }
 
-    Credentials credentials =
-        YarnServerSecurityUtils.parseCredentials(launchContext);
+    Credentials credentials = parseCredentials(launchContext);
 
     Container container =
         new ContainerImpl(getConfig(), this.dispatcher,
@@ -960,6 +913,27 @@ public class ContainerManagerImpl extends CompositeService implements
       nmTokenIdentifier);
   }
 
+  private Credentials parseCredentials(ContainerLaunchContext launchContext)
+      throws IOException {
+    Credentials credentials = new Credentials();
+    // //////////// Parse credentials
+    ByteBuffer tokens = launchContext.getTokens();
+
+    if (tokens != null) {
+      DataInputByteBuffer buf = new DataInputByteBuffer();
+      tokens.rewind();
+      buf.reset(tokens);
+      credentials.readTokenStorageStream(buf);
+      if (LOG.isDebugEnabled()) {
+        for (Token<? extends TokenIdentifier> tk : credentials.getAllTokens()) {
+          LOG.debug(tk.getService() + " = " + tk.toString());
+        }
+      }
+    }
+    // //////////// End of parsing credentials
+    return credentials;
+  }
+
   /**
    * Stop a list of containers running on this NodeManager.
    */
@@ -972,9 +946,6 @@ public class ContainerManagerImpl extends CompositeService implements
         new HashMap<ContainerId, SerializedException>();
     UserGroupInformation remoteUgi = getRemoteUgi();
     NMTokenIdentifier identifier = selectNMTokenIdentifier(remoteUgi);
-    if (identifier == null) {
-      throw RPCUtil.getRemoteException(INVALID_NMTOKEN_MSG);
-    }
     for (ContainerId id : requests.getContainerIds()) {
       try {
         stopContainerInternal(identifier, id);
@@ -1030,9 +1001,6 @@ public class ContainerManagerImpl extends CompositeService implements
         new HashMap<ContainerId, SerializedException>();
     UserGroupInformation remoteUgi = getRemoteUgi();
     NMTokenIdentifier identifier = selectNMTokenIdentifier(remoteUgi);
-    if (identifier == null) {
-      throw RPCUtil.getRemoteException(INVALID_NMTOKEN_MSG);
-    }
     for (ContainerId id : request.getContainerIds()) {
       try {
         ContainerStatus status = getContainerStatusInternal(id, identifier);
@@ -1073,9 +1041,6 @@ public class ContainerManagerImpl extends CompositeService implements
   protected void authorizeGetAndStopContainerRequest(ContainerId containerId,
       Container container, boolean stopRequest, NMTokenIdentifier identifier)
       throws YarnException {
-    if (identifier == null) {
-      throw RPCUtil.getRemoteException(INVALID_NMTOKEN_MSG);
-    }
     /*
      * For get/stop container status; we need to verify that 1) User (NMToken)
      * application attempt only has started container. 2) Requested containerId

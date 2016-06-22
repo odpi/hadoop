@@ -24,7 +24,6 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.service.Service.STATE;
-import org.apache.hadoop.yarn.api.records.DecommissionType;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.factories.RecordFactory;
 import org.apache.hadoop.yarn.factory.providers.RecordFactoryProvider;
@@ -120,8 +119,8 @@ public class TestResourceManagerAdministrationProtocolPBClientImpl {
   @Test
   public void testRefreshNodes() throws Exception {
     resourceManager.getClientRMService();
-    RefreshNodesRequest request = RefreshNodesRequest
-        .newInstance(DecommissionType.NORMAL);
+    RefreshNodesRequest request = recordFactory
+            .newRecordInstance(RefreshNodesRequest.class);
     RefreshNodesResponse response = client.refreshNodes(request);
     assertNotNull(response);
   }

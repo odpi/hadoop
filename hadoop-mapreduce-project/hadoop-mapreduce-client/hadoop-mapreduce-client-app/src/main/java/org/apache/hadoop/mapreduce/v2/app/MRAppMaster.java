@@ -56,7 +56,6 @@ import org.apache.hadoop.mapreduce.OutputFormat;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.TaskAttemptID;
 import org.apache.hadoop.mapreduce.TypeConverter;
-import org.apache.hadoop.mapreduce.counters.Limits;
 import org.apache.hadoop.mapreduce.jobhistory.AMStartedEvent;
 import org.apache.hadoop.mapreduce.jobhistory.EventReader;
 import org.apache.hadoop.mapreduce.jobhistory.EventType;
@@ -108,8 +107,6 @@ import org.apache.hadoop.mapreduce.v2.app.rm.RMCommunicator;
 import org.apache.hadoop.mapreduce.v2.app.rm.RMContainerAllocator;
 import org.apache.hadoop.mapreduce.v2.app.rm.RMContainerRequestor;
 import org.apache.hadoop.mapreduce.v2.app.rm.RMHeartbeatHandler;
-import org.apache.hadoop.mapreduce.v2.app.rm.preemption.AMPreemptionPolicy;
-import org.apache.hadoop.mapreduce.v2.app.rm.preemption.NoopAMPreemptionPolicy;
 import org.apache.hadoop.mapreduce.v2.app.speculate.DefaultSpeculator;
 import org.apache.hadoop.mapreduce.v2.app.speculate.Speculator;
 import org.apache.hadoop.mapreduce.v2.app.speculate.SpeculatorEvent;
@@ -200,8 +197,8 @@ public class MRAppMaster extends CompositeService {
   private ContainerLauncher containerLauncher;
   private EventHandler<CommitterEvent> committerEventHandler;
   private Speculator speculator;
-  protected TaskAttemptListener taskAttemptListener;
-  protected JobTokenSecretManager jobTokenSecretManager =
+  private TaskAttemptListener taskAttemptListener;
+  private JobTokenSecretManager jobTokenSecretManager =
       new JobTokenSecretManager();
   private JobId jobId;
   private boolean newApiCommitter;
@@ -210,16 +207,7 @@ public class MRAppMaster extends CompositeService {
   private JobEventDispatcher jobEventDispatcher;
   private JobHistoryEventHandler jobHistoryEventHandler;
   private SpeculatorEventDispatcher speculatorEventDispatcher;
-  private AMPreemptionPolicy preemptionPolicy;
   private byte[] encryptedSpillKey;
-
-  // After a task attempt completes from TaskUmbilicalProtocol's point of view,
-  // it will be transitioned to finishing state.
-  // taskAttemptFinishingMonitor is just a timer for attempts in finishing
-  // state. If the attempt stays in finishing state for too long,
-  // taskAttemptFinishingMonitor will notify the attempt via TA_TIMED_OUT
-  // event.
-  private TaskAttemptFinishingMonitor taskAttemptFinishingMonitor;
 
   private Job job;
   private Credentials jobCredentials = new Credentials(); // Filled during init
@@ -233,8 +221,7 @@ public class MRAppMaster extends CompositeService {
   JobStateInternal forcedState = null;
   private final ScheduledExecutorService logSyncer;
 
-  private long recoveredJobStartTime = -1L;
-  private static boolean mainStarted = false;
+  private long recoveredJobStartTime = 0;
 
   @VisibleForTesting
   protected AtomicBoolean successfullyUnregistered =
@@ -263,12 +250,6 @@ public class MRAppMaster extends CompositeService {
     logSyncer = TaskLog.createLogSyncer();
     LOG.info("Created MRAppMaster for application " + applicationAttemptId);
   }
-  protected TaskAttemptFinishingMonitor createTaskAttemptFinishingMonitor(
-      EventHandler eventHandler) {
-    TaskAttemptFinishingMonitor monitor =
-        new TaskAttemptFinishingMonitor(eventHandler);
-    return monitor;
-  }
 
   @Override
   protected void serviceInit(final Configuration conf) throws Exception {
@@ -279,11 +260,7 @@ public class MRAppMaster extends CompositeService {
 
     initJobCredentialsAndUGI(conf);
 
-    dispatcher = createDispatcher();
-    addIfService(dispatcher);
-    taskAttemptFinishingMonitor = createTaskAttemptFinishingMonitor(dispatcher.getEventHandler());
-    addIfService(taskAttemptFinishingMonitor);
-    context = new RunningAppContext(conf, taskAttemptFinishingMonitor);
+    context = new RunningAppContext(conf);
 
     // Job name is the same as the app name util we support DAG of jobs
     // for an app later
@@ -334,20 +311,14 @@ public class MRAppMaster extends CompositeService {
             " because a commit was started.");
         copyHistory = true;
         if (commitSuccess) {
-          shutDownMessage =
-              "Job commit succeeded in a prior MRAppMaster attempt " +
-              "before it crashed. Recovering.";
+          shutDownMessage = "We crashed after successfully committing. Recovering.";
           forcedState = JobStateInternal.SUCCEEDED;
         } else if (commitFailure) {
-          shutDownMessage =
-              "Job commit failed in a prior MRAppMaster attempt " +
-              "before it crashed. Not retrying.";
+          shutDownMessage = "We crashed after a commit failure.";
           forcedState = JobStateInternal.FAILED;
         } else {
           //The commit is still pending, commit error
-          shutDownMessage =
-              "Job commit from a prior MRAppMaster attempt is " +
-              "potentially in progress. Preventing multiple commit executions";
+          shutDownMessage = "We crashed durring a commit";
           forcedState = JobStateInternal.ERROR;
         }
       }
@@ -356,6 +327,9 @@ public class MRAppMaster extends CompositeService {
     }
     
     if (errorHappenedShutDown) {
+      dispatcher = createDispatcher();
+      addIfService(dispatcher);
+      
       NoopEventHandler eater = new NoopEventHandler();
       //We do not have a JobEventDispatcher in this path
       dispatcher.register(JobEventType.class, eater);
@@ -402,6 +376,9 @@ public class MRAppMaster extends CompositeService {
     } else {
       committer = createOutputCommitter(conf);
 
+      dispatcher = createDispatcher();
+      addIfService(dispatcher);
+
       //service to handle requests from JobClient
       clientService = createClientService(context);
       // Init ClientService separately so that we stop it separately, since this
@@ -415,17 +392,8 @@ public class MRAppMaster extends CompositeService {
       committerEventHandler = createCommitterEventHandler(context, committer);
       addIfService(committerEventHandler);
 
-      //policy handling preemption requests from RM
-      callWithJobClassLoader(conf, new Action<Void>() {
-        public Void call(Configuration conf) {
-          preemptionPolicy = createPreemptionPolicy(conf);
-          preemptionPolicy.init(context);
-          return null;
-        }
-      });
-
       //service to handle requests to TaskUmbilicalProtocol
-      taskAttemptListener = createTaskAttemptListener(context, preemptionPolicy);
+      taskAttemptListener = createTaskAttemptListener(context);
       addIfService(taskAttemptListener);
 
       //service to log job history events
@@ -520,12 +488,6 @@ public class MRAppMaster extends CompositeService {
     });
   }
 
-  protected AMPreemptionPolicy createPreemptionPolicy(Configuration conf) {
-    return ReflectionUtils.newInstance(conf.getClass(
-          MRJobConfig.MR_AM_PREEMPTION_POLICY,
-          NoopAMPreemptionPolicy.class, AMPreemptionPolicy.class), conf);
-  }
-
   protected boolean keepJobFiles(JobConf conf) {
     return (conf.getKeepTaskFilesPattern() != null || conf
         .getKeepFailedTaskFiles());
@@ -588,7 +550,7 @@ public class MRAppMaster extends CompositeService {
       //if isLastAMRetry comes as true, should never set it to false
       if ( !isLastAMRetry){
         if (((JobImpl)job).getInternalState() != JobStateInternal.REBOOT) {
-          LOG.info("Job finished cleanly, recording last MRAppMaster retry");
+          LOG.info("We are finishing cleanly so this is the last retry");
           isLastAMRetry = true;
         }
       }
@@ -630,37 +592,11 @@ public class MRAppMaster extends CompositeService {
       clientService.stop();
     } catch (Throwable t) {
       LOG.warn("Graceful stop failed. Exiting.. ", t);
-      exitMRAppMaster(1, t);
+      ExitUtil.terminate(1, t);
     }
-    exitMRAppMaster(0, null);
-  }
 
-  /** MRAppMaster exit method which has been instrumented for both runtime and
-   *  unit testing.
-   * If the main thread has not been started, this method was called from a
-   * test. In that case, configure the ExitUtil object to not exit the JVM.
-   *
-   * @param status integer indicating exit status
-   * @param t throwable exception that could be null
-   */
-  private void exitMRAppMaster(int status, Throwable t) {
-    if (!mainStarted) {
-      ExitUtil.disableSystemExit();
-    }
-    try {
-      if (t != null) {
-        ExitUtil.terminate(status, t);
-      } else {
-        ExitUtil.terminate(status);
-      }
-    } catch (ExitUtil.ExitException ee) {
-      // ExitUtil.ExitException is only thrown from the ExitUtil test code when
-      // SystemExit has been disabled. It is always thrown in in the test code,
-      // even when no error occurs. Ignore the exception so that tests don't
-      // need to handle it.
-    }
   }
-
+ 
   private class JobFinishEventHandler implements EventHandler<JobFinishEvent> {
     @Override
     public void handle(JobFinishEvent event) {
@@ -784,11 +720,10 @@ public class MRAppMaster extends CompositeService {
     });
   }
 
-  protected TaskAttemptListener createTaskAttemptListener(AppContext context,
-      AMPreemptionPolicy preemptionPolicy) {
+  protected TaskAttemptListener createTaskAttemptListener(AppContext context) {
     TaskAttemptListener lis =
         new TaskAttemptListenerImpl(context, jobTokenSecretManager,
-            getRMHeartbeatHandler(), preemptionPolicy, encryptedSpillKey);
+            getRMHeartbeatHandler(), encryptedSpillKey);
     return lis;
   }
 
@@ -899,7 +834,7 @@ public class MRAppMaster extends CompositeService {
             , containerID);
       } else {
         this.containerAllocator = new RMContainerAllocator(
-            this.clientService, this.context, preemptionPolicy);
+            this.clientService, this.context);
       }
       ((Service)this.containerAllocator).init(getConfig());
       ((Service)this.containerAllocator).start();
@@ -954,7 +889,7 @@ public class MRAppMaster extends CompositeService {
     protected void serviceStart() throws Exception {
       if (job.isUber()) {
         this.containerLauncher = new LocalContainerLauncher(context,
-            (TaskUmbilicalProtocol) taskAttemptListener, jobClassLoader);
+            (TaskUmbilicalProtocol) taskAttemptListener);
         ((LocalContainerLauncher) this.containerLauncher)
                 .setEncryptedSpillKey(encryptedSpillKey);
       } else {
@@ -1005,14 +940,10 @@ public class MRAppMaster extends CompositeService {
     private final ClusterInfo clusterInfo = new ClusterInfo();
     private final ClientToAMTokenSecretManager clientToAMTokenSecretManager;
 
-    private final TaskAttemptFinishingMonitor taskAttemptFinishingMonitor;
-
-    public RunningAppContext(Configuration config,
-        TaskAttemptFinishingMonitor taskAttemptFinishingMonitor) {
+    public RunningAppContext(Configuration config) {
       this.conf = config;
       this.clientToAMTokenSecretManager =
           new ClientToAMTokenSecretManager(appAttemptID, null);
-      this.taskAttemptFinishingMonitor = taskAttemptFinishingMonitor;
     }
 
     @Override
@@ -1097,12 +1028,6 @@ public class MRAppMaster extends CompositeService {
     public String getNMHostname() {
       return nmHost;
     }
-
-    @Override
-    public TaskAttemptFinishingMonitor getTaskAttemptFinishingMonitor() {
-      return taskAttemptFinishingMonitor;
-    }
-
   }
 
   @SuppressWarnings("unchecked")
@@ -1186,8 +1111,6 @@ public class MRAppMaster extends CompositeService {
 
     // finally set the job classloader
     MRApps.setClassLoader(jobClassLoader, getConfig());
-    // set job classloader if configured
-    Limits.init(getConfig());
 
     if (initFailed) {
       JobEvent initFailedEvent = new JobEvent(job.getID(), JobEventType.JOB_INIT_FAILED);
@@ -1197,15 +1120,11 @@ public class MRAppMaster extends CompositeService {
       startJobs();
     }
   }
-
-  protected void shutdownTaskLog() {
-    TaskLog.syncLogsShutdown(logSyncer);
-  }
-
+  
   @Override
   public void stop() {
     super.stop();
-    shutdownTaskLog();
+    TaskLog.syncLogsShutdown(logSyncer);
   }
 
   private boolean isRecoverySupported() throws IOException {
@@ -1488,7 +1407,6 @@ public class MRAppMaster extends CompositeService {
 
   public static void main(String[] args) {
     try {
-      mainStarted = true;
       Thread.setDefaultUncaughtExceptionHandler(new YarnUncaughtExceptionHandler());
       String containerIdStr =
           System.getenv(Environment.CONTAINER_ID.name());
@@ -1524,12 +1442,6 @@ public class MRAppMaster extends CompositeService {
       conf.addResource(new Path(MRJobConfig.JOB_CONF_FILE));
       
       MRWebAppUtil.initialize(conf);
-      // log the system properties
-      String systemPropsToLog = MRApps.getSystemPropertiesToLog(conf);
-      if (systemPropsToLog != null) {
-        LOG.info(systemPropsToLog);
-      }
-
       String jobUserName = System
           .getenv(ApplicationConstants.Environment.USER.name());
       conf.set(MRJobConfig.USER_NAME, jobUserName);
@@ -1709,14 +1621,10 @@ public class MRAppMaster extends CompositeService {
     T call(Configuration conf) throws Exception;
   }
 
-  protected void shutdownLogManager() {
-    LogManager.shutdown();
-  }
-
   @Override
   protected void serviceStop() throws Exception {
     super.serviceStop();
-    shutdownLogManager();
+    LogManager.shutdown();
   }
 
   public ClientService getClientService() {

@@ -18,10 +18,6 @@
 
 package org.apache.hadoop.yarn.server.api.protocolrecords;
 
-import java.util.List;
-import java.util.Set;
-
-import org.apache.hadoop.yarn.api.records.NodeLabel;
 import org.apache.hadoop.yarn.server.api.records.MasterKey;
 import org.apache.hadoop.yarn.server.api.records.NodeStatus;
 import org.apache.hadoop.yarn.util.Records;
@@ -30,7 +26,7 @@ public abstract class NodeHeartbeatRequest {
   
   public static NodeHeartbeatRequest newInstance(NodeStatus nodeStatus,
       MasterKey lastKnownContainerTokenMasterKey,
-      MasterKey lastKnownNMTokenMasterKey, Set<NodeLabel> nodeLabels) {
+      MasterKey lastKnownNMTokenMasterKey) {
     NodeHeartbeatRequest nodeHeartbeatRequest =
         Records.newRecord(NodeHeartbeatRequest.class);
     nodeHeartbeatRequest.setNodeStatus(nodeStatus);
@@ -38,7 +34,6 @@ public abstract class NodeHeartbeatRequest {
         .setLastKnownContainerTokenMasterKey(lastKnownContainerTokenMasterKey);
     nodeHeartbeatRequest
         .setLastKnownNMTokenMasterKey(lastKnownNMTokenMasterKey);
-    nodeHeartbeatRequest.setNodeLabels(nodeLabels);
     return nodeHeartbeatRequest;
   }
 
@@ -50,13 +45,4 @@ public abstract class NodeHeartbeatRequest {
   
   public abstract MasterKey getLastKnownNMTokenMasterKey();
   public abstract void setLastKnownNMTokenMasterKey(MasterKey secretKey);
-  
-  public abstract Set<NodeLabel> getNodeLabels();
-  public abstract void setNodeLabels(Set<NodeLabel> nodeLabels);
-
-  public abstract List<LogAggregationReport>
-      getLogAggregationReportsForApps();
-
-  public abstract void setLogAggregationReportsForApps(
-      List<LogAggregationReport> logAggregationReportsForApps);
 }

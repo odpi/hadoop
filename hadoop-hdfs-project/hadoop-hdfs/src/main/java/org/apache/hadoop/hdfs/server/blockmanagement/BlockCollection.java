@@ -31,7 +31,7 @@ public interface BlockCollection {
   /**
    * Get the last block of the collection.
    */
-  public BlockInfo getLastBlock();
+  public BlockInfoContiguous getLastBlock();
 
   /** 
    * Get content summary.
@@ -46,7 +46,7 @@ public interface BlockCollection {
   /**
    * Get the blocks.
    */
-  public BlockInfo[] getBlocks();
+  public BlockInfoContiguous[] getBlocks();
 
   /**
    * Get preferred block size for the collection 
@@ -55,6 +55,12 @@ public interface BlockCollection {
   public long getPreferredBlockSize();
 
   /**
+   * Get block replication for the collection 
+   * @return block replication value
+   */
+  public short getBlockReplication();
+
+  /** 
    * @return the storage policy ID.
    */
   public byte getStoragePolicyID();
@@ -67,21 +73,17 @@ public interface BlockCollection {
   /**
    * Set the block at the given index.
    */
-  public void setBlock(int index, BlockInfo blk);
+  public void setBlock(int index, BlockInfoContiguous blk);
 
   /**
    * Convert the last block of the collection to an under-construction block
    * and set the locations.
    */
-  public void convertLastBlockToUC(BlockInfo lastBlock, DatanodeStorageInfo[] targets) throws IOException;
+  public BlockInfoContiguousUnderConstruction setLastBlock(BlockInfoContiguous lastBlock,
+      DatanodeStorageInfo[] targets) throws IOException;
 
   /**
    * @return whether the block collection is under construction.
    */
   public boolean isUnderConstruction();
-
-  /**
-   * @return the id for the block collection
-   */
-  long getId();
 }

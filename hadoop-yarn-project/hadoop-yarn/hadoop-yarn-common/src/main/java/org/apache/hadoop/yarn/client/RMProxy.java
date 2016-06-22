@@ -232,8 +232,7 @@ public class RMProxy<T> {
 
     RetryPolicy retryPolicy = null;
     if (waitForEver) {
-      retryPolicy = RetryPolicies.retryForeverWithFixedSleep(
-          rmConnectionRetryIntervalMS, TimeUnit.MILLISECONDS);
+      retryPolicy = RetryPolicies.RETRY_FOREVER;
     } else {
       retryPolicy =
           RetryPolicies.retryUpToMaximumTimeWithFixedSleep(rmConnectWaitMS,

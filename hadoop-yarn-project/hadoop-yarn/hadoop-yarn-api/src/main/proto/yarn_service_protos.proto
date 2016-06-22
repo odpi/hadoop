@@ -198,7 +198,7 @@ message GetNodesToLabelsRequestProto {
 }
 
 message GetNodesToLabelsResponseProto {
-  repeated NodeIdToLabelsInfoProto nodeToLabels = 1;
+  repeated NodeIdToLabelsProto nodeToLabels = 1;
 }
 
 message GetLabelsToNodesRequestProto {
@@ -213,15 +213,7 @@ message GetClusterNodeLabelsRequestProto {
 }
 
 message GetClusterNodeLabelsResponseProto {
-  repeated NodeLabelProto nodeLabels = 1;
-}
-
-message UpdateApplicationPriorityRequestProto {
-  required ApplicationIdProto applicationId = 1;
-  required PriorityProto applicationPriority = 2;
-}
-
-message UpdateApplicationPriorityResponseProto {
+  repeated string nodeLabels = 1;
 }
 
 //////////////////////////////////////////////////////

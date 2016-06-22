@@ -60,7 +60,6 @@ import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.test.GenericTestUtils.DelayAnswer;
 import org.apache.log4j.Level;
-import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.Mockito;
 import org.mockito.internal.util.reflection.Whitebox;
@@ -185,7 +184,7 @@ public class TestSaveNamespace {
       // Save namespace - this may fail, depending on fault injected
       fsn.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
       try {
-        fsn.saveNamespace(0, 0);
+        fsn.saveNamespace();
         if (shouldFail) {
           fail("Did not fail!");
         }
@@ -257,7 +256,7 @@ public class TestSaveNamespace {
       // Save namespace - should mark the first storage dir as faulty
       // since it's not traversable.
       LOG.info("Doing the first savenamespace.");
-      fsn.saveNamespace(0, 0);
+      fsn.saveNamespace();
       LOG.info("First savenamespace sucessful.");      
       
       assertTrue("Savenamespace should have marked one directory as bad." +
@@ -271,7 +270,7 @@ public class TestSaveNamespace {
       // erroneous directory back to fs.name.dir. This command should
       // be successful.
       LOG.info("Doing the second savenamespace.");
-      fsn.saveNamespace(0, 0);
+      fsn.saveNamespace();
       LOG.warn("Second savenamespace sucessful.");
       assertTrue("Savenamespace should have been successful in removing " +
                  " bad directories from Image."  +
@@ -394,7 +393,7 @@ public class TestSaveNamespace {
       // Save namespace
       fsn.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
       try {
-        fsn.saveNamespace(0, 0);
+        fsn.saveNamespace();
         fail("saveNamespace did not fail even when all directories failed!");
       } catch (IOException ioe) {
         LOG.info("Got expected exception", ioe);
@@ -404,7 +403,7 @@ public class TestSaveNamespace {
       if (restoreStorageAfterFailure) {
         Mockito.reset(spyImage);
         spyStorage.setRestoreFailedStorage(true);
-        fsn.saveNamespace(0, 0);
+        fsn.saveNamespace();
         checkEditExists(fsn, 1);
       }
 
@@ -442,7 +441,7 @@ public class TestSaveNamespace {
 
       // Save namespace
       fsn.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
-      fsn.saveNamespace(0, 0);
+      fsn.saveNamespace();
 
       // Now shut down and restart the NN
       fsn.close();
@@ -476,7 +475,7 @@ public class TestSaveNamespace {
       assertEquals(2, fsn.getEditLog().getLastWrittenTxId());
       
       fsn.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
-      fsn.saveNamespace(0, 0);
+      fsn.saveNamespace();
 
       // 2 more txns: END the first segment, BEGIN a new one
       assertEquals(4, fsn.getEditLog().getLastWrittenTxId());
@@ -496,6 +495,34 @@ public class TestSaveNamespace {
     } finally {
       if (fsn != null) {
         fsn.close();
+      }
+    }
+  }
+  
+  /**
+   * Test for save namespace should succeed when parent directory renamed with
+   * open lease and destination directory exist. 
+   * This test is a regression for HDFS-2827
+   */
+  @Test
+  public void testSaveNamespaceWithRenamedLease() throws Exception {
+    MiniDFSCluster cluster = new MiniDFSCluster.Builder(new Configuration())
+        .numDataNodes(1).build();
+    cluster.waitActive();
+    DistributedFileSystem fs = (DistributedFileSystem) cluster.getFileSystem();
+    OutputStream out = null;
+    try {
+      fs.mkdirs(new Path("/test-target"));
+      out = fs.create(new Path("/test-source/foo")); // don't close
+      fs.rename(new Path("/test-source/"), new Path("/test-target/"));
+
+      fs.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
+      cluster.getNameNodeRpc().saveNamespace();
+      fs.setSafeMode(SafeModeAction.SAFEMODE_LEAVE);
+    } finally {
+      IOUtils.cleanup(LOG, out, fs);
+      if (cluster != null) {
+        cluster.shutdown();
       }
     }
   }
@@ -579,34 +606,6 @@ public class TestSaveNamespace {
       fsn.close();
     }
   }
-
-  /**
-   * Test for save namespace should succeed when parent directory renamed with
-   * open lease and destination directory exist. 
-   * This test is a regression for HDFS-2827
-   */
-  @Test (timeout=30000)
-  public void testSaveNamespaceWithRenamedLease() throws Exception {
-    MiniDFSCluster cluster = new MiniDFSCluster.Builder(new Configuration())
-        .numDataNodes(1).build();
-    cluster.waitActive();
-    DistributedFileSystem fs = cluster.getFileSystem();
-    OutputStream out = null;
-    try {
-      fs.mkdirs(new Path("/test-target"));
-      out = fs.create(new Path("/test-source/foo")); // don't close
-      fs.rename(new Path("/test-source/"), new Path("/test-target/"));
-
-      fs.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
-      cluster.getNameNodeRpc().saveNamespace(0, 0);
-      fs.setSafeMode(SafeModeAction.SAFEMODE_LEAVE);
-    } finally {
-      IOUtils.cleanup(LOG, out, fs);
-      if (cluster != null) {
-        cluster.shutdown();
-      }
-    }
-  }
   
   @Test (timeout=30000)
   public void testSaveNamespaceWithDanglingLease() throws Exception {
@@ -615,63 +614,14 @@ public class TestSaveNamespace {
     cluster.waitActive();
     DistributedFileSystem fs = cluster.getFileSystem();
     try {
-      cluster.getNamesystem().leaseManager.addLease("me",
-              INodeId.ROOT_INODE_ID + 1);
+      cluster.getNamesystem().leaseManager.addLease("me", "/non-existent");      
       fs.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
-      cluster.getNameNodeRpc().saveNamespace(0, 0);
+      cluster.getNameNodeRpc().saveNamespace();
       fs.setSafeMode(SafeModeAction.SAFEMODE_LEAVE);
     } finally {
       if (cluster != null) {
         cluster.shutdown();
       }
-    }
-  }
-
-  @Test
-  public void testSaveNamespaceBeforeShutdown() throws Exception {
-    Configuration conf = new HdfsConfiguration();
-    MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf)
-        .numDataNodes(0).build();
-    cluster.waitActive();
-    DistributedFileSystem fs = cluster.getFileSystem();
-
-    try {
-      final FSImage fsimage = cluster.getNameNode().getFSImage();
-      final long before = fsimage.getStorage().getMostRecentCheckpointTxId();
-
-      fs.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
-      // set the timewindow to 1 hour and tx gap to 1000, which means that if
-      // there is a checkpoint during the past 1 hour or the tx number happening
-      // after the latest checkpoint is <= 1000, this saveNamespace request
-      // will be ignored
-      cluster.getNameNodeRpc().saveNamespace(3600, 1000);
-
-      // make sure no new checkpoint was done
-      long after = fsimage.getStorage().getMostRecentCheckpointTxId();
-      Assert.assertEquals(before, after);
-
-      Thread.sleep(1000);
-      // do another checkpoint. this time set the timewindow to 1s
-      // we should see a new checkpoint
-      cluster.getNameNodeRpc().saveNamespace(1, 1000);
-      fs.setSafeMode(SafeModeAction.SAFEMODE_LEAVE);
-
-      after = fsimage.getStorage().getMostRecentCheckpointTxId();
-      Assert.assertTrue(after > before);
-
-      fs.mkdirs(new Path("/foo/bar/baz")); // 3 new tx
-
-      fs.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
-      cluster.getNameNodeRpc().saveNamespace(3600, 5); // 3 + end/start segment
-      long after2 = fsimage.getStorage().getMostRecentCheckpointTxId();
-      // no checkpoint should be made
-      Assert.assertEquals(after, after2);
-      cluster.getNameNodeRpc().saveNamespace(3600, 3);
-      after2 = fsimage.getStorage().getMostRecentCheckpointTxId();
-      // a new checkpoint should be done
-      Assert.assertTrue(after2 > after);
-    } finally {
-      cluster.shutdown();
     }
   }
 

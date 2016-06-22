@@ -29,7 +29,6 @@ import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
-import org.apache.hadoop.hdfs.server.datanode.DataNodeTestUtils;
 import org.junit.Test;
 
 import java.util.Iterator;
@@ -56,12 +55,7 @@ public class TestUnderReplicatedBlocks {
       DatanodeDescriptor dn = bm.blocksMap.getStorages(b.getLocalBlock())
           .iterator().next().getDatanodeDescriptor();
       bm.addToInvalidates(b.getLocalBlock(), dn);
-      // Compute the invalidate work in NN, and trigger the heartbeat from DN
-      BlockManagerTestUtil.computeAllPendingWork(bm);
-      DataNodeTestUtils.triggerHeartbeat(cluster.getDataNode(dn.getIpcPort()));
-      // Wait to make sure the DataNode receives the deletion request 
       Thread.sleep(5000);
-      // Remove the record from blocksMap
       bm.blocksMap.removeNode(b.getLocalBlock(), dn);
       
       // increment this file's replication factor

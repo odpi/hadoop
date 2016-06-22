@@ -80,7 +80,6 @@ public class LocalContainerLauncher extends AbstractService implements
   private final HashSet<File> localizedFiles;
   private final AppContext context;
   private final TaskUmbilicalProtocol umbilical;
-  private final ClassLoader jobClassLoader;
   private ExecutorService taskRunner;
   private Thread eventHandler;
   private byte[] encryptedSpillKey = new byte[] {0};
@@ -89,12 +88,6 @@ public class LocalContainerLauncher extends AbstractService implements
 
   public LocalContainerLauncher(AppContext context,
                                 TaskUmbilicalProtocol umbilical) {
-    this(context, umbilical, null);
-  }
-
-  public LocalContainerLauncher(AppContext context,
-                                TaskUmbilicalProtocol umbilical,
-                                ClassLoader jobClassLoader) {
     super(LocalContainerLauncher.class.getName());
     this.context = context;
     this.umbilical = umbilical;
@@ -102,7 +95,6 @@ public class LocalContainerLauncher extends AbstractService implements
         // (TODO/FIXME:  pointless to use RPC to talk to self; should create
         // LocalTaskAttemptListener or similar:  implement umbilical protocol
         // but skip RPC stuff)
-    this.jobClassLoader = jobClassLoader;
 
     try {
       curFC = FileContext.getFileContext(curDir.toURI());
@@ -142,18 +134,6 @@ public class LocalContainerLauncher extends AbstractService implements
             setDaemon(true).setNameFormat("uber-SubtaskRunner").build());
     // create and start an event handling thread
     eventHandler = new Thread(new EventHandler(), "uber-EventHandler");
-    // if the job classloader is specified, set it onto the event handler as the
-    // thread context classloader so that it can be used by the event handler
-    // as well as the subtask runner threads
-    if (jobClassLoader != null) {
-      LOG.info("Setting " + jobClassLoader +
-          " as the context classloader of thread " + eventHandler.getName());
-      eventHandler.setContextClassLoader(jobClassLoader);
-    } else {
-      // note the current TCCL
-      LOG.info("Context classloader of thread " + eventHandler.getName() +
-          ": " + eventHandler.getContextClassLoader());
-    }
     eventHandler.start();
     super.serviceStart();
   }
@@ -233,7 +213,7 @@ public class LocalContainerLauncher extends AbstractService implements
         try {
           event = eventQueue.take();
         } catch (InterruptedException e) {  // mostly via T_KILL? JOB_KILL?
-          LOG.warn("Returning, interrupted : " + e);
+          LOG.error("Returning, interrupted : " + e);
           break;
         }
 
@@ -270,8 +250,7 @@ public class LocalContainerLauncher extends AbstractService implements
           context.getEventHandler().handle(
               new TaskAttemptEvent(taId,
                   TaskAttemptEventType.TA_CONTAINER_CLEANED));
-        } else if (event.getType() == EventType.CONTAINER_COMPLETED) {
-          LOG.debug("Container completed " + event.toString());
+
         } else {
           LOG.warn("Ignoring unexpected event " + event.toString());
         }
@@ -321,14 +300,7 @@ public class LocalContainerLauncher extends AbstractService implements
         }
         runSubtask(remoteTask, ytask.getType(), attemptID, numMapTasks,
                    (numReduceTasks > 0), localMapFiles);
-
-        // In non-uber mode, TA gets TA_CONTAINER_COMPLETED from MRAppMaster
-        // as part of NM -> RM -> AM notification route.
-        // In uber mode, given the task run inside the MRAppMaster container,
-        // we have to simulate the notification.
-        context.getEventHandler().handle(new TaskAttemptEvent(attemptID,
-            TaskAttemptEventType.TA_CONTAINER_COMPLETED));
-
+        
       } catch (RuntimeException re) {
         JobCounterUpdateEvent jce = new JobCounterUpdateEvent(attemptID.getTaskId().getJobId());
         jce.addCounterUpdate(JobCounter.NUM_FAILED_UBERTASKS, 1);

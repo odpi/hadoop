@@ -72,9 +72,6 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Cont
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer.ContainerLocalizer;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer.FakeFSDataInputStream;
 
-import org.apache.hadoop.yarn.server.nodemanager.executor.ContainerStartContext;
-import org.apache.hadoop.yarn.server.nodemanager.executor.DeletionAsUserContext;
-import org.apache.hadoop.yarn.server.nodemanager.executor.LocalizerStartContext;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -312,26 +309,13 @@ public class TestDefaultContainerExecutor {
 
       mockExec.init();
       mockExec.activateContainer(cId, pidFile);
-      int ret = mockExec.launchContainer(new ContainerStartContext.Builder()
-          .setContainer(container)
-          .setNmPrivateContainerScriptPath(scriptPath)
-          .setNmPrivateTokensPath(tokensPath)
-          .setUser(appSubmitter)
-          .setAppId(appId)
-          .setContainerWorkDir(workDir)
-          .setLocalDirs(localDirs)
-          .setLogDirs(logDirs)
-          .build());
+      int ret = mockExec
+          .launchContainer(container, scriptPath, tokensPath, appSubmitter,
+              appId, workDir, localDirs, localDirs);
       Assert.assertNotSame(0, ret);
     } finally {
-      mockExec.deleteAsUser(new DeletionAsUserContext.Builder()
-          .setUser(appSubmitter)
-          .setSubDir(localDir)
-          .build());
-      mockExec.deleteAsUser(new DeletionAsUserContext.Builder()
-          .setUser(appSubmitter)
-          .setSubDir(logDir)
-          .build());
+      mockExec.deleteAsUser(appSubmitter, localDir);
+      mockExec.deleteAsUser(appSubmitter, logDir);
     }
   }
 
@@ -426,29 +410,14 @@ public class TestDefaultContainerExecutor {
     when(dirsHandler.getLogDirs()).thenReturn(logDirs);
     
     try {
-      mockExec.startLocalizer(new LocalizerStartContext.Builder()
-          .setNmPrivateContainerTokens(nmPrivateCTokensPath)
-          .setNmAddr(localizationServerAddress)
-          .setUser(appSubmitter)
-          .setAppId(appId)
-          .setLocId(locId)
-          .setDirsHandler(dirsHandler)
-          .build());
+      mockExec.startLocalizer(nmPrivateCTokensPath, localizationServerAddress,
+          appSubmitter, appId, locId, dirsHandler);
     } catch (IOException e) {
       Assert.fail("StartLocalizer failed to copy token file " + e);
     } finally {
-      mockExec.deleteAsUser(new DeletionAsUserContext.Builder()
-          .setUser(appSubmitter)
-          .setSubDir(firstDir)
-          .build());
-      mockExec.deleteAsUser(new DeletionAsUserContext.Builder()
-          .setUser(appSubmitter)
-          .setSubDir(secondDir)
-          .build());
-      mockExec.deleteAsUser(new DeletionAsUserContext.Builder()
-          .setUser(appSubmitter)
-          .setSubDir(logDir)
-          .build());
+      mockExec.deleteAsUser(appSubmitter, firstDir);
+      mockExec.deleteAsUser(appSubmitter, secondDir);
+      mockExec.deleteAsUser(appSubmitter, logDir);
       deleteTmpFiles();
     }
   }

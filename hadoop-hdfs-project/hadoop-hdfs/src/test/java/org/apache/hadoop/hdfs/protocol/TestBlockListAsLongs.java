@@ -187,14 +187,7 @@ public class TestBlockListAsLongs {
     }
     assertTrue(reportReplicas.isEmpty());
   }
-
-  @Test
-  public void testCapabilitiesInited() {
-    NamespaceInfo nsInfo = new NamespaceInfo();
-    assertTrue(
-        nsInfo.isCapabilitySupported(Capability.STORAGE_BLOCK_REPORT_BUFFERS));
-  }
-
+  
   @Test
   public void testDatanodeDetect() throws ServiceException, IOException {
     final AtomicReference<BlockReportRequestProto> request =
@@ -228,7 +221,7 @@ public class TestBlockListAsLongs {
     request.set(null);
     nsInfo.setCapabilities(Capability.STORAGE_BLOCK_REPORT_BUFFERS.getMask());
     nn.blockReport(reg, "pool", sbr,
-        new BlockReportContext(1, 0, System.nanoTime(), 0L));
+        new BlockReportContext(1, 0, System.nanoTime()));
     BlockReportRequestProto proto = request.get();
     assertNotNull(proto);
     assertTrue(proto.getReports(0).getBlocksList().isEmpty());
@@ -238,7 +231,7 @@ public class TestBlockListAsLongs {
     request.set(null);
     nsInfo.setCapabilities(Capability.UNKNOWN.getMask());
     nn.blockReport(reg, "pool", sbr,
-        new BlockReportContext(1, 0, System.nanoTime(), 0L));
+        new BlockReportContext(1, 0, System.nanoTime()));
     proto = request.get();
     assertNotNull(proto);
     assertFalse(proto.getReports(0).getBlocksList().isEmpty());

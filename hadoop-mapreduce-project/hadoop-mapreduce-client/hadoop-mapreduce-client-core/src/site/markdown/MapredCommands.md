@@ -55,15 +55,9 @@ Creates a hadoop archive. More information can be found at
 
 ### `classpath`
 
-Usage: `yarn classpath [--glob |--jar <path> |-h |--help]`
+Prints the class path needed to get the Hadoop jar and the required libraries.
 
-| COMMAND\_OPTION | Description |
-|:---- |:---- |
-| `--glob` | expand wildcards |
-| `--jar` *path* | write classpath as manifest in jar named *path* |
-| `-h`, `--help` | print help |
-
-Prints the class path needed to get the Hadoop jar and the required libraries. If called without arguments, then prints the classpath set up by the command scripts, which is likely to contain wildcards in the classpath entries. Additional options print the classpath after wildcard expansion or write the classpath into the manifest of a jar file. The latter is useful in environments where wildcards cannot be used and the expanded classpath exceeds the maximum supported command line length.
+Usage: `mapred classpath`
 
 ### `distcp`
 
@@ -155,5 +149,3 @@ Usage: `mapred hsadmin [-refreshUserToGroupsMappings] | [-refreshSuperUserGroups
 | -refreshLogRetentionSettings | Refresh log retention period and log retention check interval |
 | -getGroups [username] | Get the groups which given user belongs to |
 | -help [cmd] | Displays help for the given command or all commands if none is specified. |
-
-

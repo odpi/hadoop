@@ -65,7 +65,6 @@ public class TestDFVariations {
     }
   }
 
-  @Test(timeout=5000)
   public void testMount() throws Exception {
     XXDF df = new XXDF();
     String expectedMount =

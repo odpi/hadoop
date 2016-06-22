@@ -28,6 +28,7 @@ import java.util.Map;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
@@ -41,6 +42,7 @@ public class WebHdfsTestUtil {
 
   public static Configuration createConf() {
     final Configuration conf = new Configuration();
+    conf.setBoolean(DFSConfigKeys.DFS_WEBHDFS_ENABLED_KEY, true);
     return conf;
   }
 
@@ -49,11 +51,11 @@ public class WebHdfsTestUtil {
       URISyntaxException {
     final String uri;
 
-    if (WebHdfsConstants.WEBHDFS_SCHEME.equals(scheme)) {
-      uri = WebHdfsConstants.WEBHDFS_SCHEME + "://"
+    if (WebHdfsFileSystem.SCHEME.equals(scheme)) {
+      uri = WebHdfsFileSystem.SCHEME + "://"
           + conf.get(DFSConfigKeys.DFS_NAMENODE_HTTP_ADDRESS_KEY);
-    } else if (WebHdfsConstants.SWEBHDFS_SCHEME.equals(scheme)) {
-      uri = WebHdfsConstants.SWEBHDFS_SCHEME + "://"
+    } else if (SWebHdfsFileSystem.SCHEME.equals(scheme)) {
+      uri = SWebHdfsFileSystem.SCHEME + "://"
           + conf.get(DFSConfigKeys.DFS_NAMENODE_HTTPS_ADDRESS_KEY);
     } else {
       throw new IllegalArgumentException("unknown scheme:" + scheme);
@@ -64,7 +66,7 @@ public class WebHdfsTestUtil {
   public static WebHdfsFileSystem getWebHdfsFileSystemAs(
   final UserGroupInformation ugi, final Configuration conf
   ) throws IOException, InterruptedException {
-    return getWebHdfsFileSystemAs(ugi, conf, WebHdfsConstants.WEBHDFS_SCHEME);
+    return getWebHdfsFileSystemAs(ugi, conf, WebHdfsFileSystem.SCHEME);
   }
 
   public static WebHdfsFileSystem getWebHdfsFileSystemAs(
@@ -73,7 +75,7 @@ public class WebHdfsTestUtil {
     return ugi.doAs(new PrivilegedExceptionAction<WebHdfsFileSystem>() {
       @Override
       public WebHdfsFileSystem run() throws Exception {
-        return getWebHdfsFileSystem(conf, WebHdfsConstants.WEBHDFS_SCHEME);
+        return getWebHdfsFileSystem(conf, WebHdfsFileSystem.SCHEME);
       }
     });
   }

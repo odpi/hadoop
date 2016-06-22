@@ -34,16 +34,18 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
-import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.DatanodeReportType;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeDescriptor;
+import org.apache.hadoop.hdfs.server.common.GenerationStamp;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.datanode.DataNodeTestUtils;
+import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.protocol.BlocksWithLocations.BlockWithLocations;
 import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocol;
 import org.apache.hadoop.ipc.RemoteException;
+import org.apache.hadoop.util.Time;
 import org.junit.Test;
 
 /**
@@ -108,7 +110,9 @@ public class TestGetBlocks {
       // do the writing but do not close the FSDataOutputStream
       // in order to mimic the ongoing writing
       final Path fileName = new Path("/file1");
-      stm = fileSys.create(fileName, true,
+      stm = fileSys.create(
+          fileName,
+          true,
           fileSys.getConf().getInt(
               CommonConfigurationKeys.IO_FILE_BUFFER_SIZE_KEY, 4096),
           (short) 3, blockSize);
@@ -177,23 +181,37 @@ public class TestGetBlocks {
 
     final short REPLICATION_FACTOR = (short) 2;
     final int DEFAULT_BLOCK_SIZE = 1024;
+    final Random r = new Random();
 
     CONF.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, DEFAULT_BLOCK_SIZE);
     MiniDFSCluster cluster = new MiniDFSCluster.Builder(CONF).numDataNodes(
         REPLICATION_FACTOR).build();
     try {
       cluster.waitActive();
+
+      // create a file with two blocks
+      FileSystem fs = cluster.getFileSystem();
+      FSDataOutputStream out = fs.create(new Path("/tmp.txt"),
+          REPLICATION_FACTOR);
+      byte[] data = new byte[1024];
       long fileLen = 2 * DEFAULT_BLOCK_SIZE;
-      DFSTestUtil.createFile(cluster.getFileSystem(), new Path("/tmp.txt"),
-          fileLen, REPLICATION_FACTOR, 0L);
+      long bytesToWrite = fileLen;
+      while (bytesToWrite > 0) {
+        r.nextBytes(data);
+        int bytesToWriteNext = (1024 < bytesToWrite) ? 1024
+            : (int) bytesToWrite;
+        out.write(data, 0, bytesToWriteNext);
+        bytesToWrite -= bytesToWriteNext;
+      }
+      out.close();
 
       // get blocks & data nodes
       List<LocatedBlock> locatedBlocks;
       DatanodeInfo[] dataNodes = null;
       boolean notWritten;
       do {
-        final DFSClient dfsclient = new DFSClient(
-            DFSUtilClient.getNNAddress(CONF), CONF);
+        final DFSClient dfsclient = new DFSClient(NameNode.getAddress(CONF),
+            CONF);
         locatedBlocks = dfsclient.getNamenode()
             .getBlockLocations("/tmp.txt", 0, fileLen).getLocatedBlocks();
         assertEquals(2, locatedBlocks.size());
@@ -215,7 +233,7 @@ public class TestGetBlocks {
       InetSocketAddress addr = new InetSocketAddress("localhost",
           cluster.getNameNodePort());
       NamenodeProtocol namenode = NameNodeProxies.createProxy(CONF,
-          DFSUtilClient.getNNUri(addr), NamenodeProtocol.class).getProxy();
+          NameNode.getUri(addr), NamenodeProtocol.class).getProxy();
 
       // get blocks of size fileLen from dataNodes[0]
       BlockWithLocations[] locs;
@@ -277,7 +295,7 @@ public class TestGetBlocks {
 
     for (int i = 0; i < blkids.length; i++) {
       Block b = new Block(blkids[i], 0,
-          HdfsConstants.GRANDFATHER_GENERATION_STAMP);
+          GenerationStamp.GRANDFATHER_GENERATION_STAMP);
       Long v = map.get(b);
       System.out.println(b + " => " + v);
       assertEquals(blkids[i], v.longValue());

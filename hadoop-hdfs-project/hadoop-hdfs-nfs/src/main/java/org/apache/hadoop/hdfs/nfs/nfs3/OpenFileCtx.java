@@ -253,7 +253,9 @@ class OpenFileCtx {
     enabledDump = dumpFilePath != null;
     nextOffset = new AtomicLong();
     nextOffset.set(latestAttr.getSize());
-    assert(nextOffset.get() == this.fos.getPos());
+    try {	
+      assert(nextOffset.get() == this.fos.getPos());
+    } catch (IOException e) {}
     dumpThread = null;
     this.client = client;
     this.iug = iug;
@@ -266,7 +268,7 @@ class OpenFileCtx {
   }
   
   // Get flushed offset. Note that flushed data may not be persisted.
-  private long getFlushedOffset() {
+  private long getFlushedOffset() throws IOException {
     return fos.getPos();
   }
   
@@ -864,8 +866,15 @@ class OpenFileCtx {
         return COMMIT_STATUS.COMMIT_INACTIVE_WITH_PENDING_WRITE;
       }
     }
+
+    long flushed = 0;
+    try {
+      flushed = getFlushedOffset();
+    } catch (IOException e) {
+      LOG.error("Can't get flushed offset, error:" + e);
+      return COMMIT_STATUS.COMMIT_ERROR;
+    }
     
-    long flushed = getFlushedOffset();
     if (LOG.isDebugEnabled()) {
       LOG.debug("getFlushedOffset=" + flushed + " commitOffset=" + commitOffset
           + "nextOffset=" + nextOffset.get());
@@ -1084,16 +1093,18 @@ class OpenFileCtx {
 
   private void processCommits(long offset) {
     Preconditions.checkState(offset > 0);
-    long flushedOffset = getFlushedOffset();
-    Entry<Long, CommitCtx> entry = pendingCommits.firstEntry();
+    long flushedOffset = 0;
+    Entry<Long, CommitCtx> entry = null;
 
-    if (entry == null || entry.getValue().offset > flushedOffset) {
-      return;
-    }
-
-    // Now do sync for the ready commits
     int status = Nfs3Status.NFS3ERR_IO;
     try {
+      flushedOffset = getFlushedOffset();
+      entry = pendingCommits.firstEntry();
+      if (entry == null || entry.getValue().offset > flushedOffset) {
+        return;
+      }
+
+      // Now do sync for the ready commits
       // Sync file data and length
       fos.hsync(EnumSet.of(SyncFlag.UPDATE_LENGTH));
       status = Nfs3Status.NFS3_OK;

@@ -54,12 +54,8 @@ import org.apache.hadoop.conf.Configurable;
  *         job.setReducerClass(MyReducer.class);
  *
  *         // Submit the job, then poll for progress until the job is complete
- *         RunningJob runningJob = JobClient.runJob(job);
- *         if (runningJob.isSuccessful()) {
- *           return 0;
- *         } else {
- *           return 1;
- *         }
+ *         JobClient.runJob(job);
+ *         return 0;
  *       }
  *       
  *       public static void main(String[] args) throws Exception {

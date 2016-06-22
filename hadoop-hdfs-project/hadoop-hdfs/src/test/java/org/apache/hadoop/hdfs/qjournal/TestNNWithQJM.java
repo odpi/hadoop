@@ -17,7 +17,8 @@
  */
 package org.apache.hadoop.hdfs.qjournal;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.File;
 import java.io.IOException;
@@ -36,7 +37,6 @@ import org.apache.hadoop.util.ExitUtil;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-
 
 public class TestNNWithQJM {
   final Configuration conf = new HdfsConfiguration();

@@ -40,7 +40,6 @@ import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
-import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfo;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockManager;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockManagerTestUtil;
 import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeManager;
@@ -82,7 +81,6 @@ public class TestReadOnlySharedStorage {
   private DatanodeInfo readOnlyDataNode;
   
   private Block block;
-  private BlockInfo storedBlock;
 
   private ExtendedBlock extendedBlock;
 
@@ -134,8 +132,7 @@ public class TestReadOnlySharedStorage {
     LocatedBlock locatedBlock = getLocatedBlock();
     extendedBlock = locatedBlock.getBlock();
     block = extendedBlock.getLocalBlock();
-    storedBlock = blockManager.getStoredBlock(block);
-
+    
     assertThat(locatedBlock.getLocations().length, is(1));
     normalDataNode = locatedBlock.getLocations()[0];
     readOnlyDataNode = datanodeManager.getDatanode(cluster.getDataNodes().get(RO_NODE_INDEX).getDatanodeId());
@@ -191,11 +188,11 @@ public class TestReadOnlySharedStorage {
   }
   
   private void validateNumberReplicas(int expectedReplicas) throws IOException {
-    NumberReplicas numberReplicas = blockManager.countNodes(storedBlock);
+    NumberReplicas numberReplicas = blockManager.countNodes(block);
     assertThat(numberReplicas.liveReplicas(), is(expectedReplicas));
     assertThat(numberReplicas.excessReplicas(), is(0));
     assertThat(numberReplicas.corruptReplicas(), is(0));
-    assertThat(numberReplicas.decommissionedAndDecommissioning(), is(0));
+    assertThat(numberReplicas.decommissionedReplicas(), is(0));
     assertThat(numberReplicas.replicasOnStaleNodes(), is(0));
     
     BlockManagerTestUtil.updateState(blockManager);
@@ -233,7 +230,7 @@ public class TestReadOnlySharedStorage {
         cluster.getNameNode(), normalDataNode.getXferAddr());
     
     // The live replica count should now be zero (since the NORMAL replica is offline)
-    NumberReplicas numberReplicas = blockManager.countNodes(storedBlock);
+    NumberReplicas numberReplicas = blockManager.countNodes(block);
     assertThat(numberReplicas.liveReplicas(), is(0));
     
     // The block should be reported as under-replicated
@@ -266,7 +263,7 @@ public class TestReadOnlySharedStorage {
     waitForLocations(1);
     
     // However, the corrupt READ_ONLY_SHARED replica should *not* affect the overall corrupt replicas count
-    NumberReplicas numberReplicas = blockManager.countNodes(storedBlock);
+    NumberReplicas numberReplicas = blockManager.countNodes(block);
     assertThat(numberReplicas.corruptReplicas(), is(0));
   }
 

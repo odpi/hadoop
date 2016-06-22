@@ -34,7 +34,6 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.UnsupportedFileSystemException;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.nodemanager.DeletionService.FileDeletionTask;
-import org.apache.hadoop.yarn.server.nodemanager.executor.DeletionAsUserContext;
 import org.apache.hadoop.yarn.server.nodemanager.recovery.NMMemoryStateStoreService;
 import org.junit.AfterClass;
 import org.junit.Test;
@@ -81,28 +80,14 @@ public class TestDeletionService {
 
   static class FakeDefaultContainerExecutor extends DefaultContainerExecutor {
     @Override
-    public void deleteAsUser(DeletionAsUserContext ctx)
+    public void deleteAsUser(String user, Path subDir, Path... basedirs)
         throws IOException, InterruptedException {
-      String user = ctx.getUser();
-      Path subDir = ctx.getSubDir();
-      List<Path> basedirs = ctx.getBasedirs();
-
       if ((Long.parseLong(subDir.getName()) % 2) == 0) {
         assertNull(user);
       } else {
         assertEquals("dingo", user);
       }
-
-      DeletionAsUserContext.Builder builder = new DeletionAsUserContext
-          .Builder()
-          .setUser(user)
-          .setSubDir(subDir);
-
-      if (basedirs != null) {
-        builder.setBasedirs(basedirs.toArray(new Path[basedirs.size()]));
-      }
-
-      super.deleteAsUser(builder.build());
+      super.deleteAsUser(user, subDir, basedirs);
       assertFalse(lfs.util().exists(subDir));
     }
   }

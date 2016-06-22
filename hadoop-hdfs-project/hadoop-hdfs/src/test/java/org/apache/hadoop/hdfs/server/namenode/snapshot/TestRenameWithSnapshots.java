@@ -519,8 +519,8 @@ public class TestRenameWithSnapshots {
     File fsnAfter = new File(testDir, "dumptree_after");
     
     SnapshotTestHelper.dumpTree2File(fsdir, fsnBefore);
-
-    cluster.shutdown(false, false);
+    
+    cluster.shutdown();
     cluster = new MiniDFSCluster.Builder(conf).format(false)
         .numDataNodes(REPL).build();
     cluster.waitActive();
@@ -784,7 +784,6 @@ public class TestRenameWithSnapshots {
     
     // delete foo
     hdfs.delete(foo_dir1, true);
-    restartClusterAndCheckImage(true);
     hdfs.delete(bar2_dir1, true);
     
     // restart the cluster and check fsimage

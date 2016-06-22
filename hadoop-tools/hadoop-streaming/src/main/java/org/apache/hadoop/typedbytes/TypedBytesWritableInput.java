@@ -61,10 +61,8 @@ public class TypedBytesWritableInput implements Configurable {
     this.in = in;
   }
 
-  private static final ThreadLocal<TypedBytesWritableInput> TB_IN =
-      new ThreadLocal<TypedBytesWritableInput>() {
-    @Override
-    protected TypedBytesWritableInput initialValue() {
+  private static ThreadLocal tbIn = new ThreadLocal() {
+    protected synchronized Object initialValue() {
       return new TypedBytesWritableInput();
     }
   };
@@ -78,7 +76,7 @@ public class TypedBytesWritableInput implements Configurable {
    *         {@link TypedBytesInput}.
    */
   public static TypedBytesWritableInput get(TypedBytesInput in) {
-    TypedBytesWritableInput bin = TB_IN.get();
+    TypedBytesWritableInput bin = (TypedBytesWritableInput) tbIn.get();
     bin.setTypedBytesInput(in);
     return bin;
   }

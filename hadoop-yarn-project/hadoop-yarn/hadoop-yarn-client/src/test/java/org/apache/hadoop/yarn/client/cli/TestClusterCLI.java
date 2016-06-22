@@ -27,10 +27,8 @@ import static org.mockito.Mockito.when;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.io.PrintWriter;
-import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.HashSet;
 
-import org.apache.hadoop.yarn.api.records.NodeLabel;
 import org.apache.hadoop.yarn.client.api.YarnClient;
 import org.apache.hadoop.yarn.nodelabels.CommonNodeLabelsManager;
 import org.junit.Before;
@@ -57,8 +55,7 @@ public class TestClusterCLI {
   public void testGetClusterNodeLabels() throws Exception {
     YarnClient client = mock(YarnClient.class);
     when(client.getClusterNodeLabels()).thenReturn(
-        Arrays.asList(NodeLabel.newInstance("label1"),
-            NodeLabel.newInstance("label2")));
+        ImmutableSet.of("label1", "label2"));
     ClusterCLI cli = new ClusterCLI();
     cli.setClient(client);
     cli.setSysOutPrintStream(sysOut);
@@ -70,7 +67,7 @@ public class TestClusterCLI {
     
     ByteArrayOutputStream baos = new ByteArrayOutputStream();
     PrintWriter pw = new PrintWriter(baos);
-    pw.print("Node Labels: <label1:exclusivity=true>,<label2:exclusivity=true>");
+    pw.print("Node Labels: label1,label2");
     pw.close();
     verify(sysOut).println(baos.toString("UTF-8"));
   }
@@ -79,16 +76,14 @@ public class TestClusterCLI {
   public void testGetClusterNodeLabelsWithLocalAccess() throws Exception {
     YarnClient client = mock(YarnClient.class);
     when(client.getClusterNodeLabels()).thenReturn(
-        Arrays.asList(NodeLabel.newInstance("remote1"),
-            NodeLabel.newInstance("remote2")));
+        ImmutableSet.of("remote1", "remote2"));
     ClusterCLI cli = new ClusterCLI();
     cli.setClient(client);
     cli.setSysOutPrintStream(sysOut);
     cli.setSysErrPrintStream(sysErr);
     ClusterCLI.localNodeLabelsManager = mock(CommonNodeLabelsManager.class);
-    when(ClusterCLI.localNodeLabelsManager.getClusterNodeLabels()).thenReturn(
-        Arrays.asList(NodeLabel.newInstance("local1"),
-            NodeLabel.newInstance("local2")));
+    when(ClusterCLI.localNodeLabelsManager.getClusterNodeLabels())
+        .thenReturn(ImmutableSet.of("local1", "local2"));
 
     int rc =
         cli.run(new String[] { ClusterCLI.CMD,
@@ -99,7 +94,7 @@ public class TestClusterCLI {
     ByteArrayOutputStream baos = new ByteArrayOutputStream();
     PrintWriter pw = new PrintWriter(baos);
     // it should return local* instead of remote*
-    pw.print("Node Labels: <local1:exclusivity=true>,<local2:exclusivity=true>");
+    pw.print("Node Labels: local1,local2");
     pw.close();
     verify(sysOut).println(baos.toString("UTF-8"));
   }
@@ -107,7 +102,7 @@ public class TestClusterCLI {
   @Test
   public void testGetEmptyClusterNodeLabels() throws Exception {
     YarnClient client = mock(YarnClient.class);
-    when(client.getClusterNodeLabels()).thenReturn(new ArrayList<NodeLabel>());
+    when(client.getClusterNodeLabels()).thenReturn(new HashSet<String>());
     ClusterCLI cli = new ClusterCLI();
     cli.setClient(client);
     cli.setSysOutPrintStream(sysOut);
@@ -137,9 +132,7 @@ public class TestClusterCLI {
     ByteArrayOutputStream baos = new ByteArrayOutputStream();
     PrintWriter pw = new PrintWriter(baos);
     pw.println("usage: yarn cluster");
-    pw.println(" -dnl,--directly-access-node-label-store   This is DEPRECATED, will be");
-    pw.println("                                           removed in future releases.");
-    pw.println("                                           Directly access node label");
+    pw.println(" -dnl,--directly-access-node-label-store   Directly access node label");
     pw.println("                                           store, with this option, all");
     pw.println("                                           node label related operations");
     pw.println("                                           will NOT connect RM. Instead,");

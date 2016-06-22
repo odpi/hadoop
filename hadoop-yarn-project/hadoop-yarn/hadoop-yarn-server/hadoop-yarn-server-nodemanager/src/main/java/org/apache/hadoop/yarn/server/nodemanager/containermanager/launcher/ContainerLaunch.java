@@ -72,8 +72,6 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Cont
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer.ContainerLocalizer;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer.ResourceLocalizationService;
 import org.apache.hadoop.yarn.server.nodemanager.WindowsSecureContainerExecutor;
-import org.apache.hadoop.yarn.server.nodemanager.executor.ContainerSignalContext;
-import org.apache.hadoop.yarn.server.nodemanager.executor.ContainerStartContext;
 import org.apache.hadoop.yarn.server.nodemanager.util.ProcessIdFileReader;
 import org.apache.hadoop.yarn.util.Apps;
 import org.apache.hadoop.yarn.util.AuxiliaryServiceHelper;
@@ -269,11 +267,11 @@ public class ContainerLaunch implements Callable<Integer> {
         // Sanitize the container's environment
         sanitizeEnv(environment, containerWorkDir, appDirs, containerLogDirs,
           localResources, nmPrivateClasspathJarDir);
-
+        
         // Write out the environment
-        exec.writeLaunchEnv(containerScriptOutStream, environment,
-          localResources, launchContext.getCommands());
-
+        exec.writeLaunchEnv(containerScriptOutStream, environment, localResources,
+            launchContext.getCommands());
+        
         // /////////// End of writing out container-script
 
         // /////////// Write out the container-tokens in the nmPrivate space.
@@ -301,17 +299,9 @@ public class ContainerLaunch implements Callable<Integer> {
       }
       else {
         exec.activateContainer(containerID, pidFilePath);
-        ret = exec.launchContainer(new ContainerStartContext.Builder()
-            .setContainer(container)
-            .setLocalizedResources(localResources)
-            .setNmPrivateContainerScriptPath(nmPrivateContainerScriptPath)
-            .setNmPrivateTokensPath(nmPrivateTokensPath)
-            .setUser(user)
-            .setAppId(appIdStr)
-            .setContainerWorkDir(containerWorkDir)
-            .setLocalDirs(localDirs)
-            .setLogDirs(logDirs)
-            .build());
+        ret = exec.launchContainer(container, nmPrivateContainerScriptPath,
+                nmPrivateTokensPath, user, appIdStr, containerWorkDir,
+                localDirs, logDirs);
       }
     } catch (Throwable e) {
       LOG.warn("Failed to launch container.", e);
@@ -426,13 +416,7 @@ public class ContainerLaunch implements Callable<Integer> {
           ? Signal.TERM
           : Signal.KILL;
 
-        boolean result = exec.signalContainer(
-            new ContainerSignalContext.Builder()
-                .setContainer(container)
-                .setUser(user)
-                .setPid(processId)
-                .setSignal(signal)
-                .build());
+        boolean result = exec.signalContainer(user, processId, signal);
 
         LOG.debug("Sent signal " + signal + " to pid " + processId
           + " as user " + user
@@ -530,8 +514,6 @@ public class ContainerLaunch implements Callable<Integer> {
 
     public abstract void command(List<String> command) throws IOException;
 
-    public abstract void whitelistedEnv(String key, String value) throws IOException;
-
     public abstract void env(String key, String value) throws IOException;
 
     public final void symlink(Path src, Path dst) throws IOException {
@@ -590,11 +572,6 @@ public class ContainerLaunch implements Callable<Integer> {
     }
 
     @Override
-    public void whitelistedEnv(String key, String value) {
-      line("export ", key, "=${", key, ":-", "\"", value, "\"}");
-    }
-
-    @Override
     public void env(String key, String value) {
       line("export ", key, "=\"", value, "\"");
     }
@@ -632,12 +609,6 @@ public class ContainerLaunch implements Callable<Integer> {
     @Override
     public void command(List<String> command) throws IOException {
       lineWithLenCheck("@call ", StringUtils.join(" ", command));
-      errorCheck();
-    }
-
-    @Override
-    public void whitelistedEnv(String key, String value) throws IOException {
-      lineWithLenCheck("@set ", key, "=", value);
       errorCheck();
     }
 

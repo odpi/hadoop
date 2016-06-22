@@ -49,7 +49,6 @@ import org.apache.hadoop.yarn.server.resourcemanager.metrics.SystemMetricsPublis
 import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMNodeLabelsManager;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.ContainerAllocationExpirer;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
-import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.fica.FiCaSchedulerApp;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.fica.FiCaSchedulerNode;
 import org.apache.hadoop.yarn.server.resourcemanager.security.AMRMTokenSecretManager;
@@ -57,12 +56,9 @@ import org.apache.hadoop.yarn.server.resourcemanager.security.ClientToAMTokenSec
 import org.apache.hadoop.yarn.server.resourcemanager.security.NMTokenSecretManagerInRM;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMContainerTokenSecretManager;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
-import org.apache.hadoop.yarn.util.resource.DefaultResourceCalculator;
 import org.apache.hadoop.yarn.util.resource.Resources;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
-
-import com.google.common.collect.Sets;
 
 public class TestUtils {
   private static final Log LOG = LogFactory.getLog(TestUtils.class);
@@ -102,7 +98,7 @@ public class TestUtils {
           new AMRMTokenSecretManager(conf, null),
           new RMContainerTokenSecretManager(conf),
           new NMTokenSecretManagerInRM(conf),
-          new ClientToAMTokenSecretManagerInRM());
+          new ClientToAMTokenSecretManagerInRM(), writer);
     RMNodeLabelsManager nlm = mock(RMNodeLabelsManager.class);
     when(
         nlm.getQueueResource(any(String.class), any(Set.class),
@@ -116,8 +112,8 @@ public class TestUtils {
     
     when(nlm.getResourceByLabel(any(String.class), any(Resource.class)))
         .thenAnswer(new Answer<Resource>() {
-          @Override public Resource answer(InvocationOnMock invocation)
-              throws Throwable {
+          @Override
+          public Resource answer(InvocationOnMock invocation) throws Throwable {
             Object[] args = invocation.getArguments();
             return (Resource) args[1];
           }
@@ -125,12 +121,6 @@ public class TestUtils {
     
     rmContext.setNodeLabelManager(nlm);
     rmContext.setSystemMetricsPublisher(mock(SystemMetricsPublisher.class));
-    rmContext.setRMApplicationHistoryWriter(mock(RMApplicationHistoryWriter.class));
-    ResourceScheduler mockScheduler = mock(ResourceScheduler.class);
-    when(mockScheduler.getResourceCalculator()).thenReturn(
-        new DefaultResourceCalculator());
-    rmContext.setScheduler(mockScheduler);
-
     return rmContext;
   }
   
@@ -168,23 +158,30 @@ public class TestUtils {
     request.setCapability(capability);
     request.setRelaxLocality(relaxLocality);
     request.setPriority(priority);
-    request.setNodeLabelExpression(RMNodeLabelsManager.NO_LABEL);
     return request;
   }
   
   public static ApplicationId getMockApplicationId(int appId) {
-    return ApplicationId.newInstance(0L, appId);
+    ApplicationId applicationId = mock(ApplicationId.class);
+    when(applicationId.getClusterTimestamp()).thenReturn(0L);
+    when(applicationId.getId()).thenReturn(appId);
+    return applicationId;
   }
   
   public static ApplicationAttemptId 
   getMockApplicationAttemptId(int appId, int attemptId) {
     ApplicationId applicationId = BuilderUtils.newApplicationId(0l, appId);
-    return ApplicationAttemptId.newInstance(applicationId, attemptId);
+    ApplicationAttemptId applicationAttemptId = mock(ApplicationAttemptId.class);  
+    when(applicationAttemptId.getApplicationId()).thenReturn(applicationId);
+    when(applicationAttemptId.getAttemptId()).thenReturn(attemptId);
+    return applicationAttemptId;
   }
   
   public static FiCaSchedulerNode getMockNode(
       String host, String rack, int port, int capability) {
-    NodeId nodeId = NodeId.newInstance(host, port);
+    NodeId nodeId = mock(NodeId.class);
+    when(nodeId.getHost()).thenReturn(host);
+    when(nodeId.getPort()).thenReturn(port);
     RMNode rmNode = mock(RMNode.class);
     when(rmNode.getNodeID()).thenReturn(nodeId);
     when(rmNode.getTotalCapability()).thenReturn(
@@ -195,8 +192,6 @@ public class TestUtils {
     
     FiCaSchedulerNode node = spy(new FiCaSchedulerNode(rmNode, false));
     LOG.info("node = " + host + " avail=" + node.getAvailableResource());
-    
-    when(node.getNodeID()).thenReturn(nodeId);
     return node;
   }
 
@@ -220,133 +215,5 @@ public class TestUtils {
     when(container.getResource()).thenReturn(resource);
     when(container.getPriority()).thenReturn(priority);
     return container;
-  }
-  
-  @SuppressWarnings("unchecked")
-  private static <E> Set<E> toSet(E... elements) {
-    Set<E> set = Sets.newHashSet(elements);
-    return set;
-  }
-  
-  /**
-   * Get a queue structure:
-   * <pre>
-   *             Root
-   *            /  |  \
-   *           a   b   c
-   *           |   |   |
-   *           a1  b1  c1
-   *          (x)  (y)
-   * </pre>  
-   */
-  public static Configuration getConfigurationWithQueueLabels(Configuration config) {
-    CapacitySchedulerConfiguration conf =
-        new CapacitySchedulerConfiguration(config);
-    
-    // Define top-level queues
-    conf.setQueues(CapacitySchedulerConfiguration.ROOT, new String[] {"a", "b", "c"});
-    conf.setCapacityByLabel(CapacitySchedulerConfiguration.ROOT, "x", 100);
-    conf.setCapacityByLabel(CapacitySchedulerConfiguration.ROOT, "y", 100);
-
-    final String A = CapacitySchedulerConfiguration.ROOT + ".a";
-    conf.setCapacity(A, 10);
-    conf.setMaximumCapacity(A, 15);
-    conf.setAccessibleNodeLabels(A, toSet("x"));
-    conf.setCapacityByLabel(A, "x", 100);
-    
-    final String B = CapacitySchedulerConfiguration.ROOT + ".b";
-    conf.setCapacity(B, 20);
-    conf.setAccessibleNodeLabels(B, toSet("y"));
-    conf.setCapacityByLabel(B, "y", 100);
-    
-    final String C = CapacitySchedulerConfiguration.ROOT + ".c";
-    conf.setCapacity(C, 70);
-    conf.setMaximumCapacity(C, 70);
-    conf.setAccessibleNodeLabels(C, RMNodeLabelsManager.EMPTY_STRING_SET);
-    
-    // Define 2nd-level queues
-    final String A1 = A + ".a1";
-    conf.setQueues(A, new String[] {"a1"});
-    conf.setCapacity(A1, 100);
-    conf.setMaximumCapacity(A1, 100);
-    conf.setCapacityByLabel(A1, "x", 100);
-    
-    final String B1 = B + ".b1";
-    conf.setQueues(B, new String[] {"b1"});
-    conf.setCapacity(B1, 100);
-    conf.setMaximumCapacity(B1, 100);
-    conf.setCapacityByLabel(B1, "y", 100);
-    conf.setMaximumApplicationMasterResourcePerQueuePercent(B1, 1f);
-
-    final String C1 = C + ".c1";
-    conf.setQueues(C, new String[] {"c1"});
-    conf.setCapacity(C1, 100);
-    conf.setMaximumCapacity(C1, 100);
-    
-    return conf;
-  }
-  
-  public static Configuration getComplexConfigurationWithQueueLabels(
-      Configuration config) {
-    CapacitySchedulerConfiguration conf =
-        new CapacitySchedulerConfiguration(config);
-    
-    // Define top-level queues
-    conf.setQueues(CapacitySchedulerConfiguration.ROOT, new String[] {"a", "b"});
-    conf.setCapacityByLabel(CapacitySchedulerConfiguration.ROOT, "x", 100);
-    conf.setCapacityByLabel(CapacitySchedulerConfiguration.ROOT, "y", 100);
-    conf.setCapacityByLabel(CapacitySchedulerConfiguration.ROOT, "z", 100);
-
-    final String A = CapacitySchedulerConfiguration.ROOT + ".a";
-    conf.setCapacity(A, 10);
-    conf.setMaximumCapacity(A, 10);
-    conf.setAccessibleNodeLabels(A, toSet("x", "y"));
-    conf.setCapacityByLabel(A, "x", 100);
-    conf.setCapacityByLabel(A, "y", 50);
-    
-    final String B = CapacitySchedulerConfiguration.ROOT + ".b";
-    conf.setCapacity(B, 90);
-    conf.setMaximumCapacity(B, 100);
-    conf.setAccessibleNodeLabels(B, toSet("y", "z"));
-    conf.setCapacityByLabel(B, "y", 50);
-    conf.setCapacityByLabel(B, "z", 100);
-    
-    // Define 2nd-level queues
-    final String A1 = A + ".a1";
-    conf.setQueues(A, new String[] {"a1"});
-    conf.setCapacity(A1, 100);
-    conf.setMaximumCapacity(A1, 100);
-    conf.setAccessibleNodeLabels(A1, toSet("x", "y"));
-    conf.setDefaultNodeLabelExpression(A1, "x");
-    conf.setCapacityByLabel(A1, "x", 100);
-    conf.setCapacityByLabel(A1, "y", 100);
-    
-    conf.setQueues(B, new String[] {"b1", "b2"});
-    final String B1 = B + ".b1";
-    conf.setCapacity(B1, 50);
-    conf.setMaximumCapacity(B1, 50);
-    conf.setAccessibleNodeLabels(B1, RMNodeLabelsManager.EMPTY_STRING_SET);
-
-    final String B2 = B + ".b2";
-    conf.setCapacity(B2, 50);
-    conf.setMaximumCapacity(B2, 50);
-    conf.setAccessibleNodeLabels(B2, toSet("y", "z"));
-    conf.setCapacityByLabel(B2, "y", 100);
-    conf.setCapacityByLabel(B2, "z", 100);
-
-    return conf;
-  }
-  
-  public static Configuration getConfigurationWithDefaultQueueLabels(
-      Configuration config) {
-    final String A = CapacitySchedulerConfiguration.ROOT + ".a";
-    final String B = CapacitySchedulerConfiguration.ROOT + ".b";
-    
-    CapacitySchedulerConfiguration conf =
-        (CapacitySchedulerConfiguration) getConfigurationWithQueueLabels(config);
-        new CapacitySchedulerConfiguration(config);
-    conf.setDefaultNodeLabelExpression(A, "x");
-    conf.setDefaultNodeLabelExpression(B, "y");
-    return conf;
   }
 }

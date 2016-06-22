@@ -21,13 +21,8 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Random;
-import java.util.Set;
 import java.util.concurrent.TimeoutException;
 
 import org.apache.commons.logging.Log;
@@ -47,9 +42,6 @@ import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.DatanodeReportType;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
-import org.apache.hadoop.hdfs.server.balancer.BalancerParameters;
-import org.apache.hadoop.hdfs.server.protocol.DatanodeStorageReport;
-import org.apache.hadoop.hdfs.server.protocol.StorageReport;
 import org.apache.log4j.Level;
 import org.junit.Assert;
 import org.junit.Test;
@@ -68,7 +60,6 @@ public class TestBalancerWithMultipleNameNodes {
   private static final long CAPACITY = 500L;
   private static final String RACK0 = "/rack0";
   private static final String RACK1 = "/rack1";
-  private static final String RACK2 = "/rack2";
 
   private static final String FILE_NAME = "/tmp.txt";
   private static final Path FILE_PATH = new Path(FILE_NAME);
@@ -85,20 +76,16 @@ public class TestBalancerWithMultipleNameNodes {
     final MiniDFSCluster cluster;
     final ClientProtocol[] clients;
     final short replication;
-    final BalancerParameters parameters;
-
+    
     Suite(MiniDFSCluster cluster, final int nNameNodes, final int nDataNodes,
-        BalancerParameters parameters, Configuration conf) throws IOException {
+        Configuration conf) throws IOException {
       this.conf = conf;
       this.cluster = cluster;
       clients = new ClientProtocol[nNameNodes];
       for(int i = 0; i < nNameNodes; i++) {
         clients[i] = cluster.getNameNode(i).getRpcServer();
       }
-      // hard coding replication factor to 1 so logical and raw HDFS size are
-      // equal
-      replication = 1;
-      this.parameters = parameters;
+      replication = (short)Math.max(1, nDataNodes - 1);
     }
   }
 
@@ -117,9 +104,11 @@ public class TestBalancerWithMultipleNameNodes {
       ) throws IOException, InterruptedException, TimeoutException {
     final ExtendedBlock[][] blocks = new ExtendedBlock[s.clients.length][];
     for(int n = 0; n < s.clients.length; n++) {
-      createFile(s, n, size);
-      final List<LocatedBlock> locatedBlocks =
-          s.clients[n].getBlockLocations(FILE_NAME, 0, size).getLocatedBlocks();
+      final long fileLen = size/s.replication;
+      createFile(s, n, fileLen);
+
+      final List<LocatedBlock> locatedBlocks = s.clients[n].getBlockLocations(
+          FILE_NAME, 0, fileLen).getLocatedBlocks();
 
       final int numOfBlocks = locatedBlocks.size();
       blocks[n] = new ExtendedBlock[numOfBlocks];
@@ -162,14 +151,9 @@ public class TestBalancerWithMultipleNameNodes {
     wait(s.clients, totalUsed, totalCapacity);
     LOG.info("BALANCER 1");
 
-    // get storage reports for relevant blockpools so that we can compare
-    // blockpool usages after balancer has run
-    Map<Integer, DatanodeStorageReport[]> preBalancerPoolUsages =
-        getStorageReports(s);
-
     // start rebalancing
     final Collection<URI> namenodes = DFSUtil.getNsServiceRpcUris(s.conf);
-    final int r = Balancer.run(namenodes, s.parameters, s.conf);
+    final int r = Balancer.run(namenodes, Balancer.Parameters.DEFAULT, s.conf);
     Assert.assertEquals(ExitStatus.SUCCESS.getExitCode(), r);
 
     LOG.info("BALANCER 2");
@@ -205,7 +189,7 @@ public class TestBalancerWithMultipleNameNodes {
       balanced = true;
       for(int d = 0; d < used.length; d++) {
         final double p = used[d]*100.0/cap[d];
-        balanced = p <= avg + s.parameters.getThreshold();
+        balanced = p <= avg + Balancer.Parameters.DEFAULT.threshold;
         if (!balanced) {
           if (i % 100 == 0) {
             LOG.warn("datanodes " + d + " is not yet balanced: "
@@ -219,90 +203,6 @@ public class TestBalancerWithMultipleNameNodes {
       }
     }
     LOG.info("BALANCER 6");
-    // cluster is balanced, verify that only selected blockpools were touched
-    Map<Integer, DatanodeStorageReport[]> postBalancerPoolUsages =
-        getStorageReports(s);
-    Assert.assertEquals(preBalancerPoolUsages.size(),
-        postBalancerPoolUsages.size());
-    for (Map.Entry<Integer, DatanodeStorageReport[]> entry
-        : preBalancerPoolUsages.entrySet()) {
-      compareTotalPoolUsage(entry.getValue(),
-          postBalancerPoolUsages.get(entry.getKey()));
-    }
-  }
-
-  /**
-   * Compare the total blockpool usage on each datanode to ensure that nothing
-   * was balanced.
-   *
-   * @param preReports storage reports from pre balancer run
-   * @param postReports storage reports from post balancer run
-   */
-  private static void compareTotalPoolUsage(DatanodeStorageReport[] preReports,
-      DatanodeStorageReport[] postReports) {
-    Assert.assertNotNull(preReports);
-    Assert.assertNotNull(postReports);
-    Assert.assertEquals(preReports.length, postReports.length);
-    for (DatanodeStorageReport preReport : preReports) {
-      String dnUuid = preReport.getDatanodeInfo().getDatanodeUuid();
-      for(DatanodeStorageReport postReport : postReports) {
-        if(postReport.getDatanodeInfo().getDatanodeUuid().equals(dnUuid)) {
-          Assert.assertEquals(getTotalPoolUsage(preReport),
-              getTotalPoolUsage(postReport));
-          LOG.info("Comparision of datanode pool usage pre/post balancer run. "
-              + "PrePoolUsage: " + getTotalPoolUsage(preReport)
-              + ", PostPoolUsage: " + getTotalPoolUsage(postReport));
-          break;
-        }
-      }
-    }
-  }
-
-  private static long getTotalPoolUsage(DatanodeStorageReport report) {
-    long usage = 0L;
-    for (StorageReport sr : report.getStorageReports()) {
-      usage += sr.getBlockPoolUsed();
-    }
-    return usage;
-  }
-
-  /**
-   * Get the storage reports for all blockpools that were not specified by the
-   * balancer blockpool parameters. If none were specified then the parameter
-   * was not set and do not return any reports.
-   *
-   * @param s suite for the test
-   * @return a map of storage reports where the key is the blockpool index
-   * @throws IOException
-   */
-  private static Map<Integer,
-    DatanodeStorageReport[]> getStorageReports(Suite s) throws IOException {
-    Map<Integer, DatanodeStorageReport[]> reports =
-        new HashMap<Integer, DatanodeStorageReport[]>();
-    if (s.parameters.getBlockPools().size() == 0) {
-      // the blockpools parameter was not set, so we don't need to track any
-      // blockpools.
-      return Collections.emptyMap();
-    }
-    for (int i = 0; i < s.clients.length; i++) {
-      if (s.parameters.getBlockPools().contains(
-          s.cluster.getNamesystem(i)
-          .getBlockPoolId())) {
-        // we want to ensure that blockpools not specified by the balancer
-        // parameters were left alone. Therefore, if the pool was specified,
-        // skip it. Note: this code assumes the clients in the suite are ordered
-        // the same way that they are indexed via cluster#getNamesystem(index).
-        continue;
-      } else {
-        LOG.info("Tracking usage of blockpool id: "
-            + s.cluster.getNamesystem(i).getBlockPoolId());
-        reports.put(i,
-            s.clients[i].getDatanodeStorageReport(DatanodeReportType.LIVE));
-      }
-    }
-    LOG.info("Tracking " + reports.size()
-        + " blockpool(s) for pre/post balancer usage.");
-    return reports;
   }
 
   private static void sleep(long ms) {
@@ -320,29 +220,23 @@ public class TestBalancerWithMultipleNameNodes {
   }
 
   /**
-   * First start a cluster and fill the cluster up to a certain size. Then
-   * redistribute blocks according the required distribution. Finally, balance
-   * the cluster.
-   *
+   * First start a cluster and fill the cluster up to a certain size.
+   * Then redistribute blocks according the required distribution.
+   * Finally, balance the cluster.
+   * 
    * @param nNameNodes Number of NameNodes
-   * @param nNameNodesToBalance Number of NameNodes to run the balancer on
-   * @param distributionPerNN The distribution for each NameNode.
+   * @param distributionPerNN The distribution for each NameNode. 
    * @param capacities Capacities of the datanodes
    * @param racks Rack names
    * @param conf Configuration
    */
   private void unevenDistribution(final int nNameNodes,
-      final int nNameNodesToBalance, long distributionPerNN[],
-      long capacities[], String[] racks, Configuration conf) throws Exception {
+      long distributionPerNN[], long capacities[], String[] racks,
+      Configuration conf) throws Exception {
     LOG.info("UNEVEN 0");
     final int nDataNodes = distributionPerNN.length;
     if (capacities.length != nDataNodes || racks.length != nDataNodes) {
       throw new IllegalArgumentException("Array length is not the same");
-    }
-
-    if (nNameNodesToBalance > nNameNodes) {
-      throw new IllegalArgumentException("Number of namenodes to balance is "
-          + "greater than the number of namenodes.");
     }
 
     // calculate total space that need to be filled
@@ -354,7 +248,7 @@ public class TestBalancerWithMultipleNameNodes {
       LOG.info("UNEVEN 1");
       final MiniDFSCluster cluster = new MiniDFSCluster
           .Builder(new Configuration(conf))
-              .nnTopology(MiniDFSNNTopology.simpleFederatedTopology(nNameNodes))
+          .nnTopology(MiniDFSNNTopology.simpleFederatedTopology(2))
           .numDataNodes(nDataNodes)
           .racks(racks)
           .simulatedCapacities(capacities)
@@ -364,7 +258,7 @@ public class TestBalancerWithMultipleNameNodes {
         cluster.waitActive();
         DFSTestUtil.setFederatedConfiguration(cluster, conf);
         LOG.info("UNEVEN 3");
-        final Suite s = new Suite(cluster, nNameNodes, nDataNodes, null, conf);
+        final Suite s = new Suite(cluster, nNameNodes, nDataNodes, conf);
         blocks = generateBlocks(s, usedSpacePerNN);
         LOG.info("UNEVEN 4");
       } finally {
@@ -386,16 +280,7 @@ public class TestBalancerWithMultipleNameNodes {
       try {
         cluster.waitActive();
         LOG.info("UNEVEN 12");
-        Set<String> blockpools = new HashSet<String>();
-        for (int i = 0; i < nNameNodesToBalance; i++) {
-          blockpools.add(cluster.getNamesystem(i).getBlockPoolId());
-        }
-        BalancerParameters.Builder b =
-            new BalancerParameters.Builder();
-        b.setBlockpools(blockpools);
-        BalancerParameters params = b.build();
-        final Suite s =
-            new Suite(cluster, nNameNodes, nDataNodes, params, conf);
+        final Suite s = new Suite(cluster, nNameNodes, nDataNodes, conf);
         for(int n = 0; n < nNameNodes; n++) {
           // redistribute blocks
           final Block[][] blocksDN = TestBalancer.distributeBlocks(
@@ -451,9 +336,7 @@ public class TestBalancerWithMultipleNameNodes {
     try {
       cluster.waitActive();
       LOG.info("RUN_TEST 1");
-      final Suite s =
-          new Suite(cluster, nNameNodes, nDataNodes,
-              BalancerParameters.DEFAULT, conf);
+      final Suite s = new Suite(cluster, nNameNodes, nDataNodes, conf);
       long totalCapacity = TestBalancer.sum(capacities);
 
       LOG.info("RUN_TEST 2");
@@ -495,26 +378,10 @@ public class TestBalancerWithMultipleNameNodes {
   @Test
   public void testUnevenDistribution() throws Exception {
     final Configuration conf = createConf();
-    unevenDistribution(2, 2,
+    unevenDistribution(2,
         new long[] {30*CAPACITY/100, 5*CAPACITY/100},
         new long[]{CAPACITY, CAPACITY},
         new String[] {RACK0, RACK1},
         conf);
-  }
-
-  @Test
-  public void testBalancing1OutOf2Blockpools() throws Exception {
-    final Configuration conf = createConf();
-    unevenDistribution(2, 1, new long[] { 30 * CAPACITY / 100,
-        5 * CAPACITY / 100 }, new long[] { CAPACITY, CAPACITY }, new String[] {
-        RACK0, RACK1 }, conf);
-  }
-
-  @Test
-  public void testBalancing2OutOf3Blockpools() throws Exception {
-    final Configuration conf = createConf();
-    unevenDistribution(3, 2, new long[] { 30 * CAPACITY / 100,
-        5 * CAPACITY / 100, 10 * CAPACITY / 100 }, new long[] { CAPACITY,
-        CAPACITY, CAPACITY }, new String[] { RACK0, RACK1, RACK2 }, conf);
   }
 }

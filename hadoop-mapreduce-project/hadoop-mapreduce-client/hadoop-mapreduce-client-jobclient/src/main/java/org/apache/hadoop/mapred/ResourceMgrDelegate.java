@@ -58,10 +58,8 @@ import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerReport;
 import org.apache.hadoop.yarn.api.records.NodeId;
-import org.apache.hadoop.yarn.api.records.NodeLabel;
 import org.apache.hadoop.yarn.api.records.NodeReport;
 import org.apache.hadoop.yarn.api.records.NodeState;
-import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.QueueUserACLInfo;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.hadoop.yarn.api.records.YarnClusterMetrics;
@@ -339,15 +337,6 @@ public class ResourceMgrDelegate extends YarnClient {
   }
 
   @Override
-  public List<ApplicationReport> getApplications(Set<String> queues,
-      Set<String> users, Set<String> applicationTypes,
-      EnumSet<YarnApplicationState> applicationStates) throws YarnException,
-      IOException {
-    return client.getApplications(queues, users, applicationTypes,
-      applicationStates);
-  }
-
-  @Override
   public YarnClusterMetrics getYarnClusterMetrics() throws YarnException,
       IOException {
     return client.getYarnClusterMetrics();
@@ -445,32 +434,26 @@ public class ResourceMgrDelegate extends YarnClient {
   }
 
   @Override
-  public Map<NodeId, Set<NodeLabel>> getNodeToLabels() throws YarnException,
+  public Map<NodeId, Set<String>> getNodeToLabels() throws YarnException,
       IOException {
     return client.getNodeToLabels();
   }
 
   @Override
-  public Map<NodeLabel, Set<NodeId>> getLabelsToNodes() throws YarnException,
+  public Map<String, Set<NodeId>> getLabelsToNodes() throws YarnException,
       IOException {
     return client.getLabelsToNodes();
   }
 
   @Override
-  public Map<NodeLabel, Set<NodeId>> getLabelsToNodes(Set<String> labels)
+  public Map<String, Set<NodeId>> getLabelsToNodes(Set<String> labels)
       throws YarnException, IOException {
     return client.getLabelsToNodes(labels);
   }
 
   @Override
-  public List<NodeLabel> getClusterNodeLabels()
+  public Set<String> getClusterNodeLabels()
       throws YarnException, IOException {
     return client.getClusterNodeLabels();
-  }
-
-  @Override
-  public void updateApplicationPriority(ApplicationId applicationId,
-      Priority priority) throws YarnException, IOException {
-    client.updateApplicationPriority(applicationId, priority);
   }
 }

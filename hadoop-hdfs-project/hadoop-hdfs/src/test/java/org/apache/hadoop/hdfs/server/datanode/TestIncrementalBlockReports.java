@@ -31,7 +31,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.*;
 import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocolPB.DatanodeProtocolClientSideTranslatorPB;
-import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsDatasetSpi;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeRegistration;
 import org.apache.hadoop.hdfs.server.protocol.ReceivedDeletedBlockInfo;
@@ -70,12 +69,9 @@ public class TestIncrementalBlockReports {
     fs = cluster.getFileSystem();
     singletonNn = cluster.getNameNode();
     singletonDn = cluster.getDataNodes().get(0);
-    bpos = singletonDn.getAllBpOs().get(0);
+    bpos = singletonDn.getAllBpOs()[0];
     actor = bpos.getBPServiceActors().get(0);
-    try (FsDatasetSpi.FsVolumeReferences volumes =
-        singletonDn.getFSDataset().getFsVolumeReferences()) {
-      storageUuid = volumes.get(0).getStorageID();
-    }
+    storageUuid = singletonDn.getFSDataset().getVolumes().get(0).getStorageID();
   }
 
   private static Block getDummyBlock() {
@@ -163,8 +159,8 @@ public class TestIncrementalBlockReports {
           anyString(),
           any(StorageReceivedDeletedBlocks[].class));
 
-      // Trigger a heartbeat, this also triggers an IBR.
-      DataNodeTestUtils.triggerHeartbeat(singletonDn);
+      // Trigger a block report, this also triggers an IBR.
+      DataNodeTestUtils.triggerBlockReport(singletonDn);
       Thread.sleep(2000);
 
       // Ensure that the deleted block is reported.

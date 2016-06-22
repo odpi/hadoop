@@ -17,19 +17,12 @@
  */
 package org.apache.hadoop.hdfs.server.blockmanagement;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.TreeMap;
-
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.ipc.Server;
 
-import com.google.common.annotations.VisibleForTesting;
+import java.util.*;
 
 /**
  * Stores information about all corrupt blocks in the File System.
@@ -53,8 +46,8 @@ public class CorruptReplicasMap{
     CORRUPTION_REPORTED  // client or datanode reported the corruption
   }
 
-  private final Map<Block, Map<DatanodeDescriptor, Reason>> corruptReplicasMap =
-    new HashMap<Block, Map<DatanodeDescriptor, Reason>>();
+  private final SortedMap<Block, Map<DatanodeDescriptor, Reason>> corruptReplicasMap =
+    new TreeMap<Block, Map<DatanodeDescriptor, Reason>>();
 
   /**
    * Mark the block belonging to datanode as corrupt.
@@ -80,12 +73,12 @@ public class CorruptReplicasMap{
     }
     
     if (!nodes.keySet().contains(dn)) {
-      NameNode.blockStateChangeLog.debug(
+      NameNode.blockStateChangeLog.info(
           "BLOCK NameSystem.addToCorruptReplicasMap: {} added as corrupt on "
               + "{} by {} {}", blk.getBlockName(), dn, Server.getRemoteIp(),
           reasonText);
     } else {
-      NameNode.blockStateChangeLog.debug(
+      NameNode.blockStateChangeLog.info(
           "BLOCK NameSystem.addToCorruptReplicasMap: duplicate requested for" +
               " {} to add as corrupt on {} by {} {}", blk.getBlockName(), dn,
               Server.getRemoteIp(), reasonText);
@@ -188,15 +181,13 @@ public class CorruptReplicasMap{
    * @return Up to numExpectedBlocks blocks from startingBlockId if it exists
    *
    */
-  @VisibleForTesting
-  long[] getCorruptReplicaBlockIdsForTesting(int numExpectedBlocks,
+  long[] getCorruptReplicaBlockIds(int numExpectedBlocks,
                                    Long startingBlockId) {
     if (numExpectedBlocks < 0 || numExpectedBlocks > 100) {
       return null;
     }
     
-    Iterator<Block> blockIt = 
-        new TreeMap<>(corruptReplicasMap).keySet().iterator();
+    Iterator<Block> blockIt = corruptReplicasMap.keySet().iterator();
     
     // if the starting block id was specified, iterate over keys until
     // we find the matching block. If we find a matching block, break

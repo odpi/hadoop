@@ -31,7 +31,7 @@ import org.apache.hadoop.io.Writable;
  */
 @InterfaceAudience.Public
 @InterfaceStability.Stable
-public class FileStatus implements Writable, Comparable<FileStatus> {
+public class FileStatus implements Writable, Comparable {
 
   private Path path;
   private long length;
@@ -193,7 +193,7 @@ public class FileStatus implements Writable, Comparable<FileStatus> {
 
   /**
    * Get FsPermission associated with the file.
-   * @return permission. If a filesystem does not have a notion of permissions
+   * @return permssion. If a filesystem does not have a notion of permissions
    *         or if permissions could not be determined, then default 
    *         permissions equivalent of "rwxrwxrwx" is returned.
    */
@@ -323,14 +323,19 @@ public class FileStatus implements Writable, Comparable<FileStatus> {
   }
 
   /**
-   * Compare this FileStatus to another FileStatus
-   * @param   o the FileStatus to be compared.
+   * Compare this object to another object
+   * 
+   * @param   o the object to be compared.
    * @return  a negative integer, zero, or a positive integer as this object
    *   is less than, equal to, or greater than the specified object.
+   * 
+   * @throws ClassCastException if the specified object's is not of 
+   *         type FileStatus
    */
   @Override
-  public int compareTo(FileStatus o) {
-    return this.getPath().compareTo(o.getPath());
+  public int compareTo(Object o) {
+    FileStatus other = (FileStatus)o;
+    return this.getPath().compareTo(other.getPath());
   }
   
   /** Compare if this object is equal to another object

@@ -24,6 +24,7 @@ import static org.junit.Assert.fail;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.util.Random;
 import java.util.concurrent.TimeoutException;
 
 import org.apache.commons.logging.LogFactory;
@@ -35,9 +36,14 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
+import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
 import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
+import org.apache.hadoop.hdfs.server.namenode.NameNode;
+import org.apache.hadoop.hdfs.web.HftpFileSystem;
 import org.apache.hadoop.ipc.RemoteException;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.log4j.Level;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -60,6 +66,7 @@ public class TestFileStatus {
   private static MiniDFSCluster cluster;
   private static FileSystem fs;
   private static FileContext fc;
+  private static HftpFileSystem hftpfs; 
   private static DFSClient dfsClient;
   private static Path file1;
   
@@ -70,16 +77,28 @@ public class TestFileStatus {
     cluster = new MiniDFSCluster.Builder(conf).build();
     fs = cluster.getFileSystem();
     fc = FileContext.getFileContext(cluster.getURI(0), conf);
-    dfsClient = new DFSClient(DFSUtilClient.getNNAddress(conf), conf);
+    hftpfs = cluster.getHftpFileSystem(0);
+    dfsClient = new DFSClient(NameNode.getAddress(conf), conf);
     file1 = new Path("filestatus.dat");
-    DFSTestUtil.createFile(fs, file1, fileSize, fileSize, blockSize, (short) 1,
-        seed);
+    writeFile(fs, file1, 1, fileSize, blockSize);
   }
   
   @AfterClass
   public static void testTearDown() throws Exception {
     fs.close();
     cluster.shutdown();
+  }
+
+  private static void writeFile(FileSystem fileSys, Path name, int repl,
+      int fileSize, int blockSize) throws IOException {
+    // Create and write a file that contains three blocks of data
+    FSDataOutputStream stm = fileSys.create(name, true,
+        HdfsConstants.IO_FILE_BUFFER_SIZE, (short)repl, (long)blockSize);
+    byte[] buffer = new byte[fileSize];
+    Random rand = new Random(seed);
+    rand.nextBytes(buffer);
+    stm.write(buffer);
+    stm.close();
   }
   
   private void checkFile(FileSystem fileSys, Path name, int repl)
@@ -202,6 +221,8 @@ public class TestFileStatus {
     assertEquals(dir + " should be empty", 0, stats.length);
     assertEquals(dir + " should be zero size ",
         0, fs.getContentSummary(dir).getLength());
+    assertEquals(dir + " should be zero size using hftp",
+        0, hftpfs.getContentSummary(dir).getLength());
     
     RemoteIterator<FileStatus> itor = fc.listStatus(dir);
     assertFalse(dir + " should be empty", itor.hasNext());
@@ -211,8 +232,7 @@ public class TestFileStatus {
 
     // create another file that is smaller than a block.
     Path file2 = new Path(dir, "filestatus2.dat");
-    DFSTestUtil.createFile(fs, file2, blockSize/4, blockSize/4, blockSize,
-        (short) 1, seed);
+    writeFile(fs, file2, 1, blockSize/4, blockSize);
     checkFile(fs, file2, 1);
     
     // verify file attributes
@@ -224,8 +244,7 @@ public class TestFileStatus {
 
     // Create another file in the same directory
     Path file3 = new Path(dir, "filestatus3.dat");
-    DFSTestUtil.createFile(fs, file3, blockSize/4, blockSize/4, blockSize,
-        (short) 1, seed);
+    writeFile(fs, file3, 1, blockSize/4, blockSize);
     checkFile(fs, file3, 1);
     file3 = fs.makeQualified(file3);
 
@@ -234,7 +253,9 @@ public class TestFileStatus {
     final int expected = blockSize/2;  
     assertEquals(dir + " size should be " + expected, 
         expected, fs.getContentSummary(dir).getLength());
-
+    assertEquals(dir + " size should be " + expected + " using hftp", 
+        expected, hftpfs.getContentSummary(dir).getLength());
+    
     // Test listStatus on a non-empty directory
     stats = fs.listStatus(dir);
     assertEquals(dir + " should have two entries", 2, stats.length);
@@ -295,8 +316,7 @@ public class TestFileStatus {
     assertEquals(dir5.toString(), itor.next().getPath().toString());
     assertEquals(file2.toString(), itor.next().getPath().toString());
     assertEquals(file3.toString(), itor.next().getPath().toString());
-
-    assertFalse(itor.hasNext());
+    assertFalse(itor.hasNext());      
 
     itor = fs.listStatusIterator(dir);
     assertEquals(dir3.toString(), itor.next().getPath().toString());
@@ -304,10 +324,19 @@ public class TestFileStatus {
     assertEquals(dir5.toString(), itor.next().getPath().toString());
     assertEquals(file2.toString(), itor.next().getPath().toString());
     assertEquals(file3.toString(), itor.next().getPath().toString());
-
     assertFalse(itor.hasNext());
-      
 
+    { //test permission error on hftp 
+      fs.setPermission(dir, new FsPermission((short)0));
+      try {
+        final String username = UserGroupInformation.getCurrentUser().getShortUserName() + "1";
+        final HftpFileSystem hftp2 = cluster.getHftpFileSystemAs(username, conf, 0, "somegroup");
+        hftp2.getContentSummary(dir);
+        fail();
+      } catch(IOException ioe) {
+        FileSystem.LOG.info("GOOD: getting an exception", ioe);
+      }
+    }
     fs.delete(dir, true);
   }
 }

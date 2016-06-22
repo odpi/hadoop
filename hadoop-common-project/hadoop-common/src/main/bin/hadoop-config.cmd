@@ -80,22 +80,22 @@ if "%1" == "--config" (
 )
 
 @rem
+@rem Set log level. Default to INFO.
+@rem
+
+if "%1" == "--loglevel" (
+  set HADOOP_LOGLEVEL=%2
+  shift
+  shift
+)
+
+@rem
 @rem check to see it is specified whether to use the slaves or the
 @rem masters file
 @rem
 
 if "%1" == "--hosts" (
   set HADOOP_SLAVES=%HADOOP_CONF_DIR%\%2
-  shift
-  shift
-)
-
-@rem
-@rem Set log level. Default to INFO.
-@rem
-
-if "%1" == "--loglevel" (
-  set HADOOP_LOGLEVEL=%2
   shift
   shift
 )
@@ -115,7 +115,7 @@ if not defined JAVA_HOME (
 
 if not exist %JAVA_HOME%\bin\java.exe (
   echo Error: JAVA_HOME is incorrectly set.
-  echo        Please update %HADOOP_CONF_DIR%\hadoop-env.cmd
+  echo        Please update %HADOOP_HOME%\conf\hadoop-env.cmd
   goto :eof
 )
 

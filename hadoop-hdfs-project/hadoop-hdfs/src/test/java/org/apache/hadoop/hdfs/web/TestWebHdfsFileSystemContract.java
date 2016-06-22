@@ -42,6 +42,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.AppendTestUtil;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.web.resources.*;
 import org.apache.hadoop.hdfs.web.resources.NamenodeAddressParam;
@@ -59,6 +60,7 @@ public class TestWebHdfsFileSystemContract extends FileSystemContractBaseTest {
   private UserGroupInformation ugi;
 
   static {
+    conf.setBoolean(DFSConfigKeys.DFS_WEBHDFS_ENABLED_KEY, true);
     try {
       cluster = new MiniDFSCluster.Builder(conf).numDataNodes(2).build();
       cluster.waitActive();
@@ -77,7 +79,7 @@ public class TestWebHdfsFileSystemContract extends FileSystemContractBaseTest {
     final UserGroupInformation current = UserGroupInformation.getCurrentUser();
     ugi = UserGroupInformation.createUserForTesting(
         current.getShortUserName() + "x", new String[]{"user"});
-    fs = WebHdfsTestUtil.getWebHdfsFileSystemAs(ugi, conf, WebHdfsConstants.WEBHDFS_SCHEME);
+    fs = WebHdfsTestUtil.getWebHdfsFileSystemAs(ugi, conf, WebHdfsFileSystem.SCHEME);
     defaultWorkingDirectory = fs.getWorkingDirectory().toUri().getPath();
   }
 
@@ -399,7 +401,7 @@ public class TestWebHdfsFileSystemContract extends FileSystemContractBaseTest {
       final HttpURLConnection conn = (HttpURLConnection) url.openConnection();
       final Map<?, ?> m = WebHdfsTestUtil.connectAndGetJson(
           conn, HttpServletResponse.SC_OK);
-      assertEquals(webhdfs.getHomeDirectory().toUri().getPath(),
+      assertEquals(WebHdfsFileSystem.getHomeDirectoryString(ugi),
           m.get(Path.class.getSimpleName()));
       conn.disconnect();
     }
@@ -538,7 +540,7 @@ public class TestWebHdfsFileSystemContract extends FileSystemContractBaseTest {
       UserGroupInformation ugi = UserGroupInformation.createUserForTesting("alpha",
           new String[]{"beta"});
       WebHdfsFileSystem fs = WebHdfsTestUtil.getWebHdfsFileSystemAs(ugi, conf,
-          WebHdfsConstants.WEBHDFS_SCHEME);
+          WebHdfsFileSystem.SCHEME);
 
       fs.mkdirs(p1);
       fs.setPermission(p1, new FsPermission((short) 0444));

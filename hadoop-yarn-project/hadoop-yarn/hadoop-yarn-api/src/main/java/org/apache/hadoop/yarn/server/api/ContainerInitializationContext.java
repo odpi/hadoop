@@ -41,11 +41,4 @@ public class ContainerInitializationContext extends ContainerContext {
     super(user, containerId, resource);
   }
 
-  @Private
-  @Unstable
-  public ContainerInitializationContext(String user, ContainerId containerId,
-      Resource resource, ContainerType containerType) {
-    super(user, containerId, resource, containerType);
-  }
-
 }

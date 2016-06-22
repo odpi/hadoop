@@ -19,13 +19,11 @@
 package org.apache.hadoop.yarn.nodelabels;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
@@ -39,11 +37,9 @@ import java.util.regex.Pattern;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.yarn.api.records.NodeId;
-import org.apache.hadoop.yarn.api.records.NodeLabel;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.AsyncDispatcher;
@@ -60,14 +56,11 @@ import org.apache.hadoop.yarn.util.resource.Resources;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 
-@Private
 public class CommonNodeLabelsManager extends AbstractService {
   protected static final Log LOG = LogFactory.getLog(CommonNodeLabelsManager.class);
   private static final int MAX_LABEL_LENGTH = 255;
   public static final Set<String> EMPTY_STRING_SET = Collections
       .unmodifiableSet(new HashSet<String>(0));
-  public static final Set<NodeLabel> EMPTY_NODELABEL_SET = Collections
-      .unmodifiableSet(new HashSet<NodeLabel>(0));
   public static final String ANY = "*";
   public static final Set<String> ACCESS_ANY_LABEL_SET = ImmutableSet.of(ANY);
   private static final Pattern LABEL_PATTERN = Pattern
@@ -90,8 +83,8 @@ public class CommonNodeLabelsManager extends AbstractService {
 
   protected Dispatcher dispatcher;
 
-  protected ConcurrentMap<String, RMNodeLabel> labelCollections =
-      new ConcurrentHashMap<String, RMNodeLabel>();
+  protected ConcurrentMap<String, NodeLabel> labelCollections =
+      new ConcurrentHashMap<String, NodeLabel>();
   protected ConcurrentMap<String, Host> nodeCollections =
       new ConcurrentHashMap<String, Host>();
 
@@ -100,8 +93,6 @@ public class CommonNodeLabelsManager extends AbstractService {
 
   protected NodeLabelsStore store;
   private boolean nodeLabelsEnabled = false;
-
-  private boolean isDistributedNodeLabelConfiguration = false;
 
   /**
    * A <code>Host</code> can have multiple <code>Node</code>s 
@@ -219,17 +210,14 @@ public class CommonNodeLabelsManager extends AbstractService {
     nodeLabelsEnabled =
         conf.getBoolean(YarnConfiguration.NODE_LABELS_ENABLED,
             YarnConfiguration.DEFAULT_NODE_LABELS_ENABLED);
-
-    isDistributedNodeLabelConfiguration  =
-        YarnConfiguration.isDistributedNodeLabelConfiguration(conf);
     
-    labelCollections.put(NO_LABEL, new RMNodeLabel(NO_LABEL));
+    labelCollections.put(NO_LABEL, new NodeLabel(NO_LABEL));
   }
 
   protected void initNodeLabelStore(Configuration conf) throws Exception {
     this.store = new FileSystemNodeLabelsStore(this);
     this.store.init(conf);
-    this.store.recover(isDistributedNodeLabelConfiguration);
+    this.store.recover();
   }
 
   // for UT purpose
@@ -260,9 +248,7 @@ public class CommonNodeLabelsManager extends AbstractService {
   // for UT purpose
   protected void stopDispatcher() {
     AsyncDispatcher asyncDispatcher = (AsyncDispatcher) dispatcher;
-    if (null != asyncDispatcher) {
-      asyncDispatcher.stop();
-    }
+    asyncDispatcher.stop();
   }
   
   @Override
@@ -276,9 +262,14 @@ public class CommonNodeLabelsManager extends AbstractService {
     }
   }
 
+  /**
+   * Add multiple node labels to repository
+   * 
+   * @param labels
+   *          new node labels added
+   */
   @SuppressWarnings("unchecked")
-  public void addToCluserNodeLabels(Collection<NodeLabel> labels)
-      throws IOException {
+  public void addToCluserNodeLabels(Set<String> labels) throws IOException {
     if (!nodeLabelsEnabled) {
       LOG.error(NODE_LABELS_NOT_ENABLED_ERR);
       throw new IOException(NODE_LABELS_NOT_ENABLED_ERR);
@@ -286,20 +277,19 @@ public class CommonNodeLabelsManager extends AbstractService {
     if (null == labels || labels.isEmpty()) {
       return;
     }
-    List<NodeLabel> newLabels = new ArrayList<NodeLabel>();
-    normalizeNodeLabels(labels);
-    // check any mismatch in exclusivity no mismatch with skip
-    checkExclusivityMatch(labels);
+    Set<String> newLabels = new HashSet<String>();
+    labels = normalizeLabels(labels);
+
     // do a check before actual adding them, will throw exception if any of them
     // doesn't meet label name requirement
-    for (NodeLabel label : labels) {
-      checkAndThrowLabelName(label.getName());
+    for (String label : labels) {
+      checkAndThrowLabelName(label);
     }
 
-    for (NodeLabel label : labels) {
+    for (String label : labels) {
       // shouldn't overwrite it to avoid changing the Label.resource
-      if (this.labelCollections.get(label.getName()) == null) {
-        this.labelCollections.put(label.getName(), new RMNodeLabel(label));
+      if (this.labelCollections.get(label) == null) {
+        this.labelCollections.put(label, new NodeLabel(label));
         newLabels.add(label);
       }
     }
@@ -309,22 +299,6 @@ public class CommonNodeLabelsManager extends AbstractService {
     }
 
     LOG.info("Add labels: [" + StringUtils.join(labels.iterator(), ",") + "]");
-  }
-
-  /**
-   * Add multiple node labels to repository
-   *
-   * @param labels
-   *          new node labels added
-   */
-  @VisibleForTesting
-  public void addToCluserNodeLabelsWithDefaultExclusivity(Set<String> labels)
-      throws IOException {
-    Set<NodeLabel> nodeLabels = new HashSet<NodeLabel>();
-    for (String label : labels) {
-      nodeLabels.add(NodeLabel.newInstance(label));
-    }
-    addToCluserNodeLabels(nodeLabels);
   }
   
   protected void checkAddLabelsToNode(
@@ -624,10 +598,7 @@ public class CommonNodeLabelsManager extends AbstractService {
       }
     }
     
-    if (null != dispatcher && !isDistributedNodeLabelConfiguration) {
-      // In case of DistributedNodeLabelConfiguration, no need to save the the
-      // NodeLabels Mapping to the back-end store, as on RM restart/failover
-      // NodeLabels are collected from NM through Register/Heartbeat again
+    if (null != dispatcher) {
       dispatcher.getEventHandler().handle(
           new UpdateNodeToLabelsMappingsEvent(newNMToLabels));
     }
@@ -721,53 +692,23 @@ public class CommonNodeLabelsManager extends AbstractService {
    * @return nodes to labels map
    */
   public Map<NodeId, Set<String>> getNodeLabels() {
-    Map<NodeId, Set<String>> nodeToLabels =
-        generateNodeLabelsInfoPerNode(String.class);
-    return nodeToLabels;
-  }
-
-  /**
-   * Get mapping of nodes to label info
-   *
-   * @return nodes to labels map
-   */
-  public Map<NodeId, Set<NodeLabel>> getNodeLabelsInfo() {
-    Map<NodeId, Set<NodeLabel>> nodeToLabels =
-        generateNodeLabelsInfoPerNode(NodeLabel.class);
-    return nodeToLabels;
-  }
-
-  @SuppressWarnings("unchecked")
-  private <T> Map<NodeId, Set<T>> generateNodeLabelsInfoPerNode(Class<T> type) {
     try {
       readLock.lock();
-      Map<NodeId, Set<T>> nodeToLabels = new HashMap<>();
+      Map<NodeId, Set<String>> nodeToLabels =
+          new HashMap<NodeId, Set<String>>();
       for (Entry<String, Host> entry : nodeCollections.entrySet()) {
         String hostName = entry.getKey();
         Host host = entry.getValue();
         for (NodeId nodeId : host.nms.keySet()) {
-          if (type.isAssignableFrom(String.class)) {
-            Set<String> nodeLabels = getLabelsByNode(nodeId);
-            if (nodeLabels == null || nodeLabels.isEmpty()) {
-              continue;
-            }
-            nodeToLabels.put(nodeId, (Set<T>) nodeLabels);
-          } else {
-            Set<NodeLabel> nodeLabels = getLabelsInfoByNode(nodeId);
-            if (nodeLabels == null || nodeLabels.isEmpty()) {
-              continue;
-            }
-            nodeToLabels.put(nodeId, (Set<T>) nodeLabels);
+          Set<String> nodeLabels = getLabelsByNode(nodeId);
+          if (nodeLabels == null || nodeLabels.isEmpty()) {
+            continue;
           }
+          nodeToLabels.put(nodeId, nodeLabels);
         }
         if (!host.labels.isEmpty()) {
-          if (type.isAssignableFrom(String.class)) {
-            nodeToLabels.put(NodeId.newInstance(hostName, WILDCARD_PORT),
-                (Set<T>) host.labels);
-          } else {
-            nodeToLabels.put(NodeId.newInstance(hostName, WILDCARD_PORT),
-                (Set<T>) createNodeLabelFromLabelNames(host.labels));
-          }
+          nodeToLabels
+              .put(NodeId.newInstance(hostName, WILDCARD_PORT), host.labels);
         }
       }
       return Collections.unmodifiableMap(nodeToLabels);
@@ -775,7 +716,6 @@ public class CommonNodeLabelsManager extends AbstractService {
       readLock.unlock();
     }
   }
-
 
   /**
    * Get mapping of labels to nodes for all the labels.
@@ -801,70 +741,26 @@ public class CommonNodeLabelsManager extends AbstractService {
   public Map<String, Set<NodeId>> getLabelsToNodes(Set<String> labels) {
     try {
       readLock.lock();
-      Map<String, Set<NodeId>> labelsToNodes = getLabelsToNodesMapping(labels,
-          String.class);
-      return Collections.unmodifiableMap(labelsToNodes);
-    } finally {
-      readLock.unlock();
-    }
-  }
-
-
-  /**
-   * Get mapping of labels to nodes for all the labels.
-   *
-   * @return labels to nodes map
-   */
-  public Map<NodeLabel, Set<NodeId>> getLabelsInfoToNodes() {
-    try {
-      readLock.lock();
-      return getLabelsInfoToNodes(labelCollections.keySet());
-    } finally {
-      readLock.unlock();
-    }
-  }
-
-  /**
-   * Get mapping of labels info to nodes for specified set of labels.
-   *
-   * @param labels
-   *          set of nodelabels for which labels to nodes mapping will be
-   *          returned.
-   * @return labels to nodes map
-   */
-  public Map<NodeLabel, Set<NodeId>> getLabelsInfoToNodes(Set<String> labels) {
-    try {
-      readLock.lock();
-      Map<NodeLabel, Set<NodeId>> labelsToNodes = getLabelsToNodesMapping(
-          labels, NodeLabel.class);
-      return Collections.unmodifiableMap(labelsToNodes);
-    } finally {
-      readLock.unlock();
-    }
-  }
-
-  private <T> Map<T, Set<NodeId>> getLabelsToNodesMapping(Set<String> labels,
-      Class<T> type) {
-    Map<T, Set<NodeId>> labelsToNodes = new HashMap<T, Set<NodeId>>();
-    for (String label : labels) {
-      if (label.equals(NO_LABEL)) {
-        continue;
-      }
-      RMNodeLabel nodeLabelInfo = labelCollections.get(label);
-      if (nodeLabelInfo != null) {
-        Set<NodeId> nodeIds = nodeLabelInfo.getAssociatedNodeIds();
-        if (!nodeIds.isEmpty()) {
-          if (type.isAssignableFrom(String.class)) {
-            labelsToNodes.put(type.cast(label), nodeIds);
-          } else {
-            labelsToNodes.put(type.cast(nodeLabelInfo.getNodeLabel()), nodeIds);
-          }
+      Map<String, Set<NodeId>> labelsToNodes =
+          new HashMap<String, Set<NodeId>>();
+      for (String label : labels) {
+        if(label.equals(NO_LABEL)) {
+          continue;
         }
-      } else {
-        LOG.warn("getLabelsToNodes : Label [" + label + "] cannot be found");
-      }
+        NodeLabel nodeLabelInfo = labelCollections.get(label);
+        if(nodeLabelInfo != null) {
+          Set<NodeId> nodeIds = nodeLabelInfo.getAssociatedNodeIds();
+          if (!nodeIds.isEmpty()) {
+            labelsToNodes.put(label, nodeIds);
+          }
+        } else {
+          LOG.warn("getLabelsToNodes : Label [" + label + "] cannot be found");
+        }
+      }      
+      return Collections.unmodifiableMap(labelsToNodes);
+    } finally {
+      readLock.unlock();
     }
-    return labelsToNodes;
   }
 
   /**
@@ -872,7 +768,7 @@ public class CommonNodeLabelsManager extends AbstractService {
    * 
    * @return existing valid labels in repository
    */
-  public Set<String> getClusterNodeLabelNames() {
+  public Set<String> getClusterNodeLabels() {
     try {
       readLock.lock();
       Set<String> labels = new HashSet<String>(labelCollections.keySet());
@@ -882,41 +778,8 @@ public class CommonNodeLabelsManager extends AbstractService {
       readLock.unlock();
     }
   }
-  
-  public List<NodeLabel> getClusterNodeLabels() {
-    try {
-      readLock.lock();
-      List<NodeLabel> nodeLabels = new ArrayList<>();
-      for (RMNodeLabel label : labelCollections.values()) {
-        if (!label.getLabelName().equals(NO_LABEL)) {
-          nodeLabels.add(NodeLabel.newInstance(label.getLabelName(),
-              label.getIsExclusive()));
-        }
-      }
-      return nodeLabels;
-    } finally {
-      readLock.unlock();
-    }
-  }
 
-  public boolean isExclusiveNodeLabel(String nodeLabel) throws IOException {
-    try {
-      readLock.lock();
-      RMNodeLabel label = labelCollections.get(nodeLabel);
-      if (label == null) {
-        String message =
-          "Getting is-exclusive-node-label, node-label = " + nodeLabel
-            + ", is not existed.";
-        LOG.error(message);
-        throw new IOException(message);
-      }
-      return label.getIsExclusive();
-    } finally {
-      readLock.unlock();
-    }
-  }
-
-  public static void checkAndThrowLabelName(String label) throws IOException {
+  private void checkAndThrowLabelName(String label) throws IOException {
     if (label == null || label.isEmpty() || label.length() > MAX_LABEL_LENGTH) {
       throw new IOException("label added is empty or exceeds "
           + MAX_LABEL_LENGTH + " character(s)");
@@ -929,23 +792,6 @@ public class CommonNodeLabelsManager extends AbstractService {
       throw new IOException("label name should only contains "
           + "{0-9, a-z, A-Z, -, _} and should not started with {-,_}"
           + ", now it is=" + label);
-    }
-  }
-
-  private void checkExclusivityMatch(Collection<NodeLabel> labels)
-      throws IOException {
-    ArrayList<NodeLabel> mismatchlabels = new ArrayList<NodeLabel>();
-    for (NodeLabel label : labels) {
-      RMNodeLabel rmNodeLabel = this.labelCollections.get(label.getName());
-      if (rmNodeLabel != null
-          && rmNodeLabel.getIsExclusive() != label.isExclusive()) {
-        mismatchlabels.add(label);
-      }
-    }
-    if (mismatchlabels.size() > 0) {
-      throw new IOException(
-          "Exclusivity cannot be modified for an existing label with : "
-              + StringUtils.join(mismatchlabels.iterator(), ","));
     }
   }
 
@@ -964,12 +810,6 @@ public class CommonNodeLabelsManager extends AbstractService {
     return newLabels;
   }
   
-  private void normalizeNodeLabels(Collection<NodeLabel> labels) {
-    for (NodeLabel label : labels) {
-      label.setName(normalizeLabel(label.getName()));
-    }
-  }
-
   protected Node getNMInNodeSet(NodeId nodeId) {
     return getNMInNodeSet(nodeId, nodeCollections);
   }
@@ -1011,35 +851,6 @@ public class CommonNodeLabelsManager extends AbstractService {
     }
   }
   
-  public Set<NodeLabel> getLabelsInfoByNode(NodeId nodeId) {
-    try {
-      readLock.lock();
-      Set<String> labels = getLabelsByNode(nodeId, nodeCollections);
-      if (labels.isEmpty()) {
-        return EMPTY_NODELABEL_SET;
-      }
-      Set<NodeLabel> nodeLabels = createNodeLabelFromLabelNames(labels);
-      return nodeLabels;
-    } finally {
-      readLock.unlock();
-    }
-  }
-
-  private Set<NodeLabel> createNodeLabelFromLabelNames(Set<String> labels) {
-    Set<NodeLabel> nodeLabels = new HashSet<NodeLabel>();
-    for (String label : labels) {
-      if (label.equals(NO_LABEL)) {
-        continue;
-      }
-      RMNodeLabel rmLabel = labelCollections.get(label);
-      if (rmLabel == null) {
-        continue;
-      }
-      nodeLabels.add(rmLabel.getNodeLabel());
-    }
-    return nodeLabels;
-  }
-
   protected void createNodeIfNonExisted(NodeId nodeId) throws IOException {
     Host host = nodeCollections.get(nodeId.getHost());
     if (null == host) {

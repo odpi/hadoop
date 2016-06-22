@@ -33,17 +33,14 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.hdfs.BlockMissingException;
+import org.apache.hadoop.hdfs.CorruptFileBlockIterator;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
-import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
-import org.apache.hadoop.hdfs.client.impl.CorruptFileBlockIterator;
 import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
-import org.apache.hadoop.hdfs.server.datanode.DataNode;
-import org.apache.hadoop.hdfs.server.datanode.DataNodeTestUtils;
 import org.apache.hadoop.util.StringUtils;
 import org.junit.Test;
 import org.slf4j.Logger;
@@ -70,7 +67,7 @@ public class TestListCorruptFileBlocks {
       conf.setInt(DFSConfigKeys.DFS_DATANODE_DIRECTORYSCAN_INTERVAL_KEY, 1); // datanode scans directories
       conf.setInt(DFSConfigKeys.DFS_BLOCKREPORT_INTERVAL_MSEC_KEY, 3 * 1000); // datanode sends block reports
       // Set short retry timeouts so this test runs faster
-      conf.setInt(HdfsClientConfigKeys.Retry.WINDOW_BASE_KEY, 10);
+      conf.setInt(DFSConfigKeys.DFS_CLIENT_RETRY_WINDOW_BASE, 10);
       cluster = new MiniDFSCluster.Builder(conf).build();
       FileSystem fs = cluster.getFileSystem();
 
@@ -149,7 +146,7 @@ public class TestListCorruptFileBlocks {
       conf.setFloat(DFSConfigKeys.DFS_NAMENODE_REPL_QUEUE_THRESHOLD_PCT_KEY,
                     0f);
       // Set short retry timeouts so this test runs faster
-      conf.setInt(HdfsClientConfigKeys.Retry.WINDOW_BASE_KEY, 10);
+      conf.setInt(DFSConfigKeys.DFS_CLIENT_RETRY_WINDOW_BASE, 10);
       cluster = new MiniDFSCluster.Builder(conf).waitSafeMode(false).build();
       cluster.getNameNodeRpc().setSafeMode(
           HdfsConstants.SafeModeAction.SAFEMODE_LEAVE, false);
@@ -210,8 +207,7 @@ public class TestListCorruptFileBlocks {
       fs = cluster.getFileSystem();
 
       // wait until replication queues have been initialized
-      while (!cluster.getNameNode().namesystem.getBlockManager()
-          .isPopulatingReplQueues()) {
+      while (!cluster.getNameNode().namesystem.isPopulatingReplQueues()) {
         try {
           LOG.info("waiting for replication queues");
           Thread.sleep(1000);
@@ -486,10 +482,6 @@ public class TestListCorruptFileBlocks {
           }
         }
       }
-
-      // Run the direcrtoryScanner to update the Datanodes volumeMap
-      DataNode dn = cluster.getDataNodes().get(0);
-      DataNodeTestUtils.runDirectoryScanner(dn);
 
       // Occasionally the BlockPoolSliceScanner can run before we have removed
       // the blocks. Restart the Datanode to trigger the scanner into running

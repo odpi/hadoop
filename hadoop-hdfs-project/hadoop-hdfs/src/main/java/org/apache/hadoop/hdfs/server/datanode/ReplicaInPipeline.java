@@ -20,7 +20,6 @@ package org.apache.hadoop.hdfs.server.datanode;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.io.RandomAccessFile;
 
 import org.apache.hadoop.hdfs.protocol.Block;
@@ -52,8 +51,7 @@ public class ReplicaInPipeline extends ReplicaInfo
    * the bytes already written to this block.
    */
   private long bytesReserved;
-  private final long originalBytesReserved;
-
+  
   /**
    * Constructor for a zero length replica
    * @param blockId block id
@@ -99,7 +97,6 @@ public class ReplicaInPipeline extends ReplicaInfo
     this.bytesOnDisk = len;
     this.writer = writer;
     this.bytesReserved = bytesToReserve;
-    this.originalBytesReserved = bytesToReserve;
   }
 
   /**
@@ -112,7 +109,6 @@ public class ReplicaInPipeline extends ReplicaInfo
     this.bytesOnDisk = from.getBytesOnDisk();
     this.writer = from.writer;
     this.bytesReserved = from.bytesReserved;
-    this.originalBytesReserved = from.originalBytesReserved;
   }
 
   @Override
@@ -153,14 +149,8 @@ public class ReplicaInPipeline extends ReplicaInfo
   }
   
   @Override
-  public long getOriginalBytesReserved() {
-    return originalBytesReserved;
-  }
-
-  @Override
   public void releaseAllBytesReserved() {  // ReplicaInPipelineInterface
     getVolume().releaseReservedSpace(bytesReserved);
-    getVolume().releaseLockedMemory(bytesReserved);
     bytesReserved = 0;
   }
 
@@ -288,19 +278,7 @@ public class ReplicaInPipeline extends ReplicaInfo
       throw e;
     }
   }
-
-  @Override
-  public OutputStream createRestartMetaStream() throws IOException {
-    File blockFile = getBlockFile();
-    File restartMeta = new File(blockFile.getParent()  +
-        File.pathSeparator + "." + blockFile.getName() + ".restart");
-    if (restartMeta.exists() && !restartMeta.delete()) {
-      DataNode.LOG.warn("Failed to delete restart meta file: " +
-          restartMeta.getPath());
-    }
-    return new FileOutputStream(restartMeta);
-  }
-
+  
   @Override
   public String toString() {
     return super.toString()

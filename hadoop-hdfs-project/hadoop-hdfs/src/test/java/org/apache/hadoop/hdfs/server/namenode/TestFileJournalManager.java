@@ -51,6 +51,7 @@ import org.junit.rules.ExpectedException;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.TreeMultiset;
 
 public class TestFileJournalManager {
   static final Log LOG = LogFactory.getLog(TestFileJournalManager.class);
@@ -115,7 +116,7 @@ public class TestFileJournalManager {
     }
     return numTransactions;
   }
-  
+
   /** 
    * Test the normal operation of loading transactions from
    * file journal manager. 3 edits directories are setup without any

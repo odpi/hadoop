@@ -62,9 +62,6 @@ import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Writable;
-import org.apache.hadoop.io.retry.DefaultFailoverProxyProvider;
-import org.apache.hadoop.io.retry.FailoverProxyProvider;
-import org.apache.hadoop.io.retry.Idempotent;
 import org.apache.hadoop.io.retry.RetryPolicies;
 import org.apache.hadoop.io.retry.RetryProxy;
 import org.apache.hadoop.ipc.Client.ConnectionId;
@@ -74,7 +71,6 @@ import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.RpcResponseHeaderProto;
 import org.apache.hadoop.net.ConnectTimeoutException;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.util.StringUtils;
-import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.log4j.Level;
 import org.junit.Assert;
 import org.junit.Assume;
@@ -208,21 +204,18 @@ public class TestIPC {
       this.server = server;
       this.total = total;
     }
-
-    protected Object returnValue(Object value) throws Exception {
-      if (retry++ < total) {
-        throw new IOException("Fake IOException");
-      }
-      return value;
-    }
-
+    
     @Override
     public Object invoke(Object proxy, Method method, Object[] args)
         throws Throwable {
       LongWritable param = new LongWritable(RANDOM.nextLong());
       LongWritable value = (LongWritable) client.call(param,
           NetUtils.getConnectAddress(server), null, null, 0, conf);
-      return returnValue(value);
+      if (retry++ < total) {
+        throw new IOException("Fake IOException");
+      } else {
+        return value;
+      }
     }
 
     @Override
@@ -233,26 +226,7 @@ public class TestIPC {
       return null;
     }
   }
-
-  private static class TestInvalidTokenHandler extends TestInvocationHandler {
-    private int invocations = 0;
-    TestInvalidTokenHandler(Client client, Server server) {
-      super(client, server, 1);
-    }
-
-    @Override
-    protected Object returnValue(Object value) throws Exception {
-      throw new InvalidToken("Invalid Token");
-    }
-
-    @Override
-    public Object invoke(Object proxy, Method method, Object[] args)
-        throws Throwable {
-      invocations++;
-      return super.invoke(proxy, method, args);
-    }
-  }
-
+  
   @Test(timeout=60000)
   public void testSerial() throws IOException, InterruptedException {
     internalTestSerial(3, false, 2, 5, 100);
@@ -304,8 +278,6 @@ public class TestIPC {
       String causeText=cause.getMessage();
       assertTrue("Did not find " + causeText + " in " + message,
               message.contains(causeText));
-    } finally {
-      client.stop();
     }
   }
   
@@ -418,7 +390,6 @@ public class TestIPC {
       client.call(param, addr, null, null, 0, conf);
       
     } finally {
-      client.stop();
       server.stop();
     }
   }
@@ -534,8 +505,6 @@ public class TestIPC {
       fail("Expected an exception to have been thrown");
     } catch (IOException e) {
       assertTrue(e.getMessage().contains("Injected fault"));
-    } finally {
-      client.stop();
     }
   }
 
@@ -561,11 +530,11 @@ public class TestIPC {
     }).when(spyFactory).createSocket();
       
     Server server = new TestServer(1, true);
-    Client client = new Client(LongWritable.class, conf, spyFactory);
     server.start();
     try {
       // Call should fail due to injected exception.
       InetSocketAddress address = NetUtils.getConnectAddress(server);
+      Client client = new Client(LongWritable.class, conf, spyFactory);
       try {
         client.call(new LongWritable(RANDOM.nextLong()),
                 address, null, null, 0, conf);
@@ -582,7 +551,6 @@ public class TestIPC {
       client.call(new LongWritable(RANDOM.nextLong()),
           address, null, null, 0, conf);
     } finally {
-      client.stop();
       server.stop();
     }
   }
@@ -607,7 +575,6 @@ public class TestIPC {
     // set timeout to be bigger than 3*ping interval
     client.call(new LongWritable(RANDOM.nextLong()),
         addr, null, null, 3*PING_INTERVAL+MIN_SLEEP_TIME, conf);
-    client.stop();
   }
 
   @Test(timeout=60000)
@@ -628,7 +595,6 @@ public class TestIPC {
     } catch (SocketTimeoutException e) {
       LOG.info("Get a SocketTimeoutException ", e);
     }
-    client.stop();
   }
   
   /**
@@ -859,8 +825,6 @@ public class TestIPC {
             } catch (IOException e) {
               LOG.error(e);
             } catch (InterruptedException e) {
-            } finally {
-              client.stop();
             }
           }
         });
@@ -962,31 +926,6 @@ public class TestIPC {
         endFds - startFds < 20);
   }
   
-  /**
-   * Check if Client is interrupted after handling
-   * InterruptedException during cleanup
-   */
-  @Test(timeout=30000)
-  public void testInterrupted() {
-    Client client = new Client(LongWritable.class, conf);
-    client.getClientExecutor().submit(new Runnable() {
-      public void run() {
-        while(true);
-      }
-    });
-    Thread.currentThread().interrupt();
-    client.stop();
-    try {
-      assertTrue(Thread.currentThread().isInterrupted());
-      LOG.info("Expected thread interrupt during client cleanup");
-    } catch (AssertionError e) {
-      LOG.error("The Client did not interrupt after handling an Interrupted Exception");
-      Assert.fail("The Client did not interrupt after handling an Interrupted Exception");
-    }
-    // Clear Thread interrupt
-    Thread.currentThread().interrupted();
-  }
-
   private long countOpenFileDescriptors() {
     return FD_DIR.list().length;
   }
@@ -1087,8 +1026,7 @@ public class TestIPC {
   
   /** A dummy protocol */
   private interface DummyProtocol {
-    @Idempotent
-    public void dummyRun() throws IOException;
+    public void dummyRun();
   }
   
   /**
@@ -1127,40 +1065,7 @@ public class TestIPC {
       server.stop();
     }
   }
-
-  /**
-   * Test that there is no retry when invalid token exception is thrown.
-   * Verfies fix for HADOOP-12054
-   */
-  @Test(expected = InvalidToken.class)
-  public void testNoRetryOnInvalidToken() throws IOException {
-    final Client client = new Client(LongWritable.class, conf);
-    final TestServer server = new TestServer(1, false);
-    TestInvalidTokenHandler handler =
-        new TestInvalidTokenHandler(client, server);
-    DummyProtocol proxy = (DummyProtocol) Proxy.newProxyInstance(
-        DummyProtocol.class.getClassLoader(),
-        new Class[] { DummyProtocol.class }, handler);
-    FailoverProxyProvider<DummyProtocol> provider =
-        new DefaultFailoverProxyProvider<DummyProtocol>(
-            DummyProtocol.class, proxy);
-    DummyProtocol retryProxy =
-        (DummyProtocol) RetryProxy.create(DummyProtocol.class, provider,
-        RetryPolicies.failoverOnNetworkException(
-            RetryPolicies.TRY_ONCE_THEN_FAIL, 100, 100, 10000, 0));
-
-    try {
-      server.start();
-      retryProxy.dummyRun();
-    } finally {
-      // Check if dummyRun called only once
-      Assert.assertEquals(handler.invocations, 1);
-      Client.setCallIdAndRetryCount(0, 0);
-      client.stop();
-      server.stop();
-    }
-  }
-
+  
   /**
    * Test if the rpc server gets the default retry count (0) from client.
    */
@@ -1350,7 +1255,6 @@ public class TestIPC {
       Mockito.verify(mockFactory, Mockito.times(maxTimeoutRetries))
           .createSocket();
     }
-    client.stop();
   }
   
   private void doIpcVersionTest(

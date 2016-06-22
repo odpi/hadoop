@@ -101,7 +101,8 @@ public class TestDFSIO implements Tool {
                     " [-compression codecClassName]" +
                     " [-nrFiles N]" +
                     " [-size Size[B|KB|MB|GB|TB]]" +
-                    " [-resFile resultFileName] [-bufferSize Bytes]";
+                    " [-resFile resultFileName] [-bufferSize Bytes]" +
+                    " [-rootDir]";
 
   private Configuration config;
 
@@ -204,6 +205,7 @@ public class TestDFSIO implements Tool {
   @BeforeClass
   public static void beforeClass() throws Exception {
     bench = new TestDFSIO();
+    bench.getConf().setBoolean(DFSConfigKeys.DFS_SUPPORT_APPEND_KEY, true);
     bench.getConf().setInt(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY, 1);
     cluster = new MiniDFSCluster.Builder(bench.getConf())
                                 .numDataNodes(2)
@@ -735,40 +737,39 @@ public class TestDFSIO implements Tool {
       return -1;
     }
 
-    for (int i = 0; i < args.length; i++) { // parse command line
-      if (StringUtils.toLowerCase(args[i]).startsWith("-read")) {
+    for (int i = 0; i < args.length; i++) {       // parse command line
+      if (args[i].startsWith("-read")) {
         testType = TestType.TEST_TYPE_READ;
-      } else if (args[i].equalsIgnoreCase("-write")) {
+      } else if (args[i].equals("-write")) {
         testType = TestType.TEST_TYPE_WRITE;
-      } else if (args[i].equalsIgnoreCase("-append")) {
+      } else if (args[i].equals("-append")) {
         testType = TestType.TEST_TYPE_APPEND;
-      } else if (args[i].equalsIgnoreCase("-random")) {
-        if (testType != TestType.TEST_TYPE_READ) return -1;
+      } else if (args[i].equals("-random")) {
+        if(testType != TestType.TEST_TYPE_READ) return -1;
         testType = TestType.TEST_TYPE_READ_RANDOM;
-      } else if (args[i].equalsIgnoreCase("-backward")) {
-        if (testType != TestType.TEST_TYPE_READ) return -1;
+      } else if (args[i].equals("-backward")) {
+        if(testType != TestType.TEST_TYPE_READ) return -1;
         testType = TestType.TEST_TYPE_READ_BACKWARD;
-      } else if (args[i].equalsIgnoreCase("-skip")) {
-        if (testType != TestType.TEST_TYPE_READ) return -1;
+      } else if (args[i].equals("-skip")) {
+        if(testType != TestType.TEST_TYPE_READ) return -1;
         testType = TestType.TEST_TYPE_READ_SKIP;
       } else if (args[i].equalsIgnoreCase("-truncate")) {
         testType = TestType.TEST_TYPE_TRUNCATE;
-      } else if (args[i].equalsIgnoreCase("-clean")) {
+      } else if (args[i].equals("-clean")) {
         testType = TestType.TEST_TYPE_CLEANUP;
-      } else if (StringUtils.toLowerCase(args[i]).startsWith("-seq")) {
+      } else if (args[i].startsWith("-seq")) {
         isSequential = true;
-      } else if (StringUtils.toLowerCase(args[i]).startsWith("-compression")) {
+      } else if (args[i].startsWith("-compression")) {
         compressionClass = args[++i];
-      } else if (args[i].equalsIgnoreCase("-nrfiles")) {
+      } else if (args[i].equals("-nrFiles")) {
         nrFiles = Integer.parseInt(args[++i]);
-      } else if (args[i].equalsIgnoreCase("-filesize")
-          || args[i].equalsIgnoreCase("-size")) {
+      } else if (args[i].equals("-fileSize") || args[i].equals("-size")) {
         nrBytes = parseSize(args[++i]);
-      } else if (args[i].equalsIgnoreCase("-skipsize")) {
+      } else if (args[i].equals("-skipSize")) {
         skipSize = parseSize(args[++i]);
-      } else if (args[i].equalsIgnoreCase("-buffersize")) {
+      } else if (args[i].equals("-bufferSize")) {
         bufferSize = Integer.parseInt(args[++i]);
-      } else if (args[i].equalsIgnoreCase("-resfile")) {
+      } else if (args[i].equals("-resFile")) {
         resFileName = args[++i];
       } else {
         System.err.println("Illegal argument: " + args[i]);
@@ -796,6 +797,7 @@ public class TestDFSIO implements Tool {
 
     config.setInt("test.io.file.buffer.size", bufferSize);
     config.setLong("test.io.skip.size", skipSize);
+    config.setBoolean(DFSConfigKeys.DFS_SUPPORT_APPEND_KEY, true);
     FileSystem fs = FileSystem.get(config);
 
     if (isSequential) {

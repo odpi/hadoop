@@ -26,24 +26,16 @@ import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatRequest;
 import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatResponse;
 import org.apache.hadoop.yarn.server.api.protocolrecords.RegisterNodeManagerRequest;
 import org.apache.hadoop.yarn.server.api.protocolrecords.RegisterNodeManagerResponse;
-import org.apache.hadoop.yarn.server.api.protocolrecords.UnRegisterNodeManagerRequest;
-import org.apache.hadoop.yarn.server.api.protocolrecords.UnRegisterNodeManagerResponse;
 
-/**
- * This is used by the Node Manager to register/nodeHeartbeat/unregister with
- * the ResourceManager.
- */
 public interface ResourceTracker {
   
   @Idempotent
-  RegisterNodeManagerResponse registerNodeManager(
-      RegisterNodeManagerRequest request) throws YarnException, IOException;
+  public RegisterNodeManagerResponse registerNodeManager(
+      RegisterNodeManagerRequest request) throws YarnException,
+      IOException;
 
   @AtMostOnce
-  NodeHeartbeatResponse nodeHeartbeat(NodeHeartbeatRequest request)
+  public NodeHeartbeatResponse nodeHeartbeat(NodeHeartbeatRequest request)
       throws YarnException, IOException;
 
-  @Idempotent
-  UnRegisterNodeManagerResponse unRegisterNodeManager(
-      UnRegisterNodeManagerRequest request) throws YarnException, IOException;
 }

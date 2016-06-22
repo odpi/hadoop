@@ -17,6 +17,16 @@
  */
 package org.apache.hadoop.hdfs;
 
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_FAILOVER_MAX_ATTEMPTS_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_FAILOVER_MAX_ATTEMPTS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_FAILOVER_PROXY_PROVIDER_KEY_PREFIX;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_FAILOVER_SLEEPTIME_BASE_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_FAILOVER_SLEEPTIME_BASE_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_FAILOVER_SLEEPTIME_MAX_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_FAILOVER_SLEEPTIME_MAX_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_RETRY_MAX_ATTEMPTS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_RETRY_MAX_ATTEMPTS_DEFAULT;
+
 import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationHandler;
@@ -30,10 +40,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
-import org.apache.hadoop.hdfs.client.impl.DfsClientConf;
+import org.apache.hadoop.hdfs.DFSClient.Conf;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocolPB.ClientNamenodeProtocolPB;
@@ -42,10 +50,10 @@ import org.apache.hadoop.hdfs.protocolPB.JournalProtocolPB;
 import org.apache.hadoop.hdfs.protocolPB.JournalProtocolTranslatorPB;
 import org.apache.hadoop.hdfs.protocolPB.NamenodeProtocolPB;
 import org.apache.hadoop.hdfs.protocolPB.NamenodeProtocolTranslatorPB;
-import org.apache.hadoop.hdfs.server.namenode.NameNode;
-import org.apache.hadoop.hdfs.server.namenode.SafeModeException;
 import org.apache.hadoop.hdfs.server.namenode.ha.AbstractNNFailoverProxyProvider;
 import org.apache.hadoop.hdfs.server.namenode.ha.WrappedFailoverProxyProvider;
+import org.apache.hadoop.hdfs.server.namenode.NameNode;
+import org.apache.hadoop.hdfs.server.namenode.SafeModeException;
 import org.apache.hadoop.hdfs.server.protocol.JournalProtocol;
 import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocol;
 import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocols;
@@ -59,9 +67,6 @@ import org.apache.hadoop.io.retry.RetryProxy;
 import org.apache.hadoop.io.retry.RetryUtils;
 import org.apache.hadoop.ipc.ProtobufRpcEngine;
 import org.apache.hadoop.ipc.RPC;
-import org.apache.hadoop.ipc.RefreshCallQueueProtocol;
-import org.apache.hadoop.ipc.protocolPB.RefreshCallQueueProtocolClientSideTranslatorPB;
-import org.apache.hadoop.ipc.protocolPB.RefreshCallQueueProtocolPB;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.RefreshUserMappingsProtocol;
 import org.apache.hadoop.security.SecurityUtil;
@@ -71,6 +76,9 @@ import org.apache.hadoop.security.protocolPB.RefreshAuthorizationPolicyProtocolC
 import org.apache.hadoop.security.protocolPB.RefreshAuthorizationPolicyProtocolPB;
 import org.apache.hadoop.security.protocolPB.RefreshUserMappingsProtocolClientSideTranslatorPB;
 import org.apache.hadoop.security.protocolPB.RefreshUserMappingsProtocolPB;
+import org.apache.hadoop.ipc.RefreshCallQueueProtocol;
+import org.apache.hadoop.ipc.protocolPB.RefreshCallQueueProtocolPB;
+import org.apache.hadoop.ipc.protocolPB.RefreshCallQueueProtocolClientSideTranslatorPB;
 import org.apache.hadoop.tools.GetUserMappingsProtocol;
 import org.apache.hadoop.tools.protocolPB.GetUserMappingsProtocolClientSideTranslatorPB;
 import org.apache.hadoop.tools.protocolPB.GetUserMappingsProtocolPB;
@@ -84,7 +92,6 @@ import com.google.common.base.Preconditions;
  * {@link NameNodeProxies#createProxy(Configuration, URI, Class)}, which will
  * create either an HA- or non-HA-enabled client proxy as appropriate.
  */
-@InterfaceAudience.Private
 public class NameNodeProxies {
   
   private static final Log LOG = LogFactory.getLog(NameNodeProxies.class);
@@ -134,6 +141,7 @@ public class NameNodeProxies {
    *         delegation token service it corresponds to
    * @throws IOException if there is an error creating the proxy
    **/
+  @SuppressWarnings("unchecked")
   public static <T> ProxyAndInfo<T> createProxy(Configuration conf,
       URI nameNodeUri, Class<T> xface) throws IOException {
     return createProxy(conf, nameNodeUri, xface, null);
@@ -165,28 +173,27 @@ public class NameNodeProxies {
   
     if (failoverProxyProvider == null) {
       // Non-HA case
-      return createNonHAProxy(conf, DFSUtilClient.getNNAddress(nameNodeUri),
-          xface, UserGroupInformation.getCurrentUser(), true,
-          fallbackToSimpleAuth);
+      return createNonHAProxy(conf, NameNode.getAddress(nameNodeUri), xface,
+          UserGroupInformation.getCurrentUser(), true, fallbackToSimpleAuth);
     } else {
       // HA case
-      DfsClientConf config = new DfsClientConf(conf);
+      Conf config = new Conf(conf);
       T proxy = (T) RetryProxy.create(xface, failoverProxyProvider,
           RetryPolicies.failoverOnNetworkException(
-              RetryPolicies.TRY_ONCE_THEN_FAIL, config.getMaxFailoverAttempts(),
-              config.getMaxRetryAttempts(), config.getFailoverSleepBaseMillis(),
-              config.getFailoverSleepMaxMillis()));
+              RetryPolicies.TRY_ONCE_THEN_FAIL, config.maxFailoverAttempts,
+              config.maxRetryAttempts, config.failoverSleepBaseMillis,
+              config.failoverSleepMaxMillis));
 
       Text dtService;
       if (failoverProxyProvider.useLogicalURI()) {
-        dtService = HAUtilClient.buildTokenServiceForLogicalUri(nameNodeUri,
-                                                                HdfsConstants.HDFS_URI_SCHEME);
+        dtService = HAUtil.buildTokenServiceForLogicalUri(nameNodeUri,
+            HdfsConstants.HDFS_URI_SCHEME);
       } else {
         dtService = SecurityUtil.buildTokenService(
-            DFSUtilClient.getNNAddress(nameNodeUri));
+            NameNode.getAddress(nameNodeUri));
       }
       return new ProxyAndInfo<T>(proxy, dtService,
-          DFSUtilClient.getNNAddress(nameNodeUri));
+          NameNode.getAddress(nameNodeUri));
     }
   }
   
@@ -222,17 +229,17 @@ public class NameNodeProxies {
 
     if (failoverProxyProvider != null) { // HA case
       int delay = config.getInt(
-          HdfsClientConfigKeys.Failover.SLEEPTIME_BASE_KEY,
-          HdfsClientConfigKeys.Failover.SLEEPTIME_BASE_DEFAULT);
+          DFS_CLIENT_FAILOVER_SLEEPTIME_BASE_KEY,
+          DFS_CLIENT_FAILOVER_SLEEPTIME_BASE_DEFAULT);
       int maxCap = config.getInt(
-          HdfsClientConfigKeys.Failover.SLEEPTIME_MAX_KEY,
-          HdfsClientConfigKeys.Failover.SLEEPTIME_MAX_DEFAULT);
+          DFS_CLIENT_FAILOVER_SLEEPTIME_MAX_KEY,
+          DFS_CLIENT_FAILOVER_SLEEPTIME_MAX_DEFAULT);
       int maxFailoverAttempts = config.getInt(
-          HdfsClientConfigKeys.Failover.MAX_ATTEMPTS_KEY,
-          HdfsClientConfigKeys.Failover.MAX_ATTEMPTS_DEFAULT);
+          DFS_CLIENT_FAILOVER_MAX_ATTEMPTS_KEY,
+          DFS_CLIENT_FAILOVER_MAX_ATTEMPTS_DEFAULT);
       int maxRetryAttempts = config.getInt(
-          HdfsClientConfigKeys.Retry.MAX_ATTEMPTS_KEY,
-          HdfsClientConfigKeys.Retry.MAX_ATTEMPTS_DEFAULT);
+          DFS_CLIENT_RETRY_MAX_ATTEMPTS_KEY,
+          DFS_CLIENT_RETRY_MAX_ATTEMPTS_DEFAULT);
       InvocationHandler dummyHandler = new LossyRetryInvocationHandler<T>(
               numResponseToDrop, failoverProxyProvider,
               RetryPolicies.failoverOnNetworkException(
@@ -245,14 +252,14 @@ public class NameNodeProxies {
           new Class[] { xface }, dummyHandler);
       Text dtService;
       if (failoverProxyProvider.useLogicalURI()) {
-        dtService = HAUtilClient.buildTokenServiceForLogicalUri(nameNodeUri,
-                                                                HdfsConstants.HDFS_URI_SCHEME);
+        dtService = HAUtil.buildTokenServiceForLogicalUri(nameNodeUri,
+            HdfsConstants.HDFS_URI_SCHEME);
       } else {
         dtService = SecurityUtil.buildTokenService(
-            DFSUtilClient.getNNAddress(nameNodeUri));
+            NameNode.getAddress(nameNodeUri));
       }
       return new ProxyAndInfo<T>(proxy, dtService,
-          DFSUtilClient.getNNAddress(nameNodeUri));
+          NameNode.getAddress(nameNodeUri));
     } else {
       LOG.warn("Currently creating proxy using " +
       		"LossyRetryInvocationHandler requires NN HA setup");
@@ -273,6 +280,7 @@ public class NameNodeProxies {
    *         delegation token service it corresponds to
    * @throws IOException
    */
+  @SuppressWarnings("unchecked")
   public static <T> ProxyAndInfo<T> createNonHAProxy(
       Configuration conf, InetSocketAddress nnAddr, Class<T> xface,
       UserGroupInformation ugi, boolean withRetries) throws IOException {
@@ -334,7 +342,7 @@ public class NameNodeProxies {
       InetSocketAddress address, Configuration conf, UserGroupInformation ugi)
       throws IOException {
     JournalProtocolPB proxy = (JournalProtocolPB) createNameNodeProxy(address,
-        conf, ugi, JournalProtocolPB.class, 30000);
+        conf, ugi, JournalProtocolPB.class);
     return new JournalProtocolTranslatorPB(proxy);
   }
 
@@ -342,7 +350,7 @@ public class NameNodeProxies {
       createNNProxyWithRefreshAuthorizationPolicyProtocol(InetSocketAddress address,
           Configuration conf, UserGroupInformation ugi) throws IOException {
     RefreshAuthorizationPolicyProtocolPB proxy = (RefreshAuthorizationPolicyProtocolPB)
-        createNameNodeProxy(address, conf, ugi, RefreshAuthorizationPolicyProtocolPB.class, 0);
+        createNameNodeProxy(address, conf, ugi, RefreshAuthorizationPolicyProtocolPB.class);
     return new RefreshAuthorizationPolicyProtocolClientSideTranslatorPB(proxy);
   }
   
@@ -350,7 +358,7 @@ public class NameNodeProxies {
       createNNProxyWithRefreshUserMappingsProtocol(InetSocketAddress address,
           Configuration conf, UserGroupInformation ugi) throws IOException {
     RefreshUserMappingsProtocolPB proxy = (RefreshUserMappingsProtocolPB)
-        createNameNodeProxy(address, conf, ugi, RefreshUserMappingsProtocolPB.class, 0);
+        createNameNodeProxy(address, conf, ugi, RefreshUserMappingsProtocolPB.class);
     return new RefreshUserMappingsProtocolClientSideTranslatorPB(proxy);
   }
 
@@ -358,7 +366,7 @@ public class NameNodeProxies {
       createNNProxyWithRefreshCallQueueProtocol(InetSocketAddress address,
           Configuration conf, UserGroupInformation ugi) throws IOException {
     RefreshCallQueueProtocolPB proxy = (RefreshCallQueueProtocolPB)
-        createNameNodeProxy(address, conf, ugi, RefreshCallQueueProtocolPB.class, 0);
+        createNameNodeProxy(address, conf, ugi, RefreshCallQueueProtocolPB.class);
     return new RefreshCallQueueProtocolClientSideTranslatorPB(proxy);
   }
 
@@ -366,7 +374,7 @@ public class NameNodeProxies {
       InetSocketAddress address, Configuration conf, UserGroupInformation ugi)
       throws IOException {
     GetUserMappingsProtocolPB proxy = (GetUserMappingsProtocolPB)
-        createNameNodeProxy(address, conf, ugi, GetUserMappingsProtocolPB.class, 0);
+        createNameNodeProxy(address, conf, ugi, GetUserMappingsProtocolPB.class);
     return new GetUserMappingsProtocolClientSideTranslatorPB(proxy);
   }
   
@@ -374,7 +382,7 @@ public class NameNodeProxies {
       InetSocketAddress address, Configuration conf, UserGroupInformation ugi,
       boolean withRetries) throws IOException {
     NamenodeProtocolPB proxy = (NamenodeProtocolPB) createNameNodeProxy(
-        address, conf, ugi, NamenodeProtocolPB.class, 0);
+        address, conf, ugi, NamenodeProtocolPB.class);
     if (withRetries) { // create the proxy with retries
       RetryPolicy timeoutPolicy = RetryPolicies.exponentialBackoffRetry(5, 200,
               TimeUnit.MILLISECONDS);
@@ -400,11 +408,11 @@ public class NameNodeProxies {
     final RetryPolicy defaultPolicy = 
         RetryUtils.getDefaultRetryPolicy(
             conf, 
-            HdfsClientConfigKeys.Retry.POLICY_ENABLED_KEY, 
-            HdfsClientConfigKeys.Retry.POLICY_ENABLED_DEFAULT, 
-            HdfsClientConfigKeys.Retry.POLICY_SPEC_KEY,
-            HdfsClientConfigKeys.Retry.POLICY_SPEC_DEFAULT,
-            SafeModeException.class.getName());
+            DFSConfigKeys.DFS_CLIENT_RETRY_POLICY_ENABLED_KEY, 
+            DFSConfigKeys.DFS_CLIENT_RETRY_POLICY_ENABLED_DEFAULT, 
+            DFSConfigKeys.DFS_CLIENT_RETRY_POLICY_SPEC_KEY,
+            DFSConfigKeys.DFS_CLIENT_RETRY_POLICY_SPEC_DEFAULT,
+            SafeModeException.class);
     
     final long version = RPC.getProtocolVersion(ClientNamenodeProtocolPB.class);
     ClientNamenodeProtocolPB proxy = RPC.getProtocolProxy(
@@ -417,6 +425,7 @@ public class NameNodeProxies {
 
       Map<String, RetryPolicy> methodNameToPolicyMap 
                  = new HashMap<String, RetryPolicy>();
+    
       ClientProtocol translatorProxy =
         new ClientNamenodeProtocolTranslatorPB(proxy);
       return (ClientProtocol) RetryProxy.create(
@@ -431,11 +440,11 @@ public class NameNodeProxies {
   }
 
   private static Object createNameNodeProxy(InetSocketAddress address,
-      Configuration conf, UserGroupInformation ugi, Class<?> xface,
-      int rpcTimeout) throws IOException {
+      Configuration conf, UserGroupInformation ugi, Class<?> xface)
+      throws IOException {
     RPC.setProtocolEngine(conf, xface, ProtobufRpcEngine.class);
     Object proxy = RPC.getProxy(xface, RPC.getProtocolVersion(xface), address,
-        ugi, conf, NetUtils.getDefaultSocketFactory(conf), rpcTimeout);
+        ugi, conf, NetUtils.getDefaultSocketFactory(conf));
     return proxy;
   }
 
@@ -447,8 +456,9 @@ public class NameNodeProxies {
       return null;
     }
     String host = nameNodeUri.getHost();
-    String configKey = HdfsClientConfigKeys.Failover.PROXY_PROVIDER_KEY_PREFIX
-        + "." + host;
+  
+    String configKey = DFS_CLIENT_FAILOVER_PROXY_PROVIDER_KEY_PREFIX + "."
+        + host;
     try {
       @SuppressWarnings("unchecked")
       Class<FailoverProxyProvider<T>> ret = (Class<FailoverProxyProvider<T>>) conf
@@ -509,8 +519,7 @@ public class NameNodeProxies {
     // Check the port in the URI, if it is logical.
     if (checkPort && providerNN.useLogicalURI()) {
       int port = nameNodeUri.getPort();
-      if (port > 0 &&
-          port != HdfsClientConfigKeys.DFS_NAMENODE_RPC_PORT_DEFAULT) {
+      if (port > 0 && port != NameNode.DEFAULT_PORT) {
         // Throwing here without any cleanup is fine since we have not
         // actually created the underlying proxies yet.
         throw new IOException("Port " + port + " specified in URI "

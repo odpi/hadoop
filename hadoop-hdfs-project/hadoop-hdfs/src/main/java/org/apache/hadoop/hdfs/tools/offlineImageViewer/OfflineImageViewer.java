@@ -40,7 +40,7 @@ import org.apache.hadoop.hdfs.server.namenode.FSEditLogLoader.PositionTrackingIn
 /**
  * OfflineImageViewer to dump the contents of an Hadoop image file to XML
  * or the console.  Main entry point into utility, either via the
- * command line or programmatically.
+ * command line or programatically.
  */
 @InterfaceAudience.Private
 public class OfflineImageViewer {
@@ -137,11 +137,7 @@ public class OfflineImageViewer {
       done = true;
     } finally {
       if (!done) {
-        if (tracker != null) {
-          LOG.error("image loading failed at offset " + tracker.getPos());
-        } else {
-          LOG.error("Failed to load image file.");
-        }
+        LOG.error("image loading failed at offset " + tracker.getPos());
       }
       IOUtils.cleanup(LOG, in, tracker);
     }

@@ -32,11 +32,6 @@ import org.apache.hadoop.fs.permission.FsPermission;
 public class LocatedFileStatus extends FileStatus {
   private BlockLocation[] locations;
 
-
-  public LocatedFileStatus() {
-    super();
-  }
-
   /**
    * Constructor 
    * @param stat a file status
@@ -48,7 +43,7 @@ public class LocatedFileStatus extends FileStatus {
         stat.getBlockSize(), stat.getModificationTime(),
         stat.getAccessTime(), stat.getPermission(), stat.getOwner(),
         stat.getGroup(), null, stat.getPath(), locations);
-    if (stat.isSymlink()) {
+    if (isSymlink()) {
       setSymlink(stat.getSymlink());
     }
   }
@@ -90,13 +85,17 @@ public class LocatedFileStatus extends FileStatus {
   }
   
   /**
-   * Compare this FileStatus to another FileStatus
-   * @param   o the FileStatus to be compared.
+   * Compare this object to another object
+   * 
+   * @param   o the object to be compared.
    * @return  a negative integer, zero, or a positive integer as this object
    *   is less than, equal to, or greater than the specified object.
+   * 
+   * @throws ClassCastException if the specified object's is not of 
+   *         type FileStatus
    */
   @Override
-  public int compareTo(FileStatus o) {
+  public int compareTo(Object o) {
     return super.compareTo(o);
   }
   

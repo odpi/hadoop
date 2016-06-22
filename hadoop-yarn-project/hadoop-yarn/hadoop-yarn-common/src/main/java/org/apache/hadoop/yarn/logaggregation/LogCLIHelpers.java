@@ -23,7 +23,6 @@ import java.io.EOFException;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.PrintStream;
-import java.util.List;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
@@ -31,7 +30,6 @@ import org.apache.hadoop.conf.Configurable;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileContext;
 import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.HarFs;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
@@ -50,21 +48,12 @@ public class LogCLIHelpers implements Configurable {
   @VisibleForTesting
   public int dumpAContainersLogs(String appId, String containerId,
       String nodeId, String jobOwner) throws IOException {
-    return dumpAContainersLogsForALogType(appId, containerId, nodeId, jobOwner,
-      null);
-  }
-
-  @Private
-  @VisibleForTesting
-  public int dumpAContainersLogsForALogType(String appId, String containerId,
-      String nodeId, String jobOwner, List<String> logType) throws IOException {
     Path remoteRootLogDir = new Path(getConf().get(
         YarnConfiguration.NM_REMOTE_APP_LOG_DIR,
         YarnConfiguration.DEFAULT_NM_REMOTE_APP_LOG_DIR));
     String suffix = LogAggregationUtils.getRemoteNodeLogDirSuffix(getConf());
-    ApplicationId applicationId = ConverterUtils.toApplicationId(appId);
     Path remoteAppLogDir = LogAggregationUtils.getRemoteAppLogDir(
-        remoteRootLogDir, applicationId, jobOwner,
+        remoteRootLogDir, ConverterUtils.toApplicationId(appId), jobOwner,
         suffix);
     RemoteIterator<FileStatus> nodeFiles;
     try {
@@ -82,12 +71,6 @@ public class LogCLIHelpers implements Configurable {
     while (nodeFiles.hasNext()) {
       FileStatus thisNodeFile = nodeFiles.next();
       String fileName = thisNodeFile.getPath().getName();
-      if (fileName.equals(applicationId + ".har")) {
-        Path p = new Path("har:///"
-            + thisNodeFile.getPath().toUri().getRawPath());
-        nodeFiles = HarFs.get(p.toUri(), conf).listStatusIterator(p);
-        continue;
-      }
       if (fileName.contains(LogAggregationUtils.getNodeString(nodeId))
           && !fileName.endsWith(LogAggregationUtils.TMP_FILE_SUFFIX)) {
         AggregatedLogFormat.LogReader reader = null;
@@ -95,16 +78,9 @@ public class LogCLIHelpers implements Configurable {
           reader =
               new AggregatedLogFormat.LogReader(getConf(),
                 thisNodeFile.getPath());
-          if (logType == null) {
-            if (dumpAContainerLogs(containerId, reader, System.out,
+          if (dumpAContainerLogs(containerId, reader, System.out,
               thisNodeFile.getModificationTime()) > -1) {
-              foundContainerLogs = true;
-            }
-          } else {
-            if (dumpAContainerLogsForALogType(containerId, reader, System.out,
-              thisNodeFile.getModificationTime(), logType) > -1) {
-              foundContainerLogs = true;
-            }
+            foundContainerLogs = true;
           }
         } finally {
           if (reader != null) {
@@ -155,43 +131,6 @@ public class LogCLIHelpers implements Configurable {
   }
 
   @Private
-  public int dumpAContainerLogsForALogType(String containerIdStr,
-      AggregatedLogFormat.LogReader reader, PrintStream out,
-      long logUploadedTime, List<String> logType) throws IOException {
-    DataInputStream valueStream;
-    LogKey key = new LogKey();
-    valueStream = reader.next(key);
-
-    while (valueStream != null && !key.toString().equals(containerIdStr)) {
-      // Next container
-      key = new LogKey();
-      valueStream = reader.next(key);
-    }
-
-    if (valueStream == null) {
-      return -1;
-    }
-
-    boolean foundContainerLogs = false;
-    while (true) {
-      try {
-        int result = LogReader.readContainerLogsForALogType(
-            valueStream, out, logUploadedTime, logType);
-        if (result == 0) {
-          foundContainerLogs = true;
-        }
-      } catch (EOFException eof) {
-        break;
-      }
-    }
-
-    if (foundContainerLogs) {
-      return 0;
-    }
-    return -1;
-  }
-
-  @Private
   public int dumpAllContainersLogs(ApplicationId appId, String appOwner,
       PrintStream out) throws IOException {
     Path remoteRootLogDir = new Path(getConf().get(
@@ -215,12 +154,6 @@ public class LogCLIHelpers implements Configurable {
     boolean foundAnyLogs = false;
     while (nodeFiles.hasNext()) {
       FileStatus thisNodeFile = nodeFiles.next();
-      if (thisNodeFile.getPath().getName().equals(appId + ".har")) {
-        Path p = new Path("har:///"
-            + thisNodeFile.getPath().toUri().getRawPath());
-        nodeFiles = HarFs.get(p.toUri(), conf).listStatusIterator(p);
-        continue;
-      }
       if (!thisNodeFile.getPath().getName()
         .endsWith(LogAggregationUtils.TMP_FILE_SUFFIX)) {
         AggregatedLogFormat.LogReader reader =

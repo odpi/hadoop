@@ -141,6 +141,11 @@ public class TestCryptoStreams extends CryptoStreamsTestBase {
     }
 
     @Override
+    public void sync() throws IOException {
+      hflush();
+    }
+
+    @Override
     public void hflush() throws IOException {
       checkStream();
       flush();

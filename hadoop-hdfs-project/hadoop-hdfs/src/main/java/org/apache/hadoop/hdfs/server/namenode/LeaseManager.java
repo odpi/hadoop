@@ -22,19 +22,22 @@ import static org.apache.hadoop.util.Time.monotonicNow;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.PriorityQueue;
+import java.util.Map;
+import java.util.NavigableSet;
+import java.util.NoSuchElementException;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.TreeSet;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
-import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfo;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.UnresolvedLinkException;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfoContiguous;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants;
 import org.apache.hadoop.util.Daemon;
 
@@ -69,24 +72,22 @@ public class LeaseManager {
 
   private final FSNamesystem fsnamesystem;
 
-  private long softLimit = HdfsServerConstants.LEASE_SOFTLIMIT_PERIOD;
-  private long hardLimit = HdfsServerConstants.LEASE_HARDLIMIT_PERIOD;
+  private long softLimit = HdfsConstants.LEASE_SOFTLIMIT_PERIOD;
+  private long hardLimit = HdfsConstants.LEASE_HARDLIMIT_PERIOD;
 
   //
   // Used for handling lock-leases
   // Mapping: leaseHolder -> Lease
   //
-  private final SortedMap<String, Lease> leases = new TreeMap<>();
+  private final SortedMap<String, Lease> leases = new TreeMap<String, Lease>();
   // Set of: Lease
-  private final PriorityQueue<Lease> sortedLeases = new PriorityQueue<>(512,
-      new Comparator<Lease>() {
-        @Override
-        public int compare(Lease o1, Lease o2) {
-          return Long.signum(o1.getLastUpdate() - o2.getLastUpdate());
-        }
-  });
-  // INodeID -> Lease
-  private final HashMap<Long, Lease> leasesById = new HashMap<>();
+  private final NavigableSet<Lease> sortedLeases = new TreeSet<Lease>();
+
+  // 
+  // Map path names to leases. It is protected by the sortedLeases lock.
+  // The map stores pathnames in lexicographical order.
+  //
+  private final SortedMap<String, Lease> sortedLeasesByPath = new TreeMap<String, Lease>();
 
   private Daemon lmthread;
   private volatile boolean shouldRunMonitor;
@@ -97,55 +98,60 @@ public class LeaseManager {
     return leases.get(holder);
   }
 
+  @VisibleForTesting
+  int getNumSortedLeases() {return sortedLeases.size();}
+
   /**
    * This method iterates through all the leases and counts the number of blocks
    * which are not COMPLETE. The FSNamesystem read lock MUST be held before
    * calling this method.
+   * @return
    */
   synchronized long getNumUnderConstructionBlocks() {
     assert this.fsnamesystem.hasReadLock() : "The FSNamesystem read lock wasn't"
       + "acquired before counting under construction blocks";
     long numUCBlocks = 0;
-    for (Long id : getINodeIdWithLeases()) {
-      final INodeFile cons = fsnamesystem.getFSDirectory().getInode(id).asFile();
-      if (!cons.isUnderConstruction()) {
-        LOG.warn("The file " + cons.getFullPathName()
-            + " is not under construction but has lease.");
-        continue;
-      }
-      BlockInfo[] blocks = cons.getBlocks();
-      if(blocks == null) {
-        continue;
-      }
-      for(BlockInfo b : blocks) {
-        if(!b.isComplete())
-          numUCBlocks++;
+    for (Lease lease : sortedLeases) {
+      for (String path : lease.getPaths()) {
+        final INodeFile cons;
+        try {
+          cons = this.fsnamesystem.getFSDirectory().getINode(path).asFile();
+          Preconditions.checkState(cons.isUnderConstruction());
+        } catch (UnresolvedLinkException e) {
+          throw new AssertionError("Lease files should reside on this FS");
+        }
+        BlockInfoContiguous[] blocks = cons.getBlocks();
+        if(blocks == null)
+          continue;
+        for(BlockInfoContiguous b : blocks) {
+          if(!b.isComplete())
+            numUCBlocks++;
+        }
       }
     }
     LOG.info("Number of blocks under construction: " + numUCBlocks);
     return numUCBlocks;
   }
 
-  Collection<Long> getINodeIdWithLeases() {return leasesById.keySet();}
-
   /** @return the lease containing src */
-  public synchronized Lease getLease(INodeFile src) {return leasesById.get(src.getId());}
+  public Lease getLeaseByPath(String src) {return sortedLeasesByPath.get(src);}
 
   /** @return the number of leases currently in the system */
-  @VisibleForTesting
-  public synchronized int countLease() {
-    return sortedLeases.size();
-  }
+  public synchronized int countLease() {return sortedLeases.size();}
 
   /** @return the number of paths contained in all leases */
-  synchronized long countPath() {
-    return leasesById.size();
+  synchronized int countPath() {
+    int count = 0;
+    for(Lease lease : sortedLeases) {
+      count += lease.getPaths().size();
+    }
+    return count;
   }
-
+  
   /**
    * Adds (or re-adds) the lease for the specified file.
    */
-  synchronized Lease addLease(String holder, long inodeId) {
+  synchronized Lease addLease(String holder, String src) {
     Lease lease = getLease(holder);
     if (lease == null) {
       lease = new Lease(holder);
@@ -154,24 +160,23 @@ public class LeaseManager {
     } else {
       renewLease(lease);
     }
-    leasesById.put(inodeId, lease);
-    lease.files.add(inodeId);
+    sortedLeasesByPath.put(src, lease);
+    lease.paths.add(src);
     return lease;
   }
 
   /**
    * Remove the specified lease and src.
    */
-  private synchronized void removeLease(Lease lease, long inodeId) {
-    leasesById.remove(inodeId);
-    if (!lease.removeFile(inodeId)) {
+  synchronized void removeLease(Lease lease, String src) {
+    sortedLeasesByPath.remove(src);
+    if (!lease.removePath(src)) {
       if (LOG.isDebugEnabled()) {
-        LOG.debug("inode " + inodeId + " not found in lease.files (=" + lease
-                + ")");
+        LOG.debug(src + " not found in lease.paths (=" + lease.paths + ")");
       }
     }
 
-    if (!lease.hasFiles()) {
+    if (!lease.hasPath()) {
       leases.remove(lease.holder);
       if (!sortedLeases.remove(lease)) {
         LOG.error(lease + " not found in sortedLeases");
@@ -182,32 +187,31 @@ public class LeaseManager {
   /**
    * Remove the lease for the specified holder and src
    */
-  synchronized void removeLease(String holder, INodeFile src) {
+  synchronized void removeLease(String holder, String src) {
     Lease lease = getLease(holder);
     if (lease != null) {
-      removeLease(lease, src.getId());
+      removeLease(lease, src);
     } else {
       LOG.warn("Removing non-existent lease! holder=" + holder +
-          " src=" + src.getFullPathName());
+          " src=" + src);
     }
   }
 
   synchronized void removeAllLeases() {
     sortedLeases.clear();
-    leasesById.clear();
+    sortedLeasesByPath.clear();
     leases.clear();
   }
 
   /**
    * Reassign lease for file src to the new holder.
    */
-  synchronized Lease reassignLease(Lease lease, INodeFile src,
-                                   String newHolder) {
+  synchronized Lease reassignLease(Lease lease, String src, String newHolder) {
     assert newHolder != null : "new lease holder is null";
     if (lease != null) {
-      removeLease(lease, src.getId());
+      removeLease(lease, src);
     }
-    return addLease(newHolder, src.getId());
+    return addLease(newHolder, src);
   }
 
   /**
@@ -240,10 +244,10 @@ public class LeaseManager {
    * checks in.  If the client dies and allows its lease to
    * expire, all the corresponding locks can be released.
    *************************************************************/
-  class Lease {
+  class Lease implements Comparable<Lease> {
     private final String holder;
     private long lastUpdate;
-    private final HashSet<Long> files = new HashSet<>();
+    private final Collection<String> paths = new TreeSet<String>();
   
     /** Only LeaseManager object can create a lease */
     private Lease(String holder) {
@@ -266,45 +270,127 @@ public class LeaseManager {
     }
 
     /** Does this lease contain any path? */
-    boolean hasFiles() {return !files.isEmpty();}
+    boolean hasPath() {return !paths.isEmpty();}
 
-    boolean removeFile(long inodeId) {
-      return files.remove(inodeId);
+    boolean removePath(String src) {
+      return paths.remove(src);
     }
 
     @Override
     public String toString() {
       return "[Lease.  Holder: " + holder
-          + ", pending creates: " + files.size() + "]";
+          + ", pendingcreates: " + paths.size() + "]";
     }
-
+  
+    @Override
+    public int compareTo(Lease o) {
+      Lease l1 = this;
+      Lease l2 = o;
+      long lu1 = l1.lastUpdate;
+      long lu2 = l2.lastUpdate;
+      if (lu1 < lu2) {
+        return -1;
+      } else if (lu1 > lu2) {
+        return 1;
+      } else {
+        return l1.holder.compareTo(l2.holder);
+      }
+    }
+  
+    @Override
+    public boolean equals(Object o) {
+      if (!(o instanceof Lease)) {
+        return false;
+      }
+      Lease obj = (Lease) o;
+      if (lastUpdate == obj.lastUpdate &&
+          holder.equals(obj.holder)) {
+        return true;
+      }
+      return false;
+    }
+  
     @Override
     public int hashCode() {
       return holder.hashCode();
     }
     
-    private Collection<Long> getFiles() {
-      return Collections.unmodifiableCollection(files);
+    Collection<String> getPaths() {
+      return paths;
     }
 
     String getHolder() {
       return holder;
     }
 
+    void replacePath(String oldpath, String newpath) {
+      paths.remove(oldpath);
+      paths.add(newpath);
+    }
+    
     @VisibleForTesting
     long getLastUpdate() {
       return lastUpdate;
     }
   }
 
-  @VisibleForTesting
-  synchronized void removeLeases(Collection<Long> inodes) {
-    for (long inode : inodes) {
-      Lease lease = leasesById.get(inode);
-      if (lease != null) {
-        removeLease(lease, inode);
+  synchronized void changeLease(String src, String dst) {
+    if (LOG.isDebugEnabled()) {
+      LOG.debug(getClass().getSimpleName() + ".changelease: " +
+               " src=" + src + ", dest=" + dst);
+    }
+
+    final int len = src.length();
+    for(Map.Entry<String, Lease> entry
+        : findLeaseWithPrefixPath(src, sortedLeasesByPath).entrySet()) {
+      final String oldpath = entry.getKey();
+      final Lease lease = entry.getValue();
+      // replace stem of src with new destination
+      final String newpath = dst + oldpath.substring(len);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("changeLease: replacing " + oldpath + " with " + newpath);
+      }
+      lease.replacePath(oldpath, newpath);
+      sortedLeasesByPath.remove(oldpath);
+      sortedLeasesByPath.put(newpath, lease);
+    }
+  }
+
+  synchronized void removeLeaseWithPrefixPath(String prefix) {
+    for(Map.Entry<String, Lease> entry
+        : findLeaseWithPrefixPath(prefix, sortedLeasesByPath).entrySet()) {
+      if (LOG.isDebugEnabled()) {
+        LOG.debug(LeaseManager.class.getSimpleName()
+            + ".removeLeaseWithPrefixPath: entry=" + entry);
+      }
+      removeLease(entry.getValue(), entry.getKey());    
+    }
+  }
+
+  static private Map<String, Lease> findLeaseWithPrefixPath(
+      String prefix, SortedMap<String, Lease> path2lease) {
+    if (LOG.isDebugEnabled()) {
+      LOG.debug(LeaseManager.class.getSimpleName() + ".findLease: prefix=" + prefix);
+    }
+
+    final Map<String, Lease> entries = new HashMap<String, Lease>();
+    int srclen = prefix.length();
+    
+    // prefix may ended with '/'
+    if (prefix.charAt(srclen - 1) == Path.SEPARATOR_CHAR) {
+      srclen -= 1;
+    }
+
+    for(Map.Entry<String, Lease> entry : path2lease.tailMap(prefix).entrySet()) {
+      final String p = entry.getKey();
+      if (!p.startsWith(prefix)) {
+        return entries;
+      }
+      if (p.length() == srclen || p.charAt(srclen) == Path.SEPARATOR_CHAR) {
+        entries.put(entry.getKey(), entry.getValue());
       }
     }
+    return entries;
   }
 
   public void setLeasePeriod(long softLimit, long hardLimit) {
@@ -343,13 +429,30 @@ public class LeaseManager {
           if (LOG.isDebugEnabled()) {
             LOG.debug(name + " is interrupted", ie);
           }
-        } catch(Throwable e) {
-          LOG.warn("Unexpected throwable: ", e);
         }
       }
     }
   }
 
+  /**
+   * Get the list of inodes corresponding to valid leases.
+   * @return list of inodes
+   */
+  Map<String, INodeFile> getINodesUnderConstruction() {
+    Map<String, INodeFile> inodes = new TreeMap<String, INodeFile>();
+    for (String p : sortedLeasesByPath.keySet()) {
+      // verify that path exists in namespace
+      try {
+        INodeFile node = INodeFile.valueOf(fsnamesystem.dir.getINode(p), p);
+        Preconditions.checkState(node.isUnderConstruction());
+        inodes.put(p, node);
+      } catch (IOException ioe) {
+        LOG.error(ioe);
+      }
+    }
+    return inodes;
+  }
+  
   /** Check the leases beginning from the oldest.
    *  @return true is sync is needed.
    */
@@ -357,35 +460,34 @@ public class LeaseManager {
   synchronized boolean checkLeases() {
     boolean needSync = false;
     assert fsnamesystem.hasWriteLock();
+    Lease leaseToCheck = null;
+    try {
+      leaseToCheck = sortedLeases.first();
+    } catch(NoSuchElementException e) {}
 
-    while(!sortedLeases.isEmpty() && sortedLeases.peek().expiredHardLimit()) {
-      Lease leaseToCheck = sortedLeases.poll();
+    while(leaseToCheck != null) {
+      if (!leaseToCheck.expiredHardLimit()) {
+        break;
+      }
+
       LOG.info(leaseToCheck + " has expired hard limit");
 
-      final List<Long> removing = new ArrayList<>();
-      // need to create a copy of the oldest lease files, because
-      // internalReleaseLease() removes files corresponding to empty files,
+      final List<String> removing = new ArrayList<String>();
+      // need to create a copy of the oldest lease paths, because 
+      // internalReleaseLease() removes paths corresponding to empty files,
       // i.e. it needs to modify the collection being iterated over
       // causing ConcurrentModificationException
-      Collection<Long> files = leaseToCheck.getFiles();
-      Long[] leaseINodeIds = files.toArray(new Long[files.size()]);
-      FSDirectory fsd = fsnamesystem.getFSDirectory();
-      String p = null;
-      for(Long id : leaseINodeIds) {
+      String[] leasePaths = new String[leaseToCheck.getPaths().size()];
+      leaseToCheck.getPaths().toArray(leasePaths);
+      for(String p : leasePaths) {
         try {
-          INodesInPath iip = INodesInPath.fromINode(fsd.getInode(id));
-          p = iip.getPath();
-          // Sanity check to make sure the path is correct
-          if (!p.startsWith("/")) {
-            throw new IOException("Invalid path in the lease " + p);
-          }
-          boolean completed = fsnamesystem.internalReleaseLease(
-              leaseToCheck, p, iip,
-              HdfsServerConstants.NAMENODE_LEASE_HOLDER);
+          INodesInPath iip = fsnamesystem.getFSDirectory().getINodesInPath(p,
+              true);
+          boolean completed = fsnamesystem.internalReleaseLease(leaseToCheck, p,
+              iip, HdfsServerConstants.NAMENODE_LEASE_HOLDER);
           if (LOG.isDebugEnabled()) {
             if (completed) {
-              LOG.debug("Lease recovery for inode " + id + " is complete. " +
-                            "File closed.");
+              LOG.debug("Lease recovery for " + p + " is complete. File closed.");
             } else {
               LOG.debug("Started block recovery " + p + " lease " + leaseToCheck);
             }
@@ -397,15 +499,22 @@ public class LeaseManager {
         } catch (IOException e) {
           LOG.error("Cannot release the path " + p + " in the lease "
               + leaseToCheck, e);
-          removing.add(id);
+          removing.add(p);
         }
       }
 
-      for(Long id : removing) {
-        removeLease(leaseToCheck, id);
+      for(String p : removing) {
+        removeLease(leaseToCheck, p);
       }
+      leaseToCheck = sortedLeases.higher(leaseToCheck);
     }
 
+    try {
+      if(leaseToCheck != sortedLeases.first()) {
+        LOG.warn("Unable to release hard-limit expired lease: "
+          + sortedLeases.first());
+      }
+    } catch(NoSuchElementException e) {}
     return needSync;
   }
 
@@ -414,7 +523,7 @@ public class LeaseManager {
     return getClass().getSimpleName() + "= {"
         + "\n leases=" + leases
         + "\n sortedLeases=" + sortedLeases
-        + "\n leasesById=" + leasesById
+        + "\n sortedLeasesByPath=" + sortedLeasesByPath
         + "\n}";
   }
 
@@ -444,15 +553,9 @@ public class LeaseManager {
    * its leases immediately. This is for use by unit tests.
    */
   @VisibleForTesting
-  public void triggerMonitorCheckNow() {
+  void triggerMonitorCheckNow() {
     Preconditions.checkState(lmthread != null,
         "Lease monitor is not running");
     lmthread.interrupt();
   }
-
-  @VisibleForTesting
-  public void runLeaseChecks() {
-    checkLeases();
-  }
-
 }

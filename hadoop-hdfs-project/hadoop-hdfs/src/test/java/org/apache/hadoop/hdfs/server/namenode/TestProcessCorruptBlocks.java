@@ -32,9 +32,7 @@ import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.MiniDFSCluster.DataNodeProperties;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
-import org.apache.hadoop.hdfs.server.blockmanagement.BlockManager;
 import org.apache.hadoop.hdfs.server.blockmanagement.NumberReplicas;
-import org.apache.hadoop.hdfs.server.datanode.DataNodeTestUtils;
 import org.junit.Test;
 
 public class TestProcessCorruptBlocks {
@@ -261,9 +259,7 @@ public class TestProcessCorruptBlocks {
   }
 
   private static NumberReplicas countReplicas(final FSNamesystem namesystem, ExtendedBlock block) {
-    final BlockManager blockManager = namesystem.getBlockManager();
-    return blockManager.countNodes(blockManager.getStoredBlock(
-        block.getLocalBlock()));
+    return namesystem.getBlockManager().countNodes(block.getLocalBlock());
   }
 
   private void corruptBlock(MiniDFSCluster cluster, FileSystem fs, final Path fileName,
@@ -273,8 +269,6 @@ public class TestProcessCorruptBlocks {
     // But the datadirectory will not change
     assertTrue(cluster.corruptReplica(dnIndex, block));
 
-    // Run directory scanner to update the DN's volume map  
-    DataNodeTestUtils.runDirectoryScanner(cluster.getDataNodes().get(0));
     DataNodeProperties dnProps = cluster.stopDataNode(0);
 
     // Each datanode has multiple data dirs, check each

@@ -19,7 +19,6 @@ package org.apache.hadoop.fs.viewfs;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.List;
@@ -37,11 +36,9 @@ import static org.junit.Assert.assertFalse;
 
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FsConstants;
-import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.AclStatus;
 import org.apache.hadoop.fs.permission.AclUtil;
-import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.viewfs.ConfigUtil;
@@ -77,7 +74,7 @@ import org.junit.Test;
  * </p>
  */
 
-abstract public class ViewFileSystemBaseTest {
+public class ViewFileSystemBaseTest {
   FileSystem fsView;  // the view file system - the mounts are here
   FileSystem fsTarget;  // the target file system - the mount will point here
   Path targetTestRoot;
@@ -128,7 +125,7 @@ abstract public class ViewFileSystemBaseTest {
   
   void setupMountPoints() {
     ConfigUtil.addLink(conf, "/targetRoot", targetTestRoot.toUri());
-    ConfigUtil.addLink(conf, "/user", new Path(targetTestRoot, "user").toUri());
+    ConfigUtil.addLink(conf, "/user", new Path(targetTestRoot,"user").toUri());
     ConfigUtil.addLink(conf, "/user2", new Path(targetTestRoot,"user").toUri());
     ConfigUtil.addLink(conf, "/data", new Path(targetTestRoot,"data").toUri());
     ConfigUtil.addLink(conf, "/internalDir/linkToDir2",
@@ -136,9 +133,9 @@ abstract public class ViewFileSystemBaseTest {
     ConfigUtil.addLink(conf, "/internalDir/internalDir2/linkToDir3",
         new Path(targetTestRoot,"dir3").toUri());
     ConfigUtil.addLink(conf, "/danglingLink",
-        new Path(targetTestRoot, "missingTarget").toUri());
+        new Path(targetTestRoot,"missingTarget").toUri());
     ConfigUtil.addLink(conf, "/linkToAFile",
-        new Path(targetTestRoot, "aFile").toUri());
+        new Path(targetTestRoot,"aFile").toUri());
   }
   
   @Test
@@ -207,28 +204,19 @@ abstract public class ViewFileSystemBaseTest {
         fsView.makeQualified(new Path("/foo/bar")));
   }
 
-  @Test
-  public void testLocatedOperationsThroughMountLinks() throws IOException {
-    testOperationsThroughMountLinksInternal(true);
-  }
-
-  @Test
-  public void testOperationsThroughMountLinks() throws IOException {
-    testOperationsThroughMountLinksInternal(false);
-  }
-
-  /**
-   * Test modify operations (create, mkdir, delete, etc)
+  
+  /** 
+   * Test modify operations (create, mkdir, delete, etc) 
    * on the mount file system where the pathname references through
    * the mount points.  Hence these operation will modify the target
    * file system.
-   *
+   * 
    * Verify the operation via mountfs (ie fSys) and *also* via the
    *  target file system (ie fSysLocal) that the mount link points-to.
    */
-  private void testOperationsThroughMountLinksInternal(boolean located)
-      throws IOException {
-    // Create file
+  @Test
+  public void testOperationsThroughMountLinks() throws IOException {
+    // Create file 
     fileSystemTestHelper.createFile(fsView, "/user/foo");
     Assert.assertTrue("Created file should be type file",
         fsView.isFile(new Path("/user/foo")));
@@ -341,8 +329,7 @@ abstract public class ViewFileSystemBaseTest {
     fsView.mkdirs(new Path("/targetRoot/dirFoo"));
     Assert.assertTrue(fsView.exists(new Path("/targetRoot/dirFoo")));
     boolean dirFooPresent = false;
-    for (FileStatus fileStatus :
-        listStatusInternal(located, new Path("/targetRoot/"))) {
+    for (FileStatus fileStatus : fsView.listStatus(new Path("/targetRoot/"))) {
       if (fileStatus.getPath().getName().equals("dirFoo")) {
         dirFooPresent = true;
       }
@@ -407,13 +394,9 @@ abstract public class ViewFileSystemBaseTest {
       i++;     
     } 
   }
-
-  @Test
-  public void testLocatedListOnInternalDirsOfMountTable() throws IOException {
-    testListOnInternalDirsOfMountTableInternal(true);
-  }
-
-
+  
+  
+  
   /**
    * Test "readOps" (e.g. list, listStatus) 
    * on internal dirs of mount table
@@ -423,20 +406,15 @@ abstract public class ViewFileSystemBaseTest {
   // test list on internal dirs of mount table 
   @Test
   public void testListOnInternalDirsOfMountTable() throws IOException {
-    testListOnInternalDirsOfMountTableInternal(false);
-  }
-
-  private void testListOnInternalDirsOfMountTableInternal(boolean located)
-      throws IOException {
     
     // list on Slash
-
-    FileStatus[] dirPaths = listStatusInternal(located, new Path("/"));
+    
+    FileStatus[] dirPaths = fsView.listStatus(new Path("/"));
     FileStatus fs;
     verifyRootChildren(dirPaths);
 
     // list on internal dir
-    dirPaths = listStatusInternal(located, new Path("/internalDir"));
+    dirPaths = fsView.listStatus(new Path("/internalDir"));
     Assert.assertEquals(2, dirPaths.length);
 
     fs = fileSystemTestHelper.containsPath(fsView, "/internalDir/internalDir2", dirPaths);
@@ -474,26 +452,13 @@ abstract public class ViewFileSystemBaseTest {
   
   @Test
   public void testListOnMountTargetDirs() throws IOException {
-    testListOnMountTargetDirsInternal(false);
-  }
-
-  @Test
-  public void testLocatedListOnMountTargetDirs() throws IOException {
-    testListOnMountTargetDirsInternal(true);
-  }
-
-  private void testListOnMountTargetDirsInternal(boolean located)
-      throws IOException {
-    final Path dataPath = new Path("/data");
-
-    FileStatus[] dirPaths = listStatusInternal(located, dataPath);
-
+    FileStatus[] dirPaths = fsView.listStatus(new Path("/data"));
     FileStatus fs;
     Assert.assertEquals(0, dirPaths.length);
     
     // add a file
     long len = fileSystemTestHelper.createFile(fsView, "/data/foo");
-    dirPaths = listStatusInternal(located, dataPath);
+    dirPaths = fsView.listStatus(new Path("/data"));
     Assert.assertEquals(1, dirPaths.length);
     fs = fileSystemTestHelper.containsPath(fsView, "/data/foo", dirPaths);
     Assert.assertNotNull(fs);
@@ -502,7 +467,7 @@ abstract public class ViewFileSystemBaseTest {
     
     // add a dir
     fsView.mkdirs(fileSystemTestHelper.getTestRootPath(fsView, "/data/dirX"));
-    dirPaths = listStatusInternal(located, dataPath);
+    dirPaths = fsView.listStatus(new Path("/data"));
     Assert.assertEquals(2, dirPaths.length);
     fs = fileSystemTestHelper.containsPath(fsView, "/data/foo", dirPaths);
     Assert.assertNotNull(fs);
@@ -511,23 +476,7 @@ abstract public class ViewFileSystemBaseTest {
     Assert.assertNotNull(fs);
     Assert.assertTrue("Created dir should appear as a dir", fs.isDirectory()); 
   }
-
-  private FileStatus[] listStatusInternal(boolean located, Path dataPath) throws IOException {
-    FileStatus[] dirPaths = new FileStatus[0];
-    if (located) {
-      RemoteIterator<LocatedFileStatus> statIter =
-          fsView.listLocatedStatus(dataPath);
-      ArrayList<LocatedFileStatus> tmp = new ArrayList<LocatedFileStatus>(10);
-      while (statIter.hasNext()) {
-        tmp.add(statIter.next());
-      }
-      dirPaths = tmp.toArray(dirPaths);
-    } else {
-      dirPaths = fsView.listStatus(dataPath);
-    }
-    return dirPaths;
-  }
-
+      
   @Test
   public void testFileStatusOnMountLink() throws IOException {
     Assert.assertTrue(fsView.getFileStatus(new Path("/")).isDirectory());
@@ -743,21 +692,11 @@ abstract public class ViewFileSystemBaseTest {
     Assert.assertTrue("Created file should be type file",
         fsView.isFile(new Path("/user/foo")));
     Assert.assertTrue("Target of created file should be type file",
-        fsTarget.isFile(new Path(targetTestRoot, "user/foo")));
+        fsTarget.isFile(new Path(targetTestRoot,"user/foo")));
   }
 
   @Test
   public void testRootReadableExecutable() throws IOException {
-    testRootReadableExecutableInternal(false);
-  }
-
-  @Test
-  public void testLocatedRootReadableExecutable() throws IOException {
-    testRootReadableExecutableInternal(true);
-  }
-
-  private void testRootReadableExecutableInternal(boolean located)
-      throws IOException {
     // verify executable permission on root: cd /
     //
     Assert.assertFalse("In root before cd",
@@ -768,8 +707,7 @@ abstract public class ViewFileSystemBaseTest {
 
     // verify readable
     //
-    verifyRootChildren(listStatusInternal(located,
-        fsView.getWorkingDirectory()));
+    verifyRootChildren(fsView.listStatus(fsView.getWorkingDirectory()));
 
     // verify permissions
     //
@@ -865,24 +803,4 @@ abstract public class ViewFileSystemBaseTest {
     fsView.removeXAttr(new Path("/internalDir"), "xattrName");
   }
 
-  @Test(expected = AccessControlException.class)
-  public void testInternalCreateSnapshot1() throws IOException {
-    fsView.createSnapshot(new Path("/internalDir"));
-  }
-
-  @Test(expected = AccessControlException.class)
-  public void testInternalCreateSnapshot2() throws IOException {
-    fsView.createSnapshot(new Path("/internalDir"), "snap1");
-  }
-
-  @Test(expected = AccessControlException.class)
-  public void testInternalRenameSnapshot() throws IOException {
-    fsView.renameSnapshot(new Path("/internalDir"), "snapOldName",
-        "snapNewName");
-  }
-
-  @Test(expected = AccessControlException.class)
-  public void testInternalDeleteSnapshot() throws IOException {
-    fsView.deleteSnapshot(new Path("/internalDir"), "snap1");
-  }
 }

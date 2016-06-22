@@ -187,10 +187,4 @@ public class ShutdownHookManager {
     return shutdownInProgress.get();
   }
 
-  /**
-   * clear all registered shutdownHooks.
-   */
-  public void clearShutdownHooks() {
-    hooks.clear();
-  }
 }

@@ -17,7 +17,7 @@
  */
 package org.apache.hadoop.crypto.key;
 
-import org.junit.Assert;
+import junit.framework.Assert;
 import org.apache.hadoop.conf.Configuration;
 
 import org.apache.hadoop.fs.Path;

@@ -118,7 +118,8 @@ abstract class InodeTree<T> {
       return result;
     }
     
-    INode<T> resolveInternal(final String pathComponent) {
+    INode<T> resolveInternal(final String pathComponent)
+        throws FileNotFoundException {
       return children.get(pathComponent);
     }
     
@@ -335,8 +336,8 @@ abstract class InodeTree<T> {
     }
     if (!gotMountTableEntry) {
       throw new IOException(
-          "ViewFs: Cannot initialize: Empty Mount table in config for " +
-             "viewfs://" + vName + "/");
+          "ViewFs: Cannot initialize: Empty Mount table in config for " + 
+             vName == null ? "viewfs:///" : ("viewfs://" + vName + "/"));
     }
   }
 
@@ -362,7 +363,7 @@ abstract class InodeTree<T> {
       kind = k;
       targetFileSystem = targetFs;
       resolvedPath = resolveP;
-      remainingPath = remainingP;
+      remainingPath = remainingP;  
     }
     
     // isInternalDir of path resolution completed within the mount table 

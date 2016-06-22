@@ -20,7 +20,6 @@ package org.apache.hadoop.yarn.sls.web;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.ObjectInputStream;
 import java.text.MessageFormat;
 import java.util.HashMap;
 import java.util.Map;
@@ -33,28 +32,29 @@ import javax.servlet.http.HttpServletResponse;
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
-import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.SchedulerEventType;
-import org.apache.hadoop.yarn.sls.SLSRunner;
-import org.apache.hadoop.yarn.sls.scheduler.FairSchedulerMetrics;
-import org.apache.hadoop.yarn.sls.scheduler.SchedulerMetrics;
-import org.apache.hadoop.yarn.sls.scheduler.SchedulerWrapper;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event
+        .SchedulerEventType;
 import org.mortbay.jetty.Handler;
-import org.mortbay.jetty.Request;
 import org.mortbay.jetty.Server;
 import org.mortbay.jetty.handler.AbstractHandler;
-import org.mortbay.jetty.handler.ResourceHandler;
+import org.mortbay.jetty.Request;
 
+import org.apache.hadoop.yarn.sls.SLSRunner;
+import org.apache.hadoop.yarn.sls.scheduler.FairSchedulerMetrics;
+import org.apache.hadoop.yarn.sls.scheduler.ResourceSchedulerWrapper;
+import org.apache.hadoop.yarn.sls.scheduler.SchedulerMetrics;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import org.mortbay.jetty.handler.ResourceHandler;
 
 @Private
 @Unstable
 public class SLSWebApp extends HttpServlet {
   private static final long serialVersionUID = 1905162041950251407L;
   private transient Server server;
-  private transient SchedulerWrapper wrapper;
+  private transient ResourceSchedulerWrapper wrapper;
   private transient MetricRegistry metrics;
   private transient SchedulerMetrics schedulerMetrics;
   // metrics objects
@@ -69,10 +69,9 @@ public class SLSWebApp extends HttpServlet {
   private transient Gauge availableVCoresGauge;
   private transient Histogram allocateTimecostHistogram;
   private transient Histogram handleTimecostHistogram;
-  private transient Map<SchedulerEventType, Histogram>
-     handleOperTimecostHistogramMap;
-  private transient Map<String, Counter> queueAllocatedMemoryCounterMap;
-  private transient Map<String, Counter> queueAllocatedVCoresCounterMap;
+  private Map<SchedulerEventType, Histogram> handleOperTimecostHistogramMap;
+  private Map<String, Counter> queueAllocatedMemoryCounterMap;
+  private Map<String, Counter> queueAllocatedVCoresCounterMap;
   private int port;
   private int ajaxUpdateTimeMS = 1000;
   // html page templates
@@ -95,15 +94,7 @@ public class SLSWebApp extends HttpServlet {
     }
   }
 
-  private void readObject(ObjectInputStream in) throws IOException,
-      ClassNotFoundException {
-    in.defaultReadObject();
-    handleOperTimecostHistogramMap = new HashMap<>();
-    queueAllocatedMemoryCounterMap = new HashMap<>();
-    queueAllocatedVCoresCounterMap = new HashMap<>();
-  }
-
-  public SLSWebApp(SchedulerWrapper wrapper, int metricsAddressPort) {
+  public SLSWebApp(ResourceSchedulerWrapper wrapper, int metricsAddressPort) {
     this.wrapper = wrapper;
     metrics = wrapper.getMetrics();
     handleOperTimecostHistogramMap =

@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.util;
 
+import com.google.common.base.Preconditions;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.URI;
@@ -27,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -43,7 +45,6 @@ import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.net.NetUtils;
 
-import com.google.common.base.Preconditions;
 import com.google.common.net.InetAddresses;
 
 /**
@@ -315,18 +316,7 @@ public class StringUtils {
    * @return the arraylist of the comma seperated string values
    */
   public static String[] getStrings(String str){
-    String delim = ",";
-    return getStrings(str, delim);
-  }
-
-  /**
-   * Returns an arraylist of strings.
-   * @param str the string values
-   * @param delim delimiter to separate the values
-   * @return the arraylist of the seperated string values
-   */
-  public static String[] getStrings(String str, String delim){
-    Collection<String> values = getStringCollection(str, delim);
+    Collection<String> values = getStringCollection(str);
     if(values.size() == 0) {
       return null;
     }
@@ -387,6 +377,19 @@ public class StringUtils {
     }
 
     return str.trim().split("\\s*,\\s*");
+  }
+
+  /**
+   * Trims all the strings in a Collection<String> and returns a Set<String>.
+   * @param strings
+   * @return
+   */
+  public static Set<String> getTrimmedStrings(Collection<String> strings) {
+    Set<String> trimmedStrings = new HashSet<String>();
+    for (String string: strings) {
+      trimmedStrings.add(string.trim());
+    }
+    return trimmedStrings;
   }
 
   final public static String[] emptyStringArray = {};
@@ -869,10 +872,6 @@ public class StringUtils {
     return sb.toString();
   }
 
-  public static String join(char separator, Iterable<?> strings) {
-    return join(separator + "", strings);
-  }
-
   /**
    * Concatenates strings, using a separator.
    *
@@ -893,10 +892,6 @@ public class StringUtils {
       sb.append(s);
     }
     return sb.toString();
-  }
-
-  public static String join(char separator, String[] strings) {
-    return join(separator + "", strings);
   }
 
   /**

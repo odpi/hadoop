@@ -194,21 +194,6 @@ message ApplicationReportProto {
   optional string applicationType = 18;
   optional hadoop.common.TokenProto am_rm_token = 19;
   repeated string applicationTags = 20;
-  optional LogAggregationStatusProto log_aggregation_status = 21;
-  optional bool unmanaged_application = 22 [default = false];
-  optional PriorityProto priority = 23;
-  optional string appNodeLabelExpression = 24;
-  optional string amNodeLabelExpression = 25;
-}
-
-enum LogAggregationStatusProto {
-  LOG_DISABLED = 1;
-  LOG_NOT_START = 2;
-  LOG_RUNNING = 3;
-  LOG_SUCCEEDED = 4;
-  LOG_FAILED = 5;
-  LOG_TIME_OUT = 6;
-  LOG_RUNNING_WITH_FAILURE = 7;
 }
 
 message ApplicationAttemptReportProto {
@@ -220,8 +205,6 @@ message ApplicationAttemptReportProto {
   optional YarnApplicationAttemptStateProto yarn_application_attempt_state = 6;
   optional ContainerIdProto am_container_id = 7;
   optional string original_tracking_url = 8;
-  optional int64 startTime = 9;
-  optional int64 finishTime = 10;
 }
 
 enum NodeStateProto {
@@ -231,8 +214,6 @@ enum NodeStateProto {
   NS_DECOMMISSIONED = 4; 
   NS_LOST = 5;
   NS_REBOOTED = 6;
-  NS_DECOMMISSIONING = 7;
-  NS_SHUTDOWN = 8;
 }
 
 message NodeIdProto {
@@ -253,24 +234,14 @@ message NodeReportProto {
   repeated string node_labels = 10;
 }
 
-message NodeIdToLabelsInfoProto {
+message NodeIdToLabelsProto {
   optional NodeIdProto nodeId = 1;
-  repeated NodeLabelProto nodeLabels = 2;
+  repeated string nodeLabels = 2;
 }
 
 message LabelsToNodeIdsProto {
-  optional NodeLabelProto nodeLabels = 1;
+  optional string nodeLabels = 1;
   repeated NodeIdProto nodeId = 2;
-}
-
-message NodeLabelProto {
-  optional string name = 1;
-  optional bool isExclusive = 2 [default = true]; 
-}
-
-enum ContainerTypeProto {
-  APPLICATION_MASTER = 1;
-  TASK = 2;
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -345,8 +316,6 @@ message LogAggregationContextProto {
  optional string exclude_pattern = 2 [default = ""];
  optional string rolled_logs_include_pattern = 3 [default = ""];
  optional string rolled_logs_exclude_pattern = 4 [default = ".*"];
- optional string log_aggregation_policy_class_name = 5;
- optional string log_aggregation_policy_parameters = 6;
 }
 
 enum ApplicationAccessTypeProto {
@@ -361,37 +330,11 @@ message ApplicationACLMapProto {
 
 message YarnClusterMetricsProto {
   optional int32 num_node_managers = 1;
-  optional int32 num_decommissioned_nms = 2;
-  optional int32 num_active_nms = 3;
-  optional int32 num_lost_nms = 4;
-  optional int32 num_unhealthy_nms = 5;
-  optional int32 num_rebooted_nms = 6;
 }
 
 enum QueueStateProto {
   Q_STOPPED = 1;
   Q_RUNNING = 2;
-}
-
-message QueueStatisticsProto {
-  optional int64 numAppsSubmitted = 1;
-  optional int64 numAppsRunning = 2;
-  optional int64 numAppsPending = 3;
-  optional int64 numAppsCompleted = 4;
-  optional int64 numAppsKilled = 5;
-  optional int64 numAppsFailed = 6;
-  optional int64 numActiveUsers = 7;
-  optional int64 availableMemoryMB = 8;
-  optional int64 allocatedMemoryMB = 9;
-  optional int64 pendingMemoryMB = 10;
-  optional int64 reservedMemoryMB = 11;
-  optional int64 availableVCores = 12;
-  optional int64 allocatedVCores = 13;
-  optional int64 pendingVCores = 14;
-  optional int64 reservedVCores = 15;
-  optional int64 allocatedContainers = 16;
-  optional int64 pendingContainers = 17;
-  optional int64 reservedContainers = 18;
 }
 
 message QueueInfoProto {
@@ -404,7 +347,6 @@ message QueueInfoProto {
   repeated ApplicationReportProto applications = 7;
   repeated string accessibleNodeLabels = 8;
   optional string defaultNodeLabelExpression = 9;
-  optional QueueStatisticsProto queueStatistics = 10;
 }
 
 enum QueueACLProto {

@@ -199,7 +199,7 @@ public abstract class DelegationTokenAuthenticationHandler
             requestUgi = UserGroupInformation.createProxyUser(
                 doAsUser, requestUgi);
             try {
-              ProxyUsers.authorize(requestUgi, request.getRemoteAddr());
+              ProxyUsers.authorize(requestUgi, request.getRemoteHost());
             } catch (AuthorizationException ex) {
               HttpExceptionUtils.createServletExceptionResponse(response,
                   HttpServletResponse.SC_FORBIDDEN, ex);

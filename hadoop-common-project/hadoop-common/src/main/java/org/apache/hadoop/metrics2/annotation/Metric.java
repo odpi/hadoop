@@ -24,8 +24,7 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 
 /**
- * Annotation interface for a single metric used to annotate a field or a method
- * in the class.
+ * Annotation interface for a single metric
  */
 @InterfaceAudience.Public
 @InterfaceStability.Evolving

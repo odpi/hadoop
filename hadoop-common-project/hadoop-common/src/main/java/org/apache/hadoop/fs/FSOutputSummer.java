@@ -21,8 +21,6 @@ package org.apache.hadoop.fs;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.util.DataChecksum;
-import org.apache.htrace.NullScope;
-import org.apache.htrace.TraceScope;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -92,7 +90,7 @@ abstract public class FSOutputSummer extends OutputStream {
    * in a checksum chunk are in the buffer.  If the buffer is empty and
    * requested length is at least as large as the size of next checksum chunk
    * size, this method will checksum and write the chunk directly 
-   * to the underlying output stream.  Thus it avoids unnecessary data copy.
+   * to the underlying output stream.  Thus it avoids uneccessary data copy.
    *
    * @param      b     the data.
    * @param      off   the start offset in the data.
@@ -196,26 +194,16 @@ abstract public class FSOutputSummer extends OutputStream {
     return sum.getChecksumSize();
   }
 
-  protected TraceScope createWriteTraceScope() {
-    return NullScope.INSTANCE;
-  }
-
   /** Generate checksums for the given data chunks and output chunks & checksums
    * to the underlying output stream.
    */
   private void writeChecksumChunks(byte b[], int off, int len)
   throws IOException {
     sum.calculateChunkedSums(b, off, len, checksum, 0);
-    TraceScope scope = createWriteTraceScope();
-    try {
-      for (int i = 0; i < len; i += sum.getBytesPerChecksum()) {
-        int chunkLen = Math.min(sum.getBytesPerChecksum(), len - i);
-        int ckOffset = i / sum.getBytesPerChecksum() * getChecksumSize();
-        writeChunk(b, off + i, chunkLen, checksum, ckOffset,
-            getChecksumSize());
-      }
-    } finally {
-      scope.close();
+    for (int i = 0; i < len; i += sum.getBytesPerChecksum()) {
+      int chunkLen = Math.min(sum.getBytesPerChecksum(), len - i);
+      int ckOffset = i / sum.getBytesPerChecksum() * getChecksumSize();
+      writeChunk(b, off + i, chunkLen, checksum, ckOffset, getChecksumSize());
     }
   }
 

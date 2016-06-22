@@ -21,12 +21,10 @@ package org.apache.hadoop.yarn.server.resourcemanager;
 import static org.mockito.Matchers.isA;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.google.common.base.Supplier;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -55,7 +53,6 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.security.token.delegation.DelegationKey;
 import org.apache.hadoop.service.Service.STATE;
-import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.yarn.api.protocolrecords.FinishApplicationMasterRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationReportRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationReportResponse;
@@ -589,19 +586,10 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
             .getAppAttemptState());
     Assert.assertEquals(RMAppAttemptState.LAUNCHED,rmApp.getAppAttempts()
         .get(latestAppAttemptId).getAppAttemptState());
-
+    
     rm3.waitForState(latestAppAttemptId, RMAppAttemptState.FAILED);
     rm3.waitForState(rmApp.getApplicationId(), RMAppState.ACCEPTED);
-    final int maxRetry = 10;
-    final RMApp rmAppForCheck = rmApp;
-    GenericTestUtils.waitFor(
-        new Supplier<Boolean>() {
-          @Override
-          public Boolean get() {
-            return new Boolean(rmAppForCheck.getAppAttempts().size() == 4);
-          }
-        },
-        100, maxRetry);
+    Assert.assertEquals(4, rmApp.getAppAttempts().size());
     Assert.assertEquals(RMAppAttemptState.FAILED,
         rmApp.getAppAttempts().get(latestAppAttemptId).getAppAttemptState());
     
@@ -977,10 +965,9 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
     List<ApplicationReport> appList2 = response2.getApplicationList();
     Assert.assertTrue(3 == appList2.size());
 
-    // check application summary is logged for the completed apps with timeout
-    // to make sure APP_COMPLETED events are processed, after RM restart.
-    verify(rm2.getRMAppManager(), timeout(1000).times(3)).
-        logApplicationSummary(isA(ApplicationId.class));
+    // check application summary is logged for the completed apps after RM restart.
+    verify(rm2.getRMAppManager(), times(3)).logApplicationSummary(
+      isA(ApplicationId.class));
   }
 
   private MockAM launchAM(RMApp app, MockRM rm, MockNM nm)
@@ -1997,21 +1984,14 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
       }
     }
   }
-  
-  public static NMContainerStatus createNMContainerStatus(
-      ApplicationAttemptId appAttemptId, int id, ContainerState containerState) {
-    return createNMContainerStatus(appAttemptId, id, containerState,
-        RMNodeLabelsManager.NO_LABEL);
-  }
 
   public static NMContainerStatus createNMContainerStatus(
-      ApplicationAttemptId appAttemptId, int id, ContainerState containerState,
-      String nodeLabelExpression) {
+      ApplicationAttemptId appAttemptId, int id, ContainerState containerState) {
     ContainerId containerId = ContainerId.newContainerId(appAttemptId, id);
     NMContainerStatus containerReport =
         NMContainerStatus.newInstance(containerId, containerState,
-            Resource.newInstance(1024, 1), "recover container", 0,
-            Priority.newInstance(0), 0, nodeLabelExpression);
+          Resource.newInstance(1024, 1), "recover container", 0,
+          Priority.newInstance(0), 0);
     return containerReport;
   }
 
@@ -2117,7 +2097,7 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
     clusterNodeLabels.add("y");
     clusterNodeLabels.add("z");
     // Add node label x,y,z
-    nodeLabelManager.addToCluserNodeLabelsWithDefaultExclusivity(clusterNodeLabels);
+    nodeLabelManager.addToCluserNodeLabels(clusterNodeLabels);
 
     // Add node Label to Node h1->x
     NodeId n1 = NodeId.newInstance("h1", 0);
@@ -2142,7 +2122,7 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
     }
 
     Assert.assertEquals(clusterNodeLabels.size(), nodeLabelManager
-        .getClusterNodeLabelNames().size());
+        .getClusterNodeLabels().size());
 
     Map<NodeId, Set<String>> nodeLabels = nodeLabelManager.getNodeLabels();
     Assert.assertEquals(1, nodeLabelManager.getNodeLabels().size());
@@ -2161,7 +2141,7 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
 
     nodeLabelManager = rm2.getRMContext().getNodeLabelManager();
     Assert.assertEquals(clusterNodeLabels.size(), nodeLabelManager
-        .getClusterNodeLabelNames().size());
+        .getClusterNodeLabels().size());
 
     nodeLabels = nodeLabelManager.getNodeLabels();
     Assert.assertEquals(1, nodeLabelManager.getNodeLabels().size());

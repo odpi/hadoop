@@ -40,7 +40,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FilterFileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.mapred.InvalidJobConfException;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.JobID;
 import org.apache.hadoop.mapreduce.MRConfig;
@@ -52,6 +51,8 @@ import org.apache.hadoop.mapreduce.v2.api.records.TaskId;
 import org.apache.hadoop.mapreduce.v2.api.records.TaskState;
 import org.apache.hadoop.mapreduce.v2.api.records.TaskType;
 import org.apache.hadoop.util.ApplicationClassLoader;
+import org.apache.hadoop.util.StringUtils;
+import org.apache.hadoop.yarn.api.ApplicationConstants;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.yarn.api.ApplicationConstants;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
@@ -359,7 +360,6 @@ public class TestMRApps {
   }
   
   @SuppressWarnings("deprecation")
-  @Test(timeout = 120000, expected = InvalidJobConfException.class)
   public void testSetupDistributedCacheConflicts() throws Exception {
     Configuration conf = new Configuration();
     conf.setClass("fs.mockfs.impl", MockFileSystem.class, FileSystem.class);
@@ -387,10 +387,17 @@ public class TestMRApps {
     Map<String, LocalResource> localResources = 
       new HashMap<String, LocalResource>();
     MRApps.setupDistributedCache(conf, localResources);
+    
+    assertEquals(1, localResources.size());
+    LocalResource lr = localResources.get("something");
+    //Archive wins
+    assertNotNull(lr);
+    assertEquals(10l, lr.getSize());
+    assertEquals(10l, lr.getTimestamp());
+    assertEquals(LocalResourceType.ARCHIVE, lr.getType());
   }
   
   @SuppressWarnings("deprecation")
-  @Test(timeout = 120000, expected = InvalidJobConfException.class)
   public void testSetupDistributedCacheConflictsFiles() throws Exception {
     Configuration conf = new Configuration();
     conf.setClass("fs.mockfs.impl", MockFileSystem.class, FileSystem.class);
@@ -415,6 +422,14 @@ public class TestMRApps {
     Map<String, LocalResource> localResources = 
       new HashMap<String, LocalResource>();
     MRApps.setupDistributedCache(conf, localResources);
+    
+    assertEquals(1, localResources.size());
+    LocalResource lr = localResources.get("something");
+    //First one wins
+    assertNotNull(lr);
+    assertEquals(10l, lr.getSize());
+    assertEquals(10l, lr.getTimestamp());
+    assertEquals(LocalResourceType.FILE, lr.getType());
   }
   
   @SuppressWarnings("deprecation")
@@ -465,26 +480,7 @@ public class TestMRApps {
     }
     public void initialize(URI name, Configuration conf) throws IOException {}
   }
-
-  @Test
-  public void testLogSystemProperties() throws Exception {
-    Configuration conf = new Configuration();
-    // test no logging
-    conf.set(MRJobConfig.MAPREDUCE_JVM_SYSTEM_PROPERTIES_TO_LOG, " ");
-    String value = MRApps.getSystemPropertiesToLog(conf);
-    assertNull(value);
-
-    // test logging of selected keys
-    String classpath = "java.class.path";
-    String os = "os.name";
-    String version = "java.version";
-    conf.set(MRJobConfig.MAPREDUCE_JVM_SYSTEM_PROPERTIES_TO_LOG, classpath + ", " + os);
-    value = MRApps.getSystemPropertiesToLog(conf);
-    assertNotNull(value);
-    assertTrue(value.contains(classpath));
-    assertTrue(value.contains(os));
-    assertFalse(value.contains(version));
-  }
+  
 
   @Test
   public void testTaskStateUI() {

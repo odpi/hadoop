@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
+import java.util.zip.Checksum;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
@@ -81,8 +82,6 @@ public class BackupImage extends FSImage {
   private boolean stopApplyingEditsOnNextRoll = false;
   
   private FSNamesystem namesystem;
-
-  private int quotaInitThreads;
 
   /**
    * Construct a backup image.
@@ -185,9 +184,21 @@ public class BackupImage extends FSImage {
     }
     
     // write to BN's local edit log.
-    editLog.journal(firstTxId, numTxns, data);
+    logEditsLocally(firstTxId, numTxns, data);
   }
 
+  /**
+   * Write the batch of edits to the local copy of the edit logs.
+   */
+  private void logEditsLocally(long firstTxId, int numTxns, byte[] data) {
+    long expectedTxId = editLog.getLastWrittenTxId() + 1;
+    Preconditions.checkState(firstTxId == expectedTxId,
+        "received txid batch starting at %s but expected txn %s",
+        firstTxId, expectedTxId);
+    editLog.setNextTxId(firstTxId + numTxns - 1);
+    editLog.logEdit(data.length, data);
+    editLog.logSync();
+  }
 
   /**
    * Apply the batch of edits to the local namespace.
@@ -200,7 +211,7 @@ public class BackupImage extends FSImage {
     assert backupInputStream.length() == 0 : "backup input stream is not empty";
     try {
       if (LOG.isTraceEnabled()) {
-        LOG.trace("data:" + StringUtils.byteToHexString(data));
+        LOG.debug("data:" + StringUtils.byteToHexString(data));
       }
 
       FSEditLogLoader logLoader =
@@ -218,7 +229,9 @@ public class BackupImage extends FSImage {
       }
       lastAppliedTxId = logLoader.getLastAppliedTxId();
 
-      getNamesystem().dir.updateCountForQuota();
+      FSImage.updateCountForQuota(
+          getNamesystem().dir.getBlockStoragePolicySuite(),
+          getNamesystem().dir.rootDir); // inefficient!
     } finally {
       backupInputStream.clear();
     }
@@ -332,9 +345,28 @@ public class BackupImage extends FSImage {
    * This causes the BN to also start the new edit log in its local
    * directories.
    */
-  synchronized void namenodeStartedLogSegment(long txid) throws IOException {
-    editLog.startLogSegment(txid, true, namesystem.getEffectiveLayoutVersion());
-
+  synchronized void namenodeStartedLogSegment(long txid)
+      throws IOException {
+    LOG.info("NameNode started a new log segment at txid " + txid);
+    if (editLog.isSegmentOpen()) {
+      if (editLog.getLastWrittenTxId() == txid - 1) {
+        // We are in sync with the NN, so end and finalize the current segment
+        editLog.endCurrentLogSegment(false);
+      } else {
+        // We appear to have missed some transactions -- the NN probably
+        // lost contact with us temporarily. So, mark the current segment
+        // as aborted.
+        LOG.warn("NN started new log segment at txid " + txid +
+            ", but BN had only written up to txid " +
+            editLog.getLastWrittenTxId() +
+            "in the log segment starting at " + 
+        		editLog.getCurSegmentTxId() + ". Aborting this " +
+        		"log segment.");
+        editLog.abortCurrentLogSegment();
+      }
+    }
+    editLog.setNextTxId(txid);
+    editLog.startLogSegment(txid, false);
     if (bnState == BNState.DROP_UNTIL_NEXT_ROLL) {
       setState(BNState.JOURNAL_ONLY);
     }

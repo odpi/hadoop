@@ -18,7 +18,6 @@
 package org.apache.hadoop.mapred;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
@@ -85,8 +84,6 @@ public class TestCounters {
    */
   private void testCounter(Counters counter) throws ParseException {
     String compactEscapedString = counter.makeEscapedCompactString();
-    assertFalse("compactEscapedString should not contain null",
-                compactEscapedString.contains("null"));
     
     Counters recoveredCounter = 
       Counters.fromEscapedCompactString(compactEscapedString);

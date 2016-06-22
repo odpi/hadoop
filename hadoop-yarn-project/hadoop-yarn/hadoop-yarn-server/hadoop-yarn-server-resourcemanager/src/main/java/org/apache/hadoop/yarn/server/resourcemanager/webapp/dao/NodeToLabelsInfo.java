@@ -28,14 +28,14 @@ import javax.xml.bind.annotation.XmlRootElement;
 @XmlAccessorType(XmlAccessType.FIELD)
 public class NodeToLabelsInfo {
 
-  private HashMap<String, NodeLabelsInfo> nodeToLabels =
-      new HashMap<String, NodeLabelsInfo>();
+  protected HashMap<String, NodeLabelsInfo> nodeToLabels = 
+    new HashMap<String, NodeLabelsInfo>();
 
   public NodeToLabelsInfo() {
-    // JAXB needs this
-  }
-
+  } // JAXB needs this
+  
   public HashMap<String, NodeLabelsInfo> getNodeToLabels() {
-    return nodeToLabels;
+   return nodeToLabels; 
   }
+  
 }

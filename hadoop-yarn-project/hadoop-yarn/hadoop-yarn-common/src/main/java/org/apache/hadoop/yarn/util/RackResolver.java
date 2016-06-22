@@ -102,15 +102,11 @@ public class RackResolver {
     String rName = null;
     if (rNameList == null || rNameList.get(0) == null) {
       rName = NetworkTopology.DEFAULT_RACK;
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("Couldn't resolve " + hostName + ". Falling back to "
-            + NetworkTopology.DEFAULT_RACK);
-      }
+      LOG.info("Couldn't resolve " + hostName + ". Falling back to "
+          + NetworkTopology.DEFAULT_RACK);
     } else {
       rName = rNameList.get(0);
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("Resolved " + hostName + " to " + rName);
-      }
+      LOG.info("Resolved " + hostName + " to " + rName);
     }
     return new NodeBase(hostName, rName);
   }

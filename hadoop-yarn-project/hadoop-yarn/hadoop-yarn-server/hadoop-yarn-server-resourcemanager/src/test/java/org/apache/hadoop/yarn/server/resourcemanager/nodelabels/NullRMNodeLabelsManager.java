@@ -20,13 +20,11 @@ package org.apache.hadoop.yarn.server.resourcemanager.nodelabels;
 
 import java.io.IOException;
 import java.util.Collection;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.api.records.NodeId;
-import org.apache.hadoop.yarn.api.records.NodeLabel;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.nodelabels.NodeLabelsStore;
 
@@ -40,8 +38,7 @@ public class NullRMNodeLabelsManager extends RMNodeLabelsManager {
     this.store = new NodeLabelsStore(this) {
 
       @Override
-      public void recover(boolean ignoreNodeToLabelsMappings)
-          throws IOException {
+      public void recover() throws IOException {
         // do nothing
       }
 
@@ -58,8 +55,7 @@ public class NullRMNodeLabelsManager extends RMNodeLabelsManager {
       }
 
       @Override
-      public void storeNewClusterNodeLabels(List<NodeLabel> label)
-          throws IOException {
+      public void storeNewClusterNodeLabels(Set<String> label) throws IOException {
         // do nothing
       }
 

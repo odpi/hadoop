@@ -116,7 +116,6 @@ public abstract class AbstractMetricsContext implements MetricsContext {
   /**
    * Initializes the context.
    */
-  @Override
   public void init(String contextName, ContextFactory factory) 
   {
     this.contextName = contextName;
@@ -153,7 +152,6 @@ public abstract class AbstractMetricsContext implements MetricsContext {
   /**
    * Returns the context name.
    */
-  @Override
   public String getContextName() {
     return contextName;
   }
@@ -168,7 +166,6 @@ public abstract class AbstractMetricsContext implements MetricsContext {
   /**
    * Starts or restarts monitoring, the emitting of metrics records.
    */
-  @Override
   public synchronized void startMonitoring()
     throws IOException {
     if (!isMonitoring) {
@@ -181,7 +178,6 @@ public abstract class AbstractMetricsContext implements MetricsContext {
    * Stops monitoring.  This does not free buffered data. 
    * @see #close()
    */
-  @Override
   public synchronized void stopMonitoring() {
     if (isMonitoring) {
       stopTimer();
@@ -192,7 +188,6 @@ public abstract class AbstractMetricsContext implements MetricsContext {
   /**
    * Returns true if monitoring is currently in progress.
    */
-  @Override
   public boolean isMonitoring() {
     return isMonitoring;
   }
@@ -201,7 +196,6 @@ public abstract class AbstractMetricsContext implements MetricsContext {
    * Stops monitoring and frees buffered data, returning this
    * object to its initial state.  
    */
-  @Override
   public synchronized void close() {
     stopMonitoring();
     clearUpdaters();
@@ -215,7 +209,6 @@ public abstract class AbstractMetricsContext implements MetricsContext {
    * @param recordName the name of the record
    * @throws MetricsException if recordName conflicts with configuration data
    */
-  @Override
   public final synchronized MetricsRecord createRecord(String recordName) {
     if (bufferedData.get(recordName) == null) {
       bufferedData.put(recordName, new RecordMap());
@@ -239,7 +232,6 @@ public abstract class AbstractMetricsContext implements MetricsContext {
    * @param updater object to be run periodically; it should update
    * some metrics records 
    */
-  @Override
   public synchronized void registerUpdater(final Updater updater) {
     if (!updaters.contains(updater)) {
       updaters.add(updater);
@@ -251,7 +243,6 @@ public abstract class AbstractMetricsContext implements MetricsContext {
    *
    * @param updater object to be removed from the callback list
    */
-  @Override
   public synchronized void unregisterUpdater(Updater updater) {
     updaters.remove(updater);
   }
@@ -268,11 +259,11 @@ public abstract class AbstractMetricsContext implements MetricsContext {
       timer = new Timer("Timer thread for monitoring " + getContextName(), 
                         true);
       TimerTask task = new TimerTask() {
-          @Override
           public void run() {
             try {
               timerEvent();
-            } catch (IOException ioe) {
+            }
+            catch (IOException ioe) {
               ioe.printStackTrace();
             }
           }
@@ -306,7 +297,8 @@ public abstract class AbstractMetricsContext implements MetricsContext {
       for (Updater updater : myUpdaters) {
         try {
           updater.doUpdates(this);
-        } catch (Throwable throwable) {
+        }
+        catch (Throwable throwable) {
           throwable.printStackTrace();
         }
       }
@@ -336,7 +328,6 @@ public abstract class AbstractMetricsContext implements MetricsContext {
    * Useful for monitoring systems that are polling-based.
    * @return A non-null collection of all monitoring records.
    */
-  @Override
   public synchronized Map<String, Collection<OutputRecord>> getAllRecords() {
     Map<String, Collection<OutputRecord>> out = new TreeMap<String, Collection<OutputRecord>>();
     for (Map.Entry<String,RecordMap> recordEntry : bufferedData.entrySet()) {
@@ -458,7 +449,6 @@ public abstract class AbstractMetricsContext implements MetricsContext {
   /**
    * Returns the timer period.
    */
-  @Override
   public int getPeriod() {
     return period;
   }

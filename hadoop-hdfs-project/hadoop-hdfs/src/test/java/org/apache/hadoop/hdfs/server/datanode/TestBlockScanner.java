@@ -82,7 +82,7 @@ public class TestBlockScanner {
     final DataNode datanode;
     final BlockScanner blockScanner;
     final FsDatasetSpi<? extends FsVolumeSpi> data;
-    final FsDatasetSpi.FsVolumeReferences volumes;
+    final List<? extends FsVolumeSpi> volumes;
 
     TestContext(Configuration conf, int numNameServices) throws Exception {
       this.numNameServices = numNameServices;
@@ -109,12 +109,11 @@ public class TestBlockScanner {
         dfs[i].mkdirs(new Path("/test"));
       }
       data = datanode.getFSDataset();
-      volumes = data.getFsVolumeReferences();
+      volumes = data.getVolumes();
     }
 
     @Override
     public void close() throws IOException {
-      volumes.close();
       if (cluster != null) {
         for (int i = 0; i < numNameServices; i++) {
           dfs[i].delete(new Path("/test"), true);
@@ -163,8 +162,8 @@ public class TestBlockScanner {
     boolean testedRewind = false, testedSave = false, testedLoad = false;
     int blocksProcessed = 0, savedBlocksProcessed = 0;
     try {
-      List<BPOfferService> bpos = ctx.datanode.getAllBpOs();
-      assertEquals(1, bpos.size());
+      BPOfferService bpos[] = ctx.datanode.getAllBpOs();
+      assertEquals(1, bpos.length);
       BlockIterator iter = volume.newBlockIterator(ctx.bpids[0], "test");
       assertEquals(ctx.bpids[0], iter.getBlockPoolId());
       iter.setMaxStalenessMs(maxStaleness);
@@ -714,7 +713,8 @@ public class TestBlockScanner {
     ctx.createFiles(0, NUM_EXPECTED_BLOCKS, 1);
     final TestScanResultHandler.Info info =
         TestScanResultHandler.getInfo(ctx.volumes.get(0));
-    String storageID = ctx.volumes.get(0).getStorageID();
+    String storageID = ctx.datanode.getFSDataset().
+        getVolumes().get(0).getStorageID();
     synchronized (info) {
       info.sem = new Semaphore(4);
       info.shouldRun = true;

@@ -63,7 +63,7 @@ public abstract class NativeS3FileSystemContractBaseTest
 
   public void testListStatusForRoot() throws Exception {
     FileStatus[] paths = fs.listStatus(path("/"));
-    assertEquals("Root directory is not empty; ", 0, paths.length);
+    assertEquals(0, paths.length);
     
     Path testDir = path("/test");
     assertTrue(fs.mkdirs(testDir));

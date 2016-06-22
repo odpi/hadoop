@@ -39,7 +39,6 @@ import org.junit.Test;
 
 public class TestEvents {
 
-  private static final String taskId = "task_1_2_r_3";
   /**
    * test a getters of TaskAttemptFinishedEvent and TaskAttemptFinished
    * 
@@ -120,65 +119,65 @@ public class TestEvents {
         new ByteArrayInputStream(getEvents())));
     HistoryEvent e = reader.getNextEvent();
     assertTrue(e.getEventType().equals(EventType.JOB_PRIORITY_CHANGED));
-    assertEquals("ID", ((JobPriorityChange) e.getDatum()).getJobid().toString());
+    assertEquals("ID", ((JobPriorityChange) e.getDatum()).jobid.toString());
 
     e = reader.getNextEvent();
     assertTrue(e.getEventType().equals(EventType.JOB_STATUS_CHANGED));
-    assertEquals("ID", ((JobStatusChanged) e.getDatum()).getJobid().toString());
+    assertEquals("ID", ((JobStatusChanged) e.getDatum()).jobid.toString());
 
     e = reader.getNextEvent();
     assertTrue(e.getEventType().equals(EventType.TASK_UPDATED));
-    assertEquals("ID", ((TaskUpdated) e.getDatum()).getTaskid().toString());
+    assertEquals("ID", ((TaskUpdated) e.getDatum()).taskid.toString());
 
     e = reader.getNextEvent();
     assertTrue(e.getEventType().equals(EventType.REDUCE_ATTEMPT_KILLED));
-    assertEquals(taskId,
-        ((TaskAttemptUnsuccessfulCompletion) e.getDatum()).getTaskid().toString());
+    assertEquals("task_1_2_r03_4",
+        ((TaskAttemptUnsuccessfulCompletion) e.getDatum()).taskid.toString());
 
     e = reader.getNextEvent();
     assertTrue(e.getEventType().equals(EventType.JOB_KILLED));
     assertEquals("ID",
-        ((JobUnsuccessfulCompletion) e.getDatum()).getJobid().toString());
+        ((JobUnsuccessfulCompletion) e.getDatum()).jobid.toString());
 
     e = reader.getNextEvent();
     assertTrue(e.getEventType().equals(EventType.REDUCE_ATTEMPT_STARTED));
-    assertEquals(taskId,
-        ((TaskAttemptStarted) e.getDatum()).getTaskid().toString());
+    assertEquals("task_1_2_r03_4",
+        ((TaskAttemptStarted) e.getDatum()).taskid.toString());
 
     e = reader.getNextEvent();
     assertTrue(e.getEventType().equals(EventType.REDUCE_ATTEMPT_FINISHED));
-    assertEquals(taskId,
-        ((TaskAttemptFinished) e.getDatum()).getTaskid().toString());
+    assertEquals("task_1_2_r03_4",
+        ((TaskAttemptFinished) e.getDatum()).taskid.toString());
 
     e = reader.getNextEvent();
     assertTrue(e.getEventType().equals(EventType.REDUCE_ATTEMPT_KILLED));
-    assertEquals(taskId,
-        ((TaskAttemptUnsuccessfulCompletion) e.getDatum()).getTaskid().toString());
+    assertEquals("task_1_2_r03_4",
+        ((TaskAttemptUnsuccessfulCompletion) e.getDatum()).taskid.toString());
 
     e = reader.getNextEvent();
     assertTrue(e.getEventType().equals(EventType.REDUCE_ATTEMPT_KILLED));
-    assertEquals(taskId,
-        ((TaskAttemptUnsuccessfulCompletion) e.getDatum()).getTaskid().toString());
+    assertEquals("task_1_2_r03_4",
+        ((TaskAttemptUnsuccessfulCompletion) e.getDatum()).taskid.toString());
 
     e = reader.getNextEvent();
     assertTrue(e.getEventType().equals(EventType.REDUCE_ATTEMPT_STARTED));
-    assertEquals(taskId,
-        ((TaskAttemptStarted) e.getDatum()).getTaskid().toString());
+    assertEquals("task_1_2_r03_4",
+        ((TaskAttemptStarted) e.getDatum()).taskid.toString());
 
     e = reader.getNextEvent();
     assertTrue(e.getEventType().equals(EventType.REDUCE_ATTEMPT_FINISHED));
-    assertEquals(taskId,
-        ((TaskAttemptFinished) e.getDatum()).getTaskid().toString());
+    assertEquals("task_1_2_r03_4",
+        ((TaskAttemptFinished) e.getDatum()).taskid.toString());
 
     e = reader.getNextEvent();
     assertTrue(e.getEventType().equals(EventType.REDUCE_ATTEMPT_KILLED));
-    assertEquals(taskId,
-        ((TaskAttemptUnsuccessfulCompletion) e.getDatum()).getTaskid().toString());
+    assertEquals("task_1_2_r03_4",
+        ((TaskAttemptUnsuccessfulCompletion) e.getDatum()).taskid.toString());
 
     e = reader.getNextEvent();
     assertTrue(e.getEventType().equals(EventType.REDUCE_ATTEMPT_KILLED));
-    assertEquals(taskId,
-        ((TaskAttemptUnsuccessfulCompletion) e.getDatum()).getTaskid().toString());
+    assertEquals("task_1_2_r03_4",
+        ((TaskAttemptUnsuccessfulCompletion) e.getDatum()).taskid.toString());
 
     reader.close();
   }
@@ -190,8 +189,7 @@ public class TestEvents {
     ByteArrayOutputStream output = new ByteArrayOutputStream();
     FSDataOutputStream fsOutput = new FSDataOutputStream(output,
         new FileSystem.Statistics("scheme"));
-    EventWriter writer = new EventWriter(fsOutput,
-        EventWriter.WriteMode.JSON);
+    EventWriter writer = new EventWriter(fsOutput);
     writer.write(getJobPriorityChangedEvent());
     writer.write(getJobStatusChangedEvent());
     writer.write(getTaskUpdatedEvent());
@@ -228,43 +226,43 @@ public class TestEvents {
 
   private TaskAttemptUnsuccessfulCompletion getTaskAttemptUnsuccessfulCompletion() {
     TaskAttemptUnsuccessfulCompletion datum = new TaskAttemptUnsuccessfulCompletion();
-    datum.setAttemptId("attempt_1_2_r3_4_5");
-    datum.setClockSplits(Arrays.asList(1, 2, 3));
-    datum.setCpuUsages(Arrays.asList(100, 200, 300));
-    datum.setError("Error");
-    datum.setFinishTime(2L);
-    datum.setHostname("hostname");
-    datum.setRackname("rackname");
-    datum.setPhysMemKbytes(Arrays.asList(1000, 2000, 3000));
-    datum.setTaskid(taskId);
-    datum.setPort(1000);
-    datum.setTaskType("REDUCE");
-    datum.setStatus("STATUS");
-    datum.setCounters(getCounters());
-    datum.setVMemKbytes(Arrays.asList(1000, 2000, 3000));
+    datum.attemptId = "attempt_1_2_r3_4_5";
+    datum.clockSplits = Arrays.asList(1, 2, 3);
+    datum.cpuUsages = Arrays.asList(100, 200, 300);
+    datum.error = "Error";
+    datum.finishTime = 2;
+    datum.hostname = "hostname";
+    datum.rackname = "rackname";
+    datum.physMemKbytes = Arrays.asList(1000, 2000, 3000);
+    datum.taskid = "task_1_2_r03_4";
+    datum.port = 1000;
+    datum.taskType = "REDUCE";
+    datum.status = "STATUS";
+    datum.counters = getCounters();
+    datum.vMemKbytes = Arrays.asList(1000, 2000, 3000);
     return datum;
   }
 
   private JhCounters getCounters() {
     JhCounters counters = new JhCounters();
-    counters.setGroups(new ArrayList<JhCounterGroup>(0));
-    counters.setName("name");
+    counters.groups = new ArrayList<JhCounterGroup>(0);
+    counters.name = "name";
     return counters;
   }
 
   private FakeEvent getCleanupAttemptFinishedEvent() {
     FakeEvent result = new FakeEvent(EventType.CLEANUP_ATTEMPT_FINISHED);
     TaskAttemptFinished datum = new TaskAttemptFinished();
-    datum.setAttemptId("attempt_1_2_r3_4_5");
+    datum.attemptId = "attempt_1_2_r3_4_5";
 
-    datum.setCounters(getCounters());
-    datum.setFinishTime(2L);
-    datum.setHostname("hostname");
-    datum.setRackname("rackName");
-    datum.setState("state");
-    datum.setTaskid(taskId);
-    datum.setTaskStatus("taskStatus");
-    datum.setTaskType("REDUCE");
+    datum.counters = getCounters();
+    datum.finishTime = 2;
+    datum.hostname = "hostname";
+    datum.rackname = "rackName";
+    datum.state = "state";
+    datum.taskid = "task_1_2_r03_4";
+    datum.taskStatus = "taskStatus";
+    datum.taskType = "REDUCE";
     result.setDatum(datum);
     return result;
   }
@@ -273,16 +271,16 @@ public class TestEvents {
     FakeEvent result = new FakeEvent(EventType.CLEANUP_ATTEMPT_STARTED);
     TaskAttemptStarted datum = new TaskAttemptStarted();
 
-    datum.setAttemptId("attempt_1_2_r3_4_5");
-    datum.setAvataar("avatar");
-    datum.setContainerId("containerId");
-    datum.setHttpPort(10000);
-    datum.setLocality("locality");
-    datum.setShufflePort(10001);
-    datum.setStartTime(1L);
-    datum.setTaskid(taskId);
-    datum.setTaskType("taskType");
-    datum.setTrackerName("trackerName");
+    datum.attemptId = "attempt_1_2_r3_4_5";
+    datum.avataar = "avatar";
+    datum.containerId = "containerId";
+    datum.httpPort = 10000;
+    datum.locality = "locality";
+    datum.shufflePort = 10001;
+    datum.startTime = 1;
+    datum.taskid = "task_1_2_r03_4";
+    datum.taskType = "taskType";
+    datum.trackerName = "trackerName";
     result.setDatum(datum);
     return result;
   }
@@ -304,15 +302,15 @@ public class TestEvents {
     FakeEvent result = new FakeEvent(EventType.SETUP_ATTEMPT_FINISHED);
     TaskAttemptFinished datum = new TaskAttemptFinished();
 
-    datum.setAttemptId("attempt_1_2_r3_4_5");
-    datum.setCounters(getCounters());
-    datum.setFinishTime(2L);
-    datum.setHostname("hostname");
-    datum.setRackname("rackname");
-    datum.setState("state");
-    datum.setTaskid(taskId);
-    datum.setTaskStatus("taskStatus");
-    datum.setTaskType("REDUCE");
+    datum.attemptId = "attempt_1_2_r3_4_5";
+    datum.counters = getCounters();
+    datum.finishTime = 2;
+    datum.hostname = "hostname";
+    datum.rackname = "rackname";
+    datum.state = "state";
+    datum.taskid = "task_1_2_r03_4";
+    datum.taskStatus = "taskStatus";
+    datum.taskType = "REDUCE";
     result.setDatum(datum);
     return result;
   }
@@ -320,16 +318,16 @@ public class TestEvents {
   private FakeEvent getSetupAttemptStartedEvent() {
     FakeEvent result = new FakeEvent(EventType.SETUP_ATTEMPT_STARTED);
     TaskAttemptStarted datum = new TaskAttemptStarted();
-    datum.setAttemptId("ID");
-    datum.setAvataar("avataar");
-    datum.setContainerId("containerId");
-    datum.setHttpPort(10000);
-    datum.setLocality("locality");
-    datum.setShufflePort(10001);
-    datum.setStartTime(1L);
-    datum.setTaskid(taskId);
-    datum.setTaskType("taskType");
-    datum.setTrackerName("trackerName");
+    datum.attemptId = "ID";
+    datum.avataar = "avataar";
+    datum.containerId = "containerId";
+    datum.httpPort = 10000;
+    datum.locality = "locality";
+    datum.shufflePort = 10001;
+    datum.startTime = 1;
+    datum.taskid = "task_1_2_r03_4";
+    datum.taskType = "taskType";
+    datum.trackerName = "trackerName";
     result.setDatum(datum);
     return result;
   }
@@ -357,8 +355,8 @@ public class TestEvents {
   private FakeEvent getJobPriorityChangedEvent() {
     FakeEvent result = new FakeEvent(EventType.JOB_PRIORITY_CHANGED);
     JobPriorityChange datum = new JobPriorityChange();
-    datum.setJobid("ID");
-    datum.setPriority("priority");
+    datum.jobid = "ID";
+    datum.priority = "priority";
     result.setDatum(datum);
     return result;
   }
@@ -366,8 +364,8 @@ public class TestEvents {
   private FakeEvent getJobStatusChangedEvent() {
     FakeEvent result = new FakeEvent(EventType.JOB_STATUS_CHANGED);
     JobStatusChanged datum = new JobStatusChanged();
-    datum.setJobid("ID");
-    datum.setJobStatus("newStatus");
+    datum.jobid = "ID";
+    datum.jobStatus = "newStatus";
     result.setDatum(datum);
     return result;
   }
@@ -375,8 +373,8 @@ public class TestEvents {
   private FakeEvent getTaskUpdatedEvent() {
     FakeEvent result = new FakeEvent(EventType.TASK_UPDATED);
     TaskUpdated datum = new TaskUpdated();
-    datum.setFinishTime(2L);
-    datum.setTaskid("ID");
+    datum.finishTime = 2;
+    datum.taskid = "ID";
     result.setDatum(datum);
     return result;
   }

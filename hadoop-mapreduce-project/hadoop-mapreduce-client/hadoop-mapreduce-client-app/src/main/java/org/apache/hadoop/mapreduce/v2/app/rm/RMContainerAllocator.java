@@ -59,7 +59,6 @@ import org.apache.hadoop.mapreduce.v2.app.job.event.TaskAttemptDiagnosticsUpdate
 import org.apache.hadoop.mapreduce.v2.app.job.event.TaskAttemptEvent;
 import org.apache.hadoop.mapreduce.v2.app.job.event.TaskAttemptEventType;
 import org.apache.hadoop.mapreduce.v2.app.job.event.TaskAttemptKillEvent;
-import org.apache.hadoop.mapreduce.v2.app.rm.preemption.AMPreemptionPolicy;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.StringInterner;
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse;
@@ -71,7 +70,6 @@ import org.apache.hadoop.yarn.api.records.NMToken;
 import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.NodeReport;
 import org.apache.hadoop.yarn.api.records.NodeState;
-import org.apache.hadoop.yarn.api.records.PreemptionMessage;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.Token;
@@ -172,22 +170,14 @@ public class RMContainerAllocator extends RMContainerRequestor
   private long retrystartTime;
   private Clock clock;
 
-  private final AMPreemptionPolicy preemptionPolicy;
-
   @VisibleForTesting
   protected BlockingQueue<ContainerAllocatorEvent> eventQueue
     = new LinkedBlockingQueue<ContainerAllocatorEvent>();
 
   private ScheduleStats scheduleStats = new ScheduleStats();
 
-  private String mapNodeLabelExpression;
-
-  private String reduceNodeLabelExpression;
-
-  public RMContainerAllocator(ClientService clientService, AppContext context,
-      AMPreemptionPolicy preemptionPolicy) {
+  public RMContainerAllocator(ClientService clientService, AppContext context) {
     super(clientService, context);
-    this.preemptionPolicy = preemptionPolicy;
     this.stopped = new AtomicBoolean(false);
     this.clock = context.getClock();
   }
@@ -214,8 +204,6 @@ public class RMContainerAllocator extends RMContainerRequestor
     RackResolver.init(conf);
     retryInterval = getConfig().getLong(MRJobConfig.MR_AM_TO_RM_WAIT_INTERVAL_MS,
                                 MRJobConfig.DEFAULT_MR_AM_TO_RM_WAIT_INTERVAL_MS);
-    mapNodeLabelExpression = conf.get(MRJobConfig.MAP_NODE_LABEL_EXP);
-    reduceNodeLabelExpression = conf.get(MRJobConfig.REDUCE_NODE_LABEL_EXP);
     // Init startTime to current time. If all goes well, it will be reset after
     // first attempt to contact RM.
     retrystartTime = System.currentTimeMillis();
@@ -402,17 +390,15 @@ public class RMContainerAllocator extends RMContainerRequestor
           reduceResourceRequest.getVirtualCores());
         if (reqEvent.getEarlierAttemptFailed()) {
           //add to the front of queue for fail fast
-          pendingReduces.addFirst(new ContainerRequest(reqEvent,
-              PRIORITY_REDUCE, reduceNodeLabelExpression));
+          pendingReduces.addFirst(new ContainerRequest(reqEvent, PRIORITY_REDUCE));
         } else {
-          pendingReduces.add(new ContainerRequest(reqEvent, PRIORITY_REDUCE,
-              reduceNodeLabelExpression));
+          pendingReduces.add(new ContainerRequest(reqEvent, PRIORITY_REDUCE));
           //reduces are added to pending and are slowly ramped up
         }
       }
       
     } else if (
-      event.getType() == ContainerAllocator.EventType.CONTAINER_DEALLOCATE) {
+        event.getType() == ContainerAllocator.EventType.CONTAINER_DEALLOCATE) {
   
       LOG.info("Processing the event " + event.toString());
 
@@ -433,15 +419,11 @@ public class RMContainerAllocator extends RMContainerRequestor
         LOG.error("Could not deallocate container for task attemptId " + 
             aId);
       }
-      preemptionPolicy.handleCompletedContainer(event.getAttemptID());
     } else if (
         event.getType() == ContainerAllocator.EventType.CONTAINER_FAILED) {
       ContainerFailedEvent fEv = (ContainerFailedEvent) event;
       String host = getHost(fEv.getContMgrAddress());
       containerFailedOnHost(host);
-      // propagate failures to preemption policy to discard checkpoints for
-      // failed tasks
-      preemptionPolicy.handleFailedContainer(event.getAttemptID());
     }
   }
 
@@ -494,7 +476,7 @@ public class RMContainerAllocator extends RMContainerRequestor
           pendingReduces.add(req);
         }
         scheduledRequests.reduces.clear();
-
+ 
         //do further checking to find the number of map requests that were
         //hanging around for a while
         int hangingMapRequests = getNumOfHangingRequests(scheduledRequests.maps);
@@ -523,7 +505,7 @@ public class RMContainerAllocator extends RMContainerRequestor
       }
     }
   }
-
+ 
   private int getNumOfHangingRequests(Map<TaskAttemptId, ContainerRequest> requestMap) {
     if (allocationDelayThresholdMs <= 0)
       return requestMap.size();
@@ -699,7 +681,7 @@ public class RMContainerAllocator extends RMContainerRequestor
       // this application must clean itself up.
       eventHandler.handle(new JobEvent(this.getJob().getID(),
         JobEventType.JOB_AM_REBOOT));
-      throw new RMContainerAllocationException(
+      throw new YarnRuntimeException(
         "Resource Manager doesn't recognize AttemptId: "
             + this.getContext().getApplicationAttemptId(), e);
     } catch (ApplicationMasterNotRegisteredException e) {
@@ -717,7 +699,7 @@ public class RMContainerAllocator extends RMContainerRequestor
         LOG.error("Could not contact RM after " + retryInterval + " milliseconds.");
         eventHandler.handle(new JobEvent(this.getJob().getID(),
                                          JobEventType.JOB_AM_REBOOT));
-        throw new RMContainerAllocationException("Could not contact RM after " +
+        throw new YarnRuntimeException("Could not contact RM after " +
                                 retryInterval + " milliseconds.");
       }
       // Throw this up to the caller, which may decide to ignore it and
@@ -742,14 +724,6 @@ public class RMContainerAllocator extends RMContainerRequestor
     }
 
     List<ContainerStatus> finishedContainers = response.getCompletedContainersStatuses();
-
-    // propagate preemption requests
-    final PreemptionMessage preemptReq = response.getPreemptionMessage();
-    if (preemptReq != null) {
-      preemptionPolicy.preempt(
-          new PreemptionContext(assignedRequests), preemptReq);
-    }
-
     if (newContainers.size() + finishedContainers.size() > 0
         || !headRoom.equals(newHeadRoom)) {
       //something changed
@@ -787,9 +761,7 @@ public class RMContainerAllocator extends RMContainerRequestor
         String diagnostics = StringInterner.weakIntern(cont.getDiagnostics());
         eventHandler.handle(new TaskAttemptDiagnosticsUpdateEvent(attemptID,
             diagnostics));
-
-        preemptionPolicy.handleCompletedContainer(attemptID);
-      }
+      }      
     }
     return newContainers;
   }
@@ -959,9 +931,7 @@ public class RMContainerAllocator extends RMContainerRequestor
       
       if (event.getEarlierAttemptFailed()) {
         earlierFailedMaps.add(event.getAttemptID());
-        request =
-            new ContainerRequest(event, PRIORITY_FAST_FAIL_MAP,
-                mapNodeLabelExpression);
+        request = new ContainerRequest(event, PRIORITY_FAST_FAIL_MAP);
         LOG.info("Added "+event.getAttemptID()+" to list of failed maps");
       } else {
         for (String host : event.getHosts()) {
@@ -986,8 +956,7 @@ public class RMContainerAllocator extends RMContainerRequestor
             LOG.debug("Added attempt req to rack " + rack);
          }
        }
-        request =
-            new ContainerRequest(event, PRIORITY_MAP, mapNodeLabelExpression);
+       request = new ContainerRequest(event, PRIORITY_MAP);
       }
       maps.put(event.getAttemptID(), request);
       addContainerReq(request);
@@ -1004,7 +973,6 @@ public class RMContainerAllocator extends RMContainerRequestor
       Iterator<Container> it = allocatedContainers.iterator();
       LOG.info("Got allocated containers " + allocatedContainers.size());
       containersAllocated += allocatedContainers.size();
-      int reducePending = reduces.size();
       while (it.hasNext()) {
         Container allocated = it.next();
         if (LOG.isDebugEnabled()) {
@@ -1035,14 +1003,13 @@ public class RMContainerAllocator extends RMContainerRequestor
         else if (PRIORITY_REDUCE.equals(priority)) {
           if (ResourceCalculatorUtils.computeAvailableContainers(allocatedResource,
               reduceResourceRequest, getSchedulerResourceTypes()) <= 0
-              || (reducePending <= 0)) {
-            LOG.info("Cannot assign container " + allocated
+              || reduces.isEmpty()) {
+            LOG.info("Cannot assign container " + allocated 
                 + " for a reduce as either "
                 + " container memory less than required " + reduceResourceRequest
-                + " or no pending reduce tasks.");
+                + " or no pending reduce tasks - reduces.isEmpty=" 
+                + reduces.isEmpty()); 
             isAssignable = false;
-          } else {
-            reducePending--;
           }
         } else {
           LOG.warn("Container allocated at unwanted priority: " + priority + 
@@ -1122,7 +1089,7 @@ public class RMContainerAllocator extends RMContainerRequestor
       assignedRequests.add(allocated, assigned.attemptID);
 
       if (LOG.isDebugEnabled()) {
-        LOG.debug("Assigned container (" + allocated + ") "
+        LOG.info("Assigned container (" + allocated + ") "
             + " to task " + assigned.attemptID + " on node "
             + allocated.getNodeId().toString());
       }
@@ -1462,27 +1429,4 @@ public class RMContainerAllocator extends RMContainerRequestor
         " RackLocal:" + rackLocalAssigned);
     }
   }
-
-  static class PreemptionContext extends AMPreemptionPolicy.Context {
-    final AssignedRequests reqs;
-
-    PreemptionContext(AssignedRequests reqs) {
-      this.reqs = reqs;
-    }
-    @Override
-    public TaskAttemptId getTaskAttempt(ContainerId container) {
-      return reqs.get(container);
-    }
-
-    @Override
-    public List<Container> getContainers(TaskType t){
-      if(TaskType.REDUCE.equals(t))
-        return new ArrayList<Container>(reqs.reduces.values());
-      if(TaskType.MAP.equals(t))
-        return new ArrayList<Container>(reqs.maps.values());
-      return null;
-    }
-
-  }
-
 }

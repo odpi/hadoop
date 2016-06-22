@@ -40,7 +40,7 @@ import org.apache.commons.logging.Log;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
-import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
+import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.fs.shell.CommandFormat;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.SequenceFile;
@@ -510,10 +510,10 @@ public class TestFileSystem extends TestCase {
     
     {
       try {
-        runTestCache(HdfsClientConfigKeys.DFS_NAMENODE_RPC_PORT_DEFAULT);
+        runTestCache(NameNode.DEFAULT_PORT);
       } catch(java.net.BindException be) {
-        LOG.warn("Cannot test HdfsClientConfigKeys.DFS_NAMENODE_RPC_PORT_DEFAULT (="
-            + HdfsClientConfigKeys.DFS_NAMENODE_RPC_PORT_DEFAULT + ")", be);
+        LOG.warn("Cannot test NameNode.DEFAULT_PORT (="
+            + NameNode.DEFAULT_PORT + ")", be);
       }
 
       runTestCache(0);
@@ -537,11 +537,11 @@ public class TestFileSystem extends TestCase {
         }
       }
       
-      if (port == HdfsClientConfigKeys.DFS_NAMENODE_RPC_PORT_DEFAULT) {
+      if (port == NameNode.DEFAULT_PORT) {
         //test explicit default port
         URI uri2 = new URI(uri.getScheme(), uri.getUserInfo(),
-            uri.getHost(), HdfsClientConfigKeys.DFS_NAMENODE_RPC_PORT_DEFAULT,
-            uri.getPath(), uri.getQuery(), uri.getFragment());
+            uri.getHost(), NameNode.DEFAULT_PORT, uri.getPath(),
+            uri.getQuery(), uri.getFragment());  
         LOG.info("uri2=" + uri2);
         FileSystem fs = FileSystem.get(uri2, conf);
         checkPath(cluster, fs);
@@ -565,6 +565,18 @@ public class TestFileSystem extends TestCase {
     {
       Configuration conf = new Configuration();
       new Path("file:///").getFileSystem(conf);
+      FileSystem.closeAll();
+    }
+
+    {
+      Configuration conf = new Configuration();
+      new Path("hftp://localhost:12345/").getFileSystem(conf);
+      FileSystem.closeAll();
+    }
+
+    {
+      Configuration conf = new Configuration();
+      FileSystem fs = new Path("hftp://localhost:12345/").getFileSystem(conf);
       FileSystem.closeAll();
     }
   }
@@ -607,12 +619,12 @@ public class TestFileSystem extends TestCase {
     Configuration conf = new Configuration();
     
     // check basic equality
-    FileSystem.Cache.Key lowercaseCachekey1 = new FileSystem.Cache.Key(new URI("hdfs://localhost:12345/"), conf);
-    FileSystem.Cache.Key lowercaseCachekey2 = new FileSystem.Cache.Key(new URI("hdfs://localhost:12345/"), conf);
+    FileSystem.Cache.Key lowercaseCachekey1 = new FileSystem.Cache.Key(new URI("hftp://localhost:12345/"), conf);
+    FileSystem.Cache.Key lowercaseCachekey2 = new FileSystem.Cache.Key(new URI("hftp://localhost:12345/"), conf);
     assertEquals( lowercaseCachekey1, lowercaseCachekey2 );
 
     // check insensitive equality    
-    FileSystem.Cache.Key uppercaseCachekey = new FileSystem.Cache.Key(new URI("HDFS://Localhost:12345/"), conf);
+    FileSystem.Cache.Key uppercaseCachekey = new FileSystem.Cache.Key(new URI("HFTP://Localhost:12345/"), conf);
     assertEquals( lowercaseCachekey2, uppercaseCachekey );
 
     // check behaviour with collections

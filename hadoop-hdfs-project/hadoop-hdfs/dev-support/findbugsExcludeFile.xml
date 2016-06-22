@@ -77,7 +77,7 @@
       ResponseProccessor is thread that is designed to catch RuntimeException.
      -->
      <Match>
-       <Class name="org.apache.hadoop.hdfs.DataStreamer$ResponseProcessor" />
+       <Class name="org.apache.hadoop.hdfs.DFSOutputStream$DataStreamer$ResponseProcessor" />
        <Method name="run" />
        <Bug pattern="REC_CATCH_EXCEPTION" />
      </Match>
@@ -176,6 +176,16 @@
        <Method name="setDirInternal" />
        <Bug pattern="DM_STRING_CTOR" />
      </Match>
+    <Match>
+      <Class name="org.apache.hadoop.hdfs.shortcircuit.DfsClientShmManager$EndpointShmManager" />
+      <Method name="allocSlot" />
+      <Bug pattern="UL_UNRELEASED_LOCK_EXCEPTION_PATH" />
+    </Match>
+    <Match>
+      <Class name="org.apache.hadoop.hdfs.shortcircuit.DfsClientShmManager$EndpointShmManager" />
+      <Method name="allocSlot" />
+      <Bug pattern="UL_UNRELEASED_LOCK" />
+    </Match>
     <!-- Manually verified to be okay, we want to throw away the top bit here -->
     <Match>
       <Class name="org.apache.hadoop.hdfs.server.namenode.CachedBlock" />

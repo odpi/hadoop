@@ -40,23 +40,21 @@ import org.apache.hadoop.mapreduce.security.TokenCache;
  * An output format that writes the key and value appended together.
  */
 public class TeraOutputFormat extends FileOutputFormat<Text,Text> {
+  static final String FINAL_SYNC_ATTRIBUTE = "mapreduce.terasort.final.sync";
   private OutputCommitter committer = null;
 
   /**
    * Set the requirement for a final sync before the stream is closed.
    */
   static void setFinalSync(JobContext job, boolean newValue) {
-    job.getConfiguration().setBoolean(
-        TeraSortConfigKeys.FINAL_SYNC_ATTRIBUTE.key(), newValue);
+    job.getConfiguration().setBoolean(FINAL_SYNC_ATTRIBUTE, newValue);
   }
 
   /**
    * Does the user want a final sync at close?
    */
   public static boolean getFinalSync(JobContext job) {
-    return job.getConfiguration().getBoolean(
-        TeraSortConfigKeys.FINAL_SYNC_ATTRIBUTE.key(),
-        TeraSortConfigKeys.DEFAULT_FINAL_SYNC_ATTRIBUTE);
+    return job.getConfiguration().getBoolean(FINAL_SYNC_ATTRIBUTE, false);
   }
 
   static class TeraRecordWriter extends RecordWriter<Text,Text> {
@@ -77,7 +75,7 @@ public class TeraOutputFormat extends FileOutputFormat<Text,Text> {
     
     public void close(TaskAttemptContext context) throws IOException {
       if (finalSync) {
-        out.hsync();
+        out.sync();
       }
       out.close();
     }

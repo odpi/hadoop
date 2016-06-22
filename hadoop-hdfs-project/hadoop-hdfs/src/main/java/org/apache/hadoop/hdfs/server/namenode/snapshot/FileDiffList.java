@@ -21,7 +21,9 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hdfs.protocol.Block;
-import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfo;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfoContiguous;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfoContiguousUnderConstruction;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockStoragePolicySuite;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants;
 import org.apache.hadoop.hdfs.server.namenode.INode;
 import org.apache.hadoop.hdfs.server.namenode.INode.BlocksMapUpdateInfo;
@@ -44,28 +46,26 @@ public class FileDiffList extends
 
   public void destroyAndCollectSnapshotBlocks(
       BlocksMapUpdateInfo collectedBlocks) {
-    for (FileDiff d : asList()) {
+    for(FileDiff d : asList())
       d.destroyAndCollectSnapshotBlocks(collectedBlocks);
-    }
   }
 
   public void saveSelf2Snapshot(int latestSnapshotId, INodeFile iNodeFile,
       INodeFileAttributes snapshotCopy, boolean withBlocks) {
     final FileDiff diff =
         super.saveSelf2Snapshot(latestSnapshotId, iNodeFile, snapshotCopy);
-    if (withBlocks) {  // Store blocks if this is the first update
+    if(withBlocks)  // Store blocks if this is the first update
       diff.setBlocks(iNodeFile.getBlocks());
-    }
   }
 
-  public BlockInfo[] findEarlierSnapshotBlocks(int snapshotId) {
+  public BlockInfoContiguous[] findEarlierSnapshotBlocks(int snapshotId) {
     assert snapshotId != Snapshot.NO_SNAPSHOT_ID : "Wrong snapshot id";
-    if (snapshotId == Snapshot.CURRENT_STATE_ID) {
+    if(snapshotId == Snapshot.CURRENT_STATE_ID) {
       return null;
     }
     List<FileDiff> diffs = this.asList();
     int i = Collections.binarySearch(diffs, snapshotId);
-    BlockInfo[] blocks = null;
+    BlockInfoContiguous[] blocks = null;
     for(i = i >= 0 ? i : -i-2; i >= 0; i--) {
       blocks = diffs.get(i).getBlocks();
       if(blocks != null) {
@@ -75,17 +75,17 @@ public class FileDiffList extends
     return blocks;
   }
 
-  public BlockInfo[] findLaterSnapshotBlocks(int snapshotId) {
+  public BlockInfoContiguous[] findLaterSnapshotBlocks(int snapshotId) {
     assert snapshotId != Snapshot.NO_SNAPSHOT_ID : "Wrong snapshot id";
-    if (snapshotId == Snapshot.CURRENT_STATE_ID) {
+    if(snapshotId == Snapshot.CURRENT_STATE_ID) {
       return null;
     }
     List<FileDiff> diffs = this.asList();
     int i = Collections.binarySearch(diffs, snapshotId);
-    BlockInfo[] blocks = null;
-    for (i = i >= 0 ? i+1 : -i-1; i < diffs.size(); i++) {
+    BlockInfoContiguous[] blocks = null;
+    for(i = i >= 0 ? i+1 : -i-1; i < diffs.size(); i++) {
       blocks = diffs.get(i).getBlocks();
-      if (blocks != null) {
+      if(blocks != null) {
         break;
       }
     }
@@ -97,26 +97,27 @@ public class FileDiffList extends
    * up to the file length of the latter.
    * Collect unused blocks of the removed snapshot.
    */
-  void combineAndCollectSnapshotBlocks(
-      INode.ReclaimContext reclaimContext, INodeFile file, FileDiff removed) {
-    BlockInfo[] removedBlocks = removed.getBlocks();
-    if (removedBlocks == null) {
+  void combineAndCollectSnapshotBlocks(BlockStoragePolicySuite bsps, INodeFile file,
+                                       FileDiff removed,
+                                       BlocksMapUpdateInfo collectedBlocks,
+                                       List<INode> removedINodes) {
+    BlockInfoContiguous[] removedBlocks = removed.getBlocks();
+    if(removedBlocks == null) {
       FileWithSnapshotFeature sf = file.getFileWithSnapshotFeature();
       assert sf != null : "FileWithSnapshotFeature is null";
       if(sf.isCurrentFileDeleted())
-        sf.collectBlocksAndClear(reclaimContext, file);
+        sf.collectBlocksAndClear(bsps, file, collectedBlocks, removedINodes);
       return;
     }
     int p = getPrior(removed.getSnapshotId(), true);
     FileDiff earlierDiff = p == Snapshot.NO_SNAPSHOT_ID ? null : getDiffById(p);
     // Copy blocks to the previous snapshot if not set already
-    if (earlierDiff != null) {
+    if(earlierDiff != null)
       earlierDiff.setBlocks(removedBlocks);
-    }
-    BlockInfo[] earlierBlocks =
-        (earlierDiff == null ? new BlockInfo[]{} : earlierDiff.getBlocks());
+    BlockInfoContiguous[] earlierBlocks =
+        (earlierDiff == null ? new BlockInfoContiguous[]{} : earlierDiff.getBlocks());
     // Find later snapshot (or file itself) with blocks
-    BlockInfo[] laterBlocks = findLaterSnapshotBlocks(removed.getSnapshotId());
+    BlockInfoContiguous[] laterBlocks = findLaterSnapshotBlocks(removed.getSnapshotId());
     laterBlocks = (laterBlocks==null) ? file.getBlocks() : laterBlocks;
     // Skip blocks, which belong to either the earlier or the later lists
     int i = 0;
@@ -128,17 +129,17 @@ public class FileDiffList extends
       break;
     }
     // Check if last block is part of truncate recovery
-    BlockInfo lastBlock = file.getLastBlock();
+    BlockInfoContiguous lastBlock = file.getLastBlock();
     Block dontRemoveBlock = null;
-    if (lastBlock != null && lastBlock.getBlockUCState().equals(
+    if(lastBlock != null && lastBlock.getBlockUCState().equals(
         HdfsServerConstants.BlockUCState.UNDER_RECOVERY)) {
-      dontRemoveBlock = lastBlock.getUnderConstructionFeature()
+      dontRemoveBlock = ((BlockInfoContiguousUnderConstruction) lastBlock)
           .getTruncateBlock();
     }
     // Collect the remaining blocks of the file, ignoring truncate block
-    for (;i < removedBlocks.length; i++) {
+    for(;i < removedBlocks.length; i++) {
       if(dontRemoveBlock == null || !removedBlocks[i].equals(dontRemoveBlock)) {
-        reclaimContext.collectedBlocks().addDeleteBlock(removedBlocks[i]);
+        collectedBlocks.addDeleteBlock(removedBlocks[i]);
       }
     }
   }

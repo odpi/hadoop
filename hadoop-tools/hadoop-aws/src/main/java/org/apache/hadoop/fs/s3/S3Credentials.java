@@ -18,7 +18,6 @@
 
 package org.apache.hadoop.fs.s3;
 
-import java.io.IOException;
 import java.net.URI;
 
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -40,10 +39,8 @@ public class S3Credentials {
   /**
    * @throws IllegalArgumentException if credentials for S3 cannot be
    * determined.
-   * @throws IOException if credential providers are misconfigured and we have
-   *                     to talk to them.
    */
-  public void initialize(URI uri, Configuration conf) throws IOException {
+  public void initialize(URI uri, Configuration conf) {
     if (uri.getHost() == null) {
       throw new IllegalArgumentException("Invalid hostname in URI " + uri);
     }
@@ -67,10 +64,7 @@ public class S3Credentials {
       accessKey = conf.getTrimmed(accessKeyProperty);
     }
     if (secretAccessKey == null) {
-      final char[] pass = conf.getPassword(secretAccessKeyProperty);
-      if (pass != null) {
-        secretAccessKey = (new String(pass)).trim();
-      }
+      secretAccessKey = conf.getTrimmed(secretAccessKeyProperty);
     }
     if (accessKey == null && secretAccessKey == null) {
       throw new IllegalArgumentException("AWS " +

@@ -38,10 +38,8 @@ public class RamDiskReplicaLruTracker extends RamDiskReplicaTracker {
   private class RamDiskReplicaLru extends RamDiskReplica {
     long lastUsedTime;
 
-    private RamDiskReplicaLru(String bpid, long blockId,
-                              FsVolumeImpl ramDiskVolume,
-                              long lockedBytesReserved) {
-      super(bpid, blockId, ramDiskVolume, lockedBytesReserved);
+    private RamDiskReplicaLru(String bpid, long blockId, FsVolumeImpl ramDiskVolume) {
+      super(bpid, blockId, ramDiskVolume);
     }
 
     @Override
@@ -72,23 +70,20 @@ public class RamDiskReplicaLruTracker extends RamDiskReplicaTracker {
   TreeMultimap<Long, RamDiskReplicaLru> replicasPersisted;
 
   RamDiskReplicaLruTracker() {
-    replicaMaps = new HashMap<>();
-    replicasNotPersisted = new LinkedList<>();
+    replicaMaps = new HashMap<String, Map<Long, RamDiskReplicaLru>>();
+    replicasNotPersisted = new LinkedList<RamDiskReplicaLru>();
     replicasPersisted = TreeMultimap.create();
   }
 
   @Override
   synchronized void addReplica(final String bpid, final long blockId,
-                               final FsVolumeImpl transientVolume,
-                               long lockedBytesReserved) {
+                               final FsVolumeImpl transientVolume) {
     Map<Long, RamDiskReplicaLru> map = replicaMaps.get(bpid);
     if (map == null) {
-      map = new HashMap<>();
+      map = new HashMap<Long, RamDiskReplicaLru>();
       replicaMaps.put(bpid, map);
     }
-    RamDiskReplicaLru ramDiskReplicaLru =
-        new RamDiskReplicaLru(bpid, blockId, transientVolume,
-                              lockedBytesReserved);
+    RamDiskReplicaLru ramDiskReplicaLru = new RamDiskReplicaLru(bpid, blockId, transientVolume);
     map.put(blockId, ramDiskReplicaLru);
     replicasNotPersisted.add(ramDiskReplicaLru);
   }

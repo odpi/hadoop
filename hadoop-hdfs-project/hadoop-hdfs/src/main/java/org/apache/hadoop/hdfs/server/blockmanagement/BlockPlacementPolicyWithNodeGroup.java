@@ -20,7 +20,9 @@ package org.apache.hadoop.hdfs.server.blockmanagement;
 import java.util.*;
 
 import org.apache.hadoop.conf.Configuration;
+
 import org.apache.hadoop.fs.StorageType;
+import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.net.NetworkTopology;
 import org.apache.hadoop.net.NetworkTopologyWithNodeGroup;
@@ -31,7 +33,7 @@ import org.apache.hadoop.net.NodeBase;
  * for placing block replicas on environment with node-group layer.
  * The replica placement strategy is adjusted to:
  * If the writer is on a datanode, the 1st replica is placed on the local 
- *     node(or local node-group or on local rack), otherwise a random datanode.
+ *     node (or local node-group), otherwise a random datanode. 
  * The 2nd replica is placed on a datanode that is on a different rack with 1st
  *     replica node. 
  * The 3rd replica is placed on a datanode which is on a different node-group
@@ -47,7 +49,6 @@ public class BlockPlacementPolicyWithNodeGroup extends BlockPlacementPolicyDefau
   protected BlockPlacementPolicyWithNodeGroup() {
   }
 
-  @Override
   public void initialize(Configuration conf,  FSClusterStats stats,
           NetworkTopology clusterMap, 
           Host2NodesMap host2datanodeMap) {
@@ -65,11 +66,34 @@ public class BlockPlacementPolicyWithNodeGroup extends BlockPlacementPolicyDefau
       List<DatanodeStorageInfo> results, boolean avoidStaleNodes,
       EnumMap<StorageType, Integer> storageTypes, boolean fallbackToLocalRack)
       throws NotEnoughReplicasException {
-    DatanodeStorageInfo localStorage = chooseLocalStorage(localMachine,
-        excludedNodes, blocksize, maxNodesPerRack, results,
-        avoidStaleNodes, storageTypes);
-    if (localStorage != null) {
-      return localStorage;
+    // if no local machine, randomly choose one node
+    if (localMachine == null)
+      return chooseRandom(NodeBase.ROOT, excludedNodes, 
+          blocksize, maxNodesPerRack, results, avoidStaleNodes, storageTypes);
+
+    // otherwise try local machine first
+    if (localMachine instanceof DatanodeDescriptor) {
+      DatanodeDescriptor localDataNode = (DatanodeDescriptor)localMachine;
+      if (excludedNodes.add(localMachine)) { // was not in the excluded list
+        for (Iterator<Map.Entry<StorageType, Integer>> iter = storageTypes
+            .entrySet().iterator(); iter.hasNext(); ) {
+          Map.Entry<StorageType, Integer> entry = iter.next();
+          for (DatanodeStorageInfo localStorage : DFSUtil.shuffle(
+              localDataNode.getStorageInfos())) {
+            StorageType type = entry.getKey();
+            if (addIfIsGoodTarget(localStorage, excludedNodes, blocksize,
+                maxNodesPerRack, false, results, avoidStaleNodes, type) >= 0) {
+              int num = entry.getValue();
+              if (num == 1) {
+                iter.remove();
+              } else {
+                entry.setValue(num - 1);
+              }
+              return localStorage;
+            }
+          }
+        }
+      }
     }
 
     // try a node on local node group
@@ -140,6 +164,9 @@ public class BlockPlacementPolicyWithNodeGroup extends BlockPlacementPolicyDefau
     }
   }
 
+  /**
+   * {@inheritDoc}
+   */
   @Override
   protected void chooseRemoteRack(int numOfReplicas,
       DatanodeDescriptor localMachine, Set<Node> excludedNodes,
@@ -165,7 +192,7 @@ public class BlockPlacementPolicyWithNodeGroup extends BlockPlacementPolicyDefau
   /* choose one node from the nodegroup that <i>localMachine</i> is on.
    * if no such node is available, choose one node from the nodegroup where
    * a second replica is on.
-   * if still no such node is available, return null.
+   * if still no such node is available, choose a random node in the cluster.
    * @return the chosen node
    */
   private DatanodeStorageInfo chooseLocalNodeGroup(
@@ -195,12 +222,14 @@ public class BlockPlacementPolicyWithNodeGroup extends BlockPlacementPolicyDefau
               excludedNodes, blocksize, maxNodesPerRack, results,
               avoidStaleNodes, storageTypes);
         } catch(NotEnoughReplicasException e2) {
-          //otherwise return null
-          return null;
+          //otherwise randomly choose one from the network
+          return chooseRandom(NodeBase.ROOT, excludedNodes, blocksize,
+              maxNodesPerRack, results, avoidStaleNodes, storageTypes);
         }
       } else {
-        //otherwise return null
-        return null;
+        //otherwise randomly choose one from the network
+        return chooseRandom(NodeBase.ROOT, excludedNodes, blocksize,
+            maxNodesPerRack, results, avoidStaleNodes, storageTypes);
       }
     }
   }

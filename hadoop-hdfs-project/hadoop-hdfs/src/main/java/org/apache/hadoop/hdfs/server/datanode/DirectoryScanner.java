@@ -31,7 +31,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -42,8 +41,9 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.protocol.Block;
-import org.apache.hadoop.hdfs.protocol.HdfsConstants;
+import org.apache.hadoop.hdfs.server.common.GenerationStamp;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsDatasetSpi;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeSpi;
 import org.apache.hadoop.util.Daemon;
@@ -305,7 +305,7 @@ public class DirectoryScanner implements Runnable {
     public long getGenStamp() {
       return metaSuffix != null ? Block.getGenerationStamp(
           getMetaFile().getName()) : 
-            HdfsConstants.GRANDFATHER_GENERATION_STAMP;
+            GenerationStamp.GRANDFATHER_GENERATION_STAMP;
     }
   }
 
@@ -327,8 +327,7 @@ public class DirectoryScanner implements Runnable {
 
   void start() {
     shouldRun = true;
-    long offset = ThreadLocalRandom.current().nextInt(
-        (int) (scanPeriodMsecs/1000L)) * 1000L; //msec
+    long offset = DFSUtil.getRandom().nextInt((int) (scanPeriodMsecs/1000L)) * 1000L; //msec
     long firstScanTime = Time.now() + offset;
     LOG.info("Periodic Directory Tree Verification scan starting at " 
         + firstScanTime + " with interval " + scanPeriodMsecs);
@@ -528,48 +527,59 @@ public class DirectoryScanner implements Runnable {
     diffRecord.add(new ScanInfo(blockId, null, null, vol));
   }
 
+  /** Is the given volume still valid in the dataset? */
+  private static boolean isValid(final FsDatasetSpi<?> dataset,
+      final FsVolumeSpi volume) {
+    for (FsVolumeSpi vol : dataset.getVolumes()) {
+      if (vol == volume) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /** Get lists of blocks on the disk sorted by blockId, per blockpool */
   private Map<String, ScanInfo[]> getDiskReport() {
-    ScanInfoPerBlockPool list = new ScanInfoPerBlockPool();
-    ScanInfoPerBlockPool[] dirReports = null;
     // First get list of data directories
-    try (FsDatasetSpi.FsVolumeReferences volumes =
-        dataset.getFsVolumeReferences()) {
+    final List<? extends FsVolumeSpi> volumes = dataset.getVolumes();
 
-      // Use an array since the threads may return out of order and
-      // compilersInProgress#keySet may return out of order as well.
-      dirReports = new ScanInfoPerBlockPool[volumes.size()];
+    // Use an array since the threads may return out of order and
+    // compilersInProgress#keySet may return out of order as well.
+    ScanInfoPerBlockPool[] dirReports = new ScanInfoPerBlockPool[volumes.size()];
 
-      Map<Integer, Future<ScanInfoPerBlockPool>> compilersInProgress =
-          new HashMap<Integer, Future<ScanInfoPerBlockPool>>();
+    Map<Integer, Future<ScanInfoPerBlockPool>> compilersInProgress =
+      new HashMap<Integer, Future<ScanInfoPerBlockPool>>();
 
-      for (int i = 0; i < volumes.size(); i++) {
+    for (int i = 0; i < volumes.size(); i++) {
+      if (isValid(dataset, volumes.get(i))) {
         ReportCompiler reportCompiler =
-            new ReportCompiler(datanode, volumes.get(i));
-        Future<ScanInfoPerBlockPool> result =
-            reportCompileThreadPool.submit(reportCompiler);
+          new ReportCompiler(datanode,volumes.get(i));
+        Future<ScanInfoPerBlockPool> result = 
+          reportCompileThreadPool.submit(reportCompiler);
         compilersInProgress.put(i, result);
       }
+    }
+    
+    for (Entry<Integer, Future<ScanInfoPerBlockPool>> report :
+        compilersInProgress.entrySet()) {
+      try {
+        dirReports[report.getKey()] = report.getValue().get();
+      } catch (Exception ex) {
+        LOG.error("Error compiling report", ex);
+        // Propagate ex to DataBlockScanner to deal with
+        throw new RuntimeException(ex);
+      }
+    }
 
-      for (Entry<Integer, Future<ScanInfoPerBlockPool>> report :
-          compilersInProgress.entrySet()) {
-        try {
-          dirReports[report.getKey()] = report.getValue().get();
-        } catch (Exception ex) {
-          LOG.error("Error compiling report", ex);
-          // Propagate ex to DataBlockScanner to deal with
-          throw new RuntimeException(ex);
-        }
-      }
-    } catch (IOException e) {
-      LOG.error("Unexpected IOException by closing FsVolumeReference", e);
-    }
-    if (dirReports != null) {
-      // Compile consolidated report for all the volumes
-      for (ScanInfoPerBlockPool report : dirReports) {
-        list.addAll(report);
+    // Compile consolidated report for all the volumes
+    ScanInfoPerBlockPool list = new ScanInfoPerBlockPool();
+    for (int i = 0; i < volumes.size(); i++) {
+      if (isValid(dataset, volumes.get(i))) {
+        // volume is still valid
+        list.addAll(dirReports[i]);
       }
     }
+
     return list.toSortedArrays();
   }
 

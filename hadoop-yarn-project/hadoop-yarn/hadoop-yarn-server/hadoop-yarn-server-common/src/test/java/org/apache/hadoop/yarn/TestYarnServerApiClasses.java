@@ -19,39 +19,33 @@
 package org.apache.hadoop.yarn;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
 
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
 import org.apache.hadoop.yarn.api.records.NodeId;
-import org.apache.hadoop.yarn.api.records.NodeLabel;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.impl.pb.ApplicationAttemptIdPBImpl;
 import org.apache.hadoop.yarn.api.records.impl.pb.ApplicationIdPBImpl;
 import org.apache.hadoop.yarn.api.records.impl.pb.ContainerIdPBImpl;
 import org.apache.hadoop.yarn.api.records.impl.pb.SerializedExceptionPBImpl;
 import org.apache.hadoop.yarn.factory.providers.RecordFactoryProvider;
-import org.apache.hadoop.yarn.server.api.protocolrecords.RegisterNodeManagerRequest;
 import org.apache.hadoop.yarn.server.api.protocolrecords.impl.pb.NodeHeartbeatRequestPBImpl;
 import org.apache.hadoop.yarn.server.api.protocolrecords.impl.pb.NodeHeartbeatResponsePBImpl;
 import org.apache.hadoop.yarn.server.api.protocolrecords.impl.pb.RegisterNodeManagerRequestPBImpl;
 import org.apache.hadoop.yarn.server.api.protocolrecords.impl.pb.RegisterNodeManagerResponsePBImpl;
-import org.apache.hadoop.yarn.server.api.protocolrecords.impl.pb.UnRegisterNodeManagerRequestPBImpl;
 import org.apache.hadoop.yarn.server.api.records.MasterKey;
 import org.apache.hadoop.yarn.server.api.records.NodeAction;
 import org.apache.hadoop.yarn.server.api.records.NodeHealthStatus;
 import org.apache.hadoop.yarn.server.api.records.NodeStatus;
 import org.apache.hadoop.yarn.server.api.records.impl.pb.MasterKeyPBImpl;
 import org.apache.hadoop.yarn.server.api.records.impl.pb.NodeStatusPBImpl;
-import org.junit.Assert;
 import org.junit.Test;
 
 /**
@@ -83,17 +77,7 @@ public class TestYarnServerApiClasses {
     assertEquals(1, copy.getNMTokenMasterKey().getKeyId());
     assertEquals(NodeAction.NORMAL, copy.getNodeAction());
     assertEquals("testDiagnosticMessage", copy.getDiagnosticsMessage());
-    assertFalse(copy.getAreNodeLabelsAcceptedByRM());
-  }
 
-  @Test
-  public void testRegisterNodeManagerResponsePBImplWithRMAcceptLbls() {
-    RegisterNodeManagerResponsePBImpl original =
-        new RegisterNodeManagerResponsePBImpl();
-    original.setAreNodeLabelsAcceptedByRM(true);
-    RegisterNodeManagerResponsePBImpl copy =
-        new RegisterNodeManagerResponsePBImpl(original.getProto());
-    assertTrue(copy.getAreNodeLabelsAcceptedByRM());
   }
 
   /**
@@ -105,32 +89,11 @@ public class TestYarnServerApiClasses {
     original.setLastKnownContainerTokenMasterKey(getMasterKey());
     original.setLastKnownNMTokenMasterKey(getMasterKey());
     original.setNodeStatus(getNodeStatus());
-    original.setNodeLabels(getValidNodeLabels());
     NodeHeartbeatRequestPBImpl copy = new NodeHeartbeatRequestPBImpl(
         original.getProto());
     assertEquals(1, copy.getLastKnownContainerTokenMasterKey().getKeyId());
     assertEquals(1, copy.getLastKnownNMTokenMasterKey().getKeyId());
     assertEquals("localhost", copy.getNodeStatus().getNodeId().getHost());
-    // check labels are coming with valid values
-    Assert.assertTrue(original.getNodeLabels()
-        .containsAll(copy.getNodeLabels()));
-    // check for empty labels
-    original.setNodeLabels(new HashSet<NodeLabel> ());
-    copy = new NodeHeartbeatRequestPBImpl(
-        original.getProto());
-    Assert.assertNotNull(copy.getNodeLabels());
-    Assert.assertEquals(0, copy.getNodeLabels().size());
-  }
-
-  /**
-   * Test NodeHeartbeatRequestPBImpl.
-   */
-  @Test
-  public void testNodeHeartbeatRequestPBImplWithNullLabels() {
-    NodeHeartbeatRequestPBImpl original = new NodeHeartbeatRequestPBImpl();
-    NodeHeartbeatRequestPBImpl copy =
-        new NodeHeartbeatRequestPBImpl(original.getProto());
-    Assert.assertNull(copy.getNodeLabels());
   }
 
   /**
@@ -156,16 +119,6 @@ public class TestYarnServerApiClasses {
     assertEquals(1, copy.getContainerTokenMasterKey().getKeyId());
     assertEquals(1, copy.getNMTokenMasterKey().getKeyId());
     assertEquals("testDiagnosticMessage", copy.getDiagnosticsMessage());
-    assertEquals(false, copy.getAreNodeLabelsAcceptedByRM());
-   }
-
-  @Test
-  public void testNodeHeartbeatResponsePBImplWithRMAcceptLbls() {
-    NodeHeartbeatResponsePBImpl original = new NodeHeartbeatResponsePBImpl();
-    original.setAreNodeLabelsAcceptedByRM(true);
-    NodeHeartbeatResponsePBImpl copy =
-        new NodeHeartbeatResponsePBImpl(original.getProto());
-    assertTrue(copy.getAreNodeLabelsAcceptedByRM());
   }
 
   /**
@@ -253,66 +206,6 @@ public class TestYarnServerApiClasses {
     assertEquals(9090, copy.getNodeId().getPort());
     assertEquals(1, copy.getResponseId());
 
-  }
-
-  @Test
-  public void testRegisterNodeManagerRequestWithNullLabels() {
-    RegisterNodeManagerRequest request =
-        RegisterNodeManagerRequest.newInstance(
-            NodeId.newInstance("host", 1234), 1234, Resource.newInstance(0, 0),
-            "version", null, null);
-
-    // serialze to proto, and get request from proto
-    RegisterNodeManagerRequest request1 =
-        new RegisterNodeManagerRequestPBImpl(
-            ((RegisterNodeManagerRequestPBImpl) request).getProto());
-
-    // check labels are coming with no values
-    Assert.assertNull(request1.getNodeLabels());
-  }
-
-  @Test
-  public void testRegisterNodeManagerRequestWithValidLabels() {
-    HashSet<NodeLabel> nodeLabels = getValidNodeLabels();
-    RegisterNodeManagerRequest request =
-        RegisterNodeManagerRequest.newInstance(
-            NodeId.newInstance("host", 1234), 1234, Resource.newInstance(0, 0),
-            "version", null, null, nodeLabels);
-
-    // serialze to proto, and get request from proto
-    RegisterNodeManagerRequest copy =
-        new RegisterNodeManagerRequestPBImpl(
-            ((RegisterNodeManagerRequestPBImpl) request).getProto());
-
-    // check labels are coming with valid values
-    Assert.assertEquals(true, nodeLabels.containsAll(copy.getNodeLabels()));
-
-    // check for empty labels
-    request.setNodeLabels(new HashSet<NodeLabel> ());
-    copy = new RegisterNodeManagerRequestPBImpl(
-        ((RegisterNodeManagerRequestPBImpl) request).getProto());
-    Assert.assertNotNull(copy.getNodeLabels());
-    Assert.assertEquals(0, copy.getNodeLabels().size());
-  }
-
-  @Test
-  public void testUnRegisterNodeManagerRequestPBImpl() throws Exception {
-    UnRegisterNodeManagerRequestPBImpl request = new UnRegisterNodeManagerRequestPBImpl();
-    NodeId nodeId = NodeId.newInstance("host", 1234);
-    request.setNodeId(nodeId);
-
-    UnRegisterNodeManagerRequestPBImpl copy = new UnRegisterNodeManagerRequestPBImpl(
-        request.getProto());
-    Assert.assertEquals(nodeId, copy.getNodeId());
-  }
-
-  private HashSet<NodeLabel> getValidNodeLabels() {
-    HashSet<NodeLabel> nodeLabels = new HashSet<NodeLabel>();
-    nodeLabels.add(NodeLabel.newInstance("java"));
-    nodeLabels.add(NodeLabel.newInstance("windows"));
-    nodeLabels.add(NodeLabel.newInstance("gpu"));
-    nodeLabels.add(NodeLabel.newInstance("x86"));
-    return nodeLabels;
   }
 
   private ContainerStatus getContainerStatus(int applicationId,

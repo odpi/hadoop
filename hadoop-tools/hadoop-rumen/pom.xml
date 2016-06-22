@@ -20,12 +20,12 @@
   <parent>
     <groupId>org.apache.hadoop</groupId>
     <artifactId>hadoop-project</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>2.7.1-arenadata</version>
     <relativePath>../../hadoop-project</relativePath>
   </parent>
   <groupId>org.apache.hadoop</groupId>
   <artifactId>hadoop-rumen</artifactId>
-  <version>3.0.0-SNAPSHOT</version>
+  <version>2.7.1-arenadata</version>
   <description>Apache Hadoop Rumen</description>
   <name>Apache Hadoop Rumen</name>
   <packaging>jar</packaging>
@@ -135,4 +135,3 @@
     </plugins>
   </build>
 </project>
-

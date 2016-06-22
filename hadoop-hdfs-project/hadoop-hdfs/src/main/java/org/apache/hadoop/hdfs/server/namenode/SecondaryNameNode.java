@@ -108,7 +108,6 @@ public class SecondaryNameNode implements Runnable,
 
   private final long starttime = Time.now();
   private volatile long lastCheckpointTime = 0;
-  private volatile long lastCheckpointWallclockTime = 0;
 
   private URL fsName;
   private CheckpointStorage checkpointImage;
@@ -135,9 +134,8 @@ public class SecondaryNameNode implements Runnable,
       + "\nName Node Address      : " + nameNodeAddr
       + "\nStart Time             : " + new Date(starttime)
       + "\nLast Checkpoint        : " + (lastCheckpointTime == 0? "--":
-        new Date(lastCheckpointWallclockTime))
-      + " (" + ((Time.monotonicNow() - lastCheckpointTime) / 1000)
-      + " seconds ago)"
+				       ((Time.monotonicNow() - lastCheckpointTime) / 1000))
+	                            + " seconds ago"
       + "\nCheckpoint Period      : " + checkpointConf.getPeriod() + " seconds"
       + "\nCheckpoint Transactions: " + checkpointConf.getTxnCount()
       + "\nCheckpoint Dirs        : " + checkpointDirs
@@ -390,14 +388,12 @@ public class SecondaryNameNode implements Runnable,
         if(UserGroupInformation.isSecurityEnabled())
           UserGroupInformation.getCurrentUser().checkTGTAndReloginFromKeytab();
         
-        final long monotonicNow = Time.monotonicNow();
-        final long now = Time.now();
+        final long now = Time.monotonicNow();
 
         if (shouldCheckpointBasedOnCount() ||
-            monotonicNow >= lastCheckpointTime + 1000 * checkpointConf.getPeriod()) {
+            now >= lastCheckpointTime + 1000 * checkpointConf.getPeriod()) {
           doCheckpoint();
-          lastCheckpointTime = monotonicNow;
-          lastCheckpointWallclockTime = now;
+          lastCheckpointTime = now;
         }
       } catch (IOException e) {
         LOG.error("Exception in doCheckpoint", e);
@@ -667,28 +663,29 @@ public class SecondaryNameNode implements Runnable,
       opts.usage();
       System.exit(0);
     }
-
+    
+    StringUtils.startupShutdownMessage(SecondaryNameNode.class, argv, LOG);
+    Configuration tconf = new HdfsConfiguration();
+    SecondaryNameNode secondary = null;
     try {
-      StringUtils.startupShutdownMessage(SecondaryNameNode.class, argv, LOG);
-      Configuration tconf = new HdfsConfiguration();
-      SecondaryNameNode secondary = null;
       secondary = new SecondaryNameNode(tconf, opts);
-
-      if (opts != null && opts.getCommand() != null) {
-        int ret = secondary.processStartupCommand(opts);
-        terminate(ret);
-      }
-
-      if (secondary != null) {
-        secondary.startCheckpointThread();
-        secondary.join();
-      }
-    } catch (Throwable e) {
-      LOG.fatal("Failed to start secondary namenode", e);
+    } catch (IOException ioe) {
+      LOG.fatal("Failed to start secondary namenode", ioe);
       terminate(1);
     }
-  }
 
+    if (opts != null && opts.getCommand() != null) {
+      int ret = secondary.processStartupCommand(opts);
+      terminate(ret);
+    }
+
+    if (secondary != null) {
+      secondary.startCheckpointThread();
+      secondary.join();
+    }
+  }
+  
+  
   public void startCheckpointThread() {
     Preconditions.checkState(checkpointThread == null,
         "Should not already have a thread");
@@ -698,31 +695,22 @@ public class SecondaryNameNode implements Runnable,
     checkpointThread.start();
   }
 
-  @Override // SecondaryNameNodeInfoMXBean
+  @Override // SecondaryNameNodeInfoMXXBean
   public String getHostAndPort() {
     return NetUtils.getHostPortString(nameNodeAddr);
   }
 
-  @Override // SecondaryNameNodeInfoMXBean
+  @Override // SecondaryNameNodeInfoMXXBean
   public long getStartTime() {
     return starttime;
   }
 
-  @Override // SecondaryNameNodeInfoMXBean
+  @Override // SecondaryNameNodeInfoMXXBean
   public long getLastCheckpointTime() {
-    return lastCheckpointWallclockTime;
+    return lastCheckpointTime;
   }
 
-  @Override // SecondaryNameNodeInfoMXBean
-  public long getLastCheckpointDeltaMs() {
-    if (lastCheckpointTime == 0) {
-      return -1;
-    } else {
-      return (Time.monotonicNow() - lastCheckpointTime);
-    }
-  }
-
-  @Override // SecondaryNameNodeInfoMXBean
+  @Override // SecondaryNameNodeInfoMXXBean
   public String[] getCheckpointDirectories() {
     ArrayList<String> r = Lists.newArrayListWithCapacity(checkpointDirs.size());
     for (URI d : checkpointDirs) {
@@ -731,7 +719,7 @@ public class SecondaryNameNode implements Runnable,
     return r.toArray(new String[r.size()]);
   }
 
-  @Override // SecondaryNameNodeInfoMXBean
+  @Override // SecondaryNameNodeInfoMXXBean
   public String[] getCheckpointEditlogDirectories() {
     ArrayList<String> r = Lists.newArrayListWithCapacity(checkpointEditsDirs.size());
     for (URI d : checkpointEditsDirs) {
@@ -907,7 +895,7 @@ public class SecondaryNameNode implements Runnable,
             throw new RuntimeException(ioe);
           }
           FileJournalManager.addStreamsToCollectionFromFiles(editFiles, streams,
-              fromTxId, Long.MAX_VALUE, inProgressOk);
+              fromTxId, inProgressOk);
         }
       }
       
@@ -1084,8 +1072,6 @@ public class SecondaryNameNode implements Runnable,
     Checkpointer.rollForwardByApplyingLogs(manifest, dstImage, dstNamesystem);
     // The following has the side effect of purging old fsimages/edit logs.
     dstImage.saveFSImageInAllDirs(dstNamesystem, dstImage.getLastAppliedTxId());
-    if (!dstNamesystem.isRollingUpgrade()) {
-      dstStorage.writeAll();
-    }
+    dstStorage.writeAll();
   }
 }

@@ -41,7 +41,7 @@ public class CryptoFSDataOutputStream extends FSDataOutputStream {
   }
   
   @Override
-  public long getPos() {
+  public long getPos() throws IOException {
     return fsOut.getPos();
   }
 }

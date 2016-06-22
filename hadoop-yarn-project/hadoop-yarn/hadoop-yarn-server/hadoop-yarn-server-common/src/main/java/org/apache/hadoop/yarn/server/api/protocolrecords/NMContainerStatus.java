@@ -23,7 +23,6 @@ import org.apache.hadoop.yarn.api.records.ContainerState;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.Resource;
-import org.apache.hadoop.yarn.nodelabels.CommonNodeLabelsManager;
 import org.apache.hadoop.yarn.util.Records;
 
 /**
@@ -32,21 +31,11 @@ import org.apache.hadoop.yarn.util.Records;
  * inside YARN and by end-users.
  */
 public abstract class NMContainerStatus {
-  
-  // Used by tests only
-  public static NMContainerStatus newInstance(ContainerId containerId,
-      ContainerState containerState, Resource allocatedResource,
-      String diagnostics, int containerExitStatus, Priority priority,
-      long creationTime) {
-    return newInstance(containerId, containerState, allocatedResource,
-        diagnostics, containerExitStatus, priority, creationTime,
-        CommonNodeLabelsManager.NO_LABEL);
-  }
 
   public static NMContainerStatus newInstance(ContainerId containerId,
       ContainerState containerState, Resource allocatedResource,
       String diagnostics, int containerExitStatus, Priority priority,
-      long creationTime, String nodeLabelExpression) {
+      long creationTime) {
     NMContainerStatus status =
         Records.newRecord(NMContainerStatus.class);
     status.setContainerId(containerId);
@@ -56,7 +45,6 @@ public abstract class NMContainerStatus {
     status.setContainerExitStatus(containerExitStatus);
     status.setPriority(priority);
     status.setCreationTime(creationTime);
-    status.setNodeLabelExpression(nodeLabelExpression);
     return status;
   }
 
@@ -117,12 +105,4 @@ public abstract class NMContainerStatus {
   public abstract long getCreationTime();
 
   public abstract void setCreationTime(long creationTime);
-  
-  /**
-   * Get the node-label-expression in the original ResourceRequest
-   */
-  public abstract String getNodeLabelExpression();
-
-  public abstract void setNodeLabelExpression(
-      String nodeLabelExpression);
 }

@@ -29,7 +29,6 @@ import java.util.Comparator;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.permission.AclEntry;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.CacheDirectiveInfoExpirationProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.CacheDirectiveInfoProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.CachePoolInfoProto;
@@ -42,7 +41,6 @@ import org.apache.hadoop.hdfs.server.namenode.FsImageProto.FileSummary;
 import org.apache.hadoop.hdfs.server.namenode.FsImageProto.FilesUnderConstructionSection.FileUnderConstructionEntry;
 import org.apache.hadoop.hdfs.server.namenode.FsImageProto.INodeDirectorySection;
 import org.apache.hadoop.hdfs.server.namenode.FsImageProto.INodeSection;
-import org.apache.hadoop.hdfs.server.namenode.FsImageProto.INodeSection.AclFeatureProto;
 import org.apache.hadoop.hdfs.server.namenode.FsImageProto.INodeSection.INodeDirectory;
 import org.apache.hadoop.hdfs.server.namenode.FsImageProto.INodeSection.INodeSymlink;
 import org.apache.hadoop.hdfs.server.namenode.FsImageProto.INodeReferenceSection;
@@ -53,7 +51,7 @@ import org.apache.hadoop.hdfs.server.namenode.FsImageProto.SnapshotSection;
 import org.apache.hadoop.hdfs.server.namenode.FsImageProto.StringTableSection;
 import org.apache.hadoop.hdfs.util.XMLUtils;
 import org.apache.hadoop.util.LimitInputStream;
-import com.google.common.collect.ImmutableList;
+
 import com.google.common.collect.Lists;
 
 /**
@@ -190,7 +188,7 @@ public final class PBImageXmlWriter {
   private void dumpINodeDirectory(INodeDirectory d) {
     o("mtime", d.getModificationTime()).o("permission",
         dumpPermission(d.getPermission()));
-    dumpAcls(d.getAcl());
+
     if (d.hasDsQuota() && d.hasNsQuota()) {
       o("nsquota", d.getNsQuota()).o("dsquota", d.getDsQuota());
     }
@@ -244,7 +242,7 @@ public final class PBImageXmlWriter {
         .o("atime", f.getAccessTime())
         .o("perferredBlockSize", f.getPreferredBlockSize())
         .o("permission", dumpPermission(f.getPermission()));
-    dumpAcls(f.getAcl());
+
     if (f.getBlocksCount() > 0) {
       out.print("<blocks>");
       for (BlockProto b : f.getBlocksList()) {
@@ -262,18 +260,6 @@ public final class PBImageXmlWriter {
       o("clientName", u.getClientName()).o("clientMachine",
           u.getClientMachine());
       out.print("</file-under-construction>\n");
-    }
-  }
-
-  private void dumpAcls(AclFeatureProto aclFeatureProto) {
-    ImmutableList<AclEntry> aclEntryList = FSImageFormatPBINode.Loader
-        .loadAclEntries(aclFeatureProto, stringTable);
-    if (aclEntryList.size() > 0) {
-      out.print("<acls>");
-      for (AclEntry aclEntry : aclEntryList) {
-        o("acl", aclEntry.toString());
-      }
-      out.print("</acls>");
     }
   }
 

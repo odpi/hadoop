@@ -37,7 +37,7 @@ import org.apache.hadoop.net.NetUtils;
 /**
  * OfflineImageViewerPB to dump the contents of an Hadoop image file to XML or
  * the console. Main entry point into utility, either via the command line or
- * programmatically.
+ * programatically.
  */
 @InterfaceAudience.Private
 public class OfflineImageViewerPB {
@@ -115,7 +115,7 @@ public class OfflineImageViewerPB {
    * Entry point to command-line-driven operation. User may specify options and
    * start fsimage viewer from the command line. Program will process image file
    * and exit cleanly or, if an error is encountered, inform user and exit.
-   * 
+   *
    * @param args
    *          Command line options
    * @throws IOException

@@ -50,6 +50,19 @@ public class TestModTime {
   Random myrand = new Random();
   Path hostsFile;
   Path excludeFile;
+
+  private void writeFile(FileSystem fileSys, Path name, int repl)
+    throws IOException {
+    // create and write a file that contains three blocks of data
+    FSDataOutputStream stm = fileSys.create(name, true, fileSys.getConf()
+        .getInt(CommonConfigurationKeys.IO_FILE_BUFFER_SIZE_KEY, 4096),
+        (short) repl, blockSize);
+    byte[] buffer = new byte[fileSize];
+    Random rand = new Random(seed);
+    rand.nextBytes(buffer);
+    stm.write(buffer);
+    stm.close();
+  }
   
   private void cleanupFile(FileSystem fileSys, Path name) throws IOException {
     assertTrue(fileSys.exists(name));
@@ -92,8 +105,7 @@ public class TestModTime {
      System.out.println("Creating testdir1 and testdir1/test1.dat.");
      Path dir1 = new Path("testdir1");
      Path file1 = new Path(dir1, "test1.dat");
-     DFSTestUtil.createFile(fileSys, file1, fileSize, fileSize, blockSize,
-         (short) replicas, seed);
+     writeFile(fileSys, file1, replicas);
      FileStatus stat = fileSys.getFileStatus(file1);
      long mtime1 = stat.getModificationTime();
      assertTrue(mtime1 != 0);
@@ -108,8 +120,7 @@ public class TestModTime {
      //
      System.out.println("Creating testdir1/test2.dat.");
      Path file2 = new Path(dir1, "test2.dat");
-     DFSTestUtil.createFile(fileSys, file2, fileSize, fileSize, blockSize,
-         (short) replicas, seed);
+     writeFile(fileSys, file2, replicas);
      stat = fileSys.getFileStatus(file2);
 
      //

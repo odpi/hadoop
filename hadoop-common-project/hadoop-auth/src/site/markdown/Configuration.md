@@ -73,13 +73,12 @@ To use Kerberos SPNEGO as the authentication mechanism, the authentication filte
 
 **Example**:
 
-```xml
     <web-app version="2.5" xmlns="http://java.sun.com/xml/ns/javaee">
         ...
 
         <filter>
             <filter-name>kerberosFilter</filter-name>
-            <filter-class>org.apache.hadoop.security.authentication.server.AuthenticationFilter</filter-class>
+            <filter-class>org.apache.hadoop.security.auth.server.AuthenticationFilter</filter-class>
             <init-param>
                 <param-name>type</param-name>
                 <param-value>kerberos</param-value>
@@ -113,7 +112,6 @@ To use Kerberos SPNEGO as the authentication mechanism, the authentication filte
 
         ...
     </web-app>
-```
 
 ### Pseudo/Simple Configuration
 
@@ -127,13 +125,12 @@ To use Pseudo/Simple as the authentication mechanism (trusting the value of the 
 
 **Example**:
 
-```xml
     <web-app version="2.5" xmlns="http://java.sun.com/xml/ns/javaee">
         ...
 
         <filter>
             <filter-name>simpleFilter</filter-name>
-            <filter-class>org.apache.hadoop.security.authentication.server.AuthenticationFilter</filter-class>
+            <filter-class>org.apache.hadoop.security.auth.server.AuthenticationFilter</filter-class>
             <init-param>
                 <param-name>type</param-name>
                 <param-value>simple</param-value>
@@ -163,7 +160,6 @@ To use Pseudo/Simple as the authentication mechanism (trusting the value of the 
 
         ...
     </web-app>
-```
 
 ### AltKerberos Configuration
 
@@ -179,13 +175,12 @@ The AltKerberos authentication mechanism is a partially implemented derivative o
 
 **Example**:
 
-```xml
     <web-app version="2.5" xmlns="http://java.sun.com/xml/ns/javaee">
         ...
 
         <filter>
             <filter-name>kerberosFilter</filter-name>
-            <filter-class>org.apache.hadoop.security.authentication.server.AuthenticationFilter</filter-class>
+            <filter-class>org.apache.hadoop.security.auth.server.AuthenticationFilter</filter-class>
             <init-param>
                 <param-name>type</param-name>
                 <param-value>org.my.subclass.of.AltKerberosAuthenticationHandler</param-value>
@@ -223,7 +218,6 @@ The AltKerberos authentication mechanism is a partially implemented derivative o
 
         ...
     </web-app>
-```
 
 ### SignerSecretProvider Configuration
 
@@ -268,7 +262,6 @@ The following configuration properties are specific to the `zookeeper` implement
 
 **Example**:
 
-```xml
     <web-app version="2.5" xmlns="http://java.sun.com/xml/ns/javaee">
         ...
 
@@ -286,11 +279,9 @@ The following configuration properties are specific to the `zookeeper` implement
 
         ...
     </web-app>
-```
 
 **Example**:
 
-```xml
     <web-app version="2.5" xmlns="http://java.sun.com/xml/ns/javaee">
         ...
 
@@ -308,11 +299,9 @@ The following configuration properties are specific to the `zookeeper` implement
 
         ...
     </web-app>
-```
 
 **Example**:
 
-```xml
     <web-app version="2.5" xmlns="http://java.sun.com/xml/ns/javaee">
         ...
 
@@ -350,4 +339,3 @@ The following configuration properties are specific to the `zookeeper` implement
 
         ...
     </web-app>
-```

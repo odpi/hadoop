@@ -36,8 +36,8 @@ import org.apache.hadoop.hdfs.server.protocol.NamespaceInfo;
  */
 @InterfaceAudience.Private
 @InterfaceStability.Evolving
-public interface JournalManager extends Closeable, FormatConfirmable,
-    LogsPurgeable {
+public interface JournalManager extends Closeable, LogsPurgeable,
+                                        FormatConfirmable {
 
   /**
    * Format the underlying storage, removing any previously
@@ -110,6 +110,11 @@ public interface JournalManager extends Closeable, FormatConfirmable,
    * roll back their state should just return without error.
    */
   void doRollback() throws IOException;
+  
+  /**
+   * @return the CTime of the journal manager.
+   */
+  long getJournalCTime() throws IOException;
 
   /**
    * Discard the segments whose first txid is >= the given txid.
@@ -118,11 +123,6 @@ public interface JournalManager extends Closeable, FormatConfirmable,
    * to the txid exists.
    */
   void discardSegments(long startTxId) throws IOException;
-
-  /**
-   * @return the CTime of the journal manager.
-   */
-  long getJournalCTime() throws IOException;
 
   /**
    * Close the journal manager, freeing any resources it may hold.

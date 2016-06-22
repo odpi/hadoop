@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.mapreduce.v2.hs.webapp;
 
+import static org.apache.hadoop.mapreduce.v2.app.webapp.AMParams.TASK_ID;
 import static org.apache.hadoop.yarn.webapp.view.JQueryUI.*;
 
 import org.apache.hadoop.mapreduce.v2.app.webapp.CountersBlock;
@@ -34,7 +35,12 @@ public class HsCountersPage extends HsView {
    */
   @Override protected void preHead(Page.HTML<_> html) {
     commonPreHead(html);
-    setActiveNavColumnForTask();
+    String tid = $(TASK_ID);
+    String activeNav = "2";
+    if(tid == null || tid.isEmpty()) {
+      activeNav = "1";
+    }
+    set(initID(ACCORDION, "nav"), "{autoHeight:false, active:"+activeNav+"}");
     set(DATATABLES_SELECTOR, "#counters .dt-counters");
     set(initSelector(DATATABLES),
         "{bJQueryUI:true, sDom:'t', iDisplayLength:-1}");

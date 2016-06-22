@@ -51,7 +51,6 @@ import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerExitStatus;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
-import org.apache.hadoop.yarn.api.records.NodeLabel;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.QueueInfo;
 import org.apache.hadoop.yarn.api.records.Resource;
@@ -213,8 +212,7 @@ public class TestSchedulerUtils {
       queueAccessibleNodeLabels.clear();
       queueAccessibleNodeLabels.addAll(Arrays.asList("x", "y"));
       rmContext.getNodeLabelManager().addToCluserNodeLabels(
-          ImmutableSet.of(NodeLabel.newInstance("x"),
-              NodeLabel.newInstance("y")));
+          ImmutableSet.of("x", "y"));
       Resource resource = Resources.createResource(
           0,
           YarnConfiguration.DEFAULT_RM_SCHEDULER_MINIMUM_ALLOCATION_VCORES);
@@ -268,8 +266,8 @@ public class TestSchedulerUtils {
       queueAccessibleNodeLabels.clear();
       queueAccessibleNodeLabels.addAll(Arrays.asList("x", "y"));
       rmContext.getNodeLabelManager().addToCluserNodeLabels(
-          ImmutableSet.of(NodeLabel.newInstance("x"),
-              NodeLabel.newInstance("y")));
+          ImmutableSet.of("x",
+              "y"));
       
       Resource resource = Resources.createResource(
           0,
@@ -293,8 +291,7 @@ public class TestSchedulerUtils {
       queueAccessibleNodeLabels.clear();
       queueAccessibleNodeLabels.addAll(Arrays.asList("x", "y"));
       rmContext.getNodeLabelManager().addToCluserNodeLabels(
-          ImmutableSet.of(NodeLabel.newInstance("x"),
-              NodeLabel.newInstance("y")));
+          ImmutableSet.of("x", "y"));
       
       Resource resource = Resources.createResource(
           0,
@@ -343,7 +340,7 @@ public class TestSchedulerUtils {
       queueAccessibleNodeLabels.clear();
       
       rmContext.getNodeLabelManager().addToCluserNodeLabels(
-          ImmutableSet.of(NodeLabel.newInstance("x")));
+          ImmutableSet.of("x"));
       
       Resource resource = Resources.createResource(
           0,
@@ -367,8 +364,7 @@ public class TestSchedulerUtils {
       queueAccessibleNodeLabels.add(RMNodeLabelsManager.ANY);
       
       rmContext.getNodeLabelManager().addToCluserNodeLabels(
-          ImmutableSet.of(NodeLabel.newInstance("x"),
-              NodeLabel.newInstance("y"), NodeLabel.newInstance("z")));
+          ImmutableSet.of("x", "y", "z"));
       
       Resource resource = Resources.createResource(
           0,
@@ -418,8 +414,7 @@ public class TestSchedulerUtils {
       queueAccessibleNodeLabels.clear();
       queueAccessibleNodeLabels.addAll(Arrays.asList("x", "y"));
       rmContext.getNodeLabelManager().addToCluserNodeLabels(
-          ImmutableSet.of(NodeLabel.newInstance("x"),
-              NodeLabel.newInstance("y")));
+          ImmutableSet.of("x", "y"));
       
       Resource resource = Resources.createResource(
           0,
@@ -444,7 +439,7 @@ public class TestSchedulerUtils {
       queueAccessibleNodeLabels.addAll(Arrays
           .asList(CommonNodeLabelsManager.ANY));
       rmContext.getNodeLabelManager().addToCluserNodeLabels(
-          ImmutableSet.of(NodeLabel.newInstance("x")));
+          ImmutableSet.of("x"));
       
       Resource resource = Resources.createResource(
           0,
@@ -718,8 +713,7 @@ public class TestSchedulerUtils {
       queueAccessibleNodeLabels.clear();
       queueAccessibleNodeLabels.addAll(Arrays.asList("x", "y"));
       rmContext.getNodeLabelManager().addToCluserNodeLabels(
-          ImmutableSet.of(NodeLabel.newInstance("x"),
-              NodeLabel.newInstance("y")));
+          ImmutableSet.of("x", "y"));
       Resource resource = Resources.createResource(
           0,
           YarnConfiguration.DEFAULT_RM_SCHEDULER_MINIMUM_ALLOCATION_VCORES);

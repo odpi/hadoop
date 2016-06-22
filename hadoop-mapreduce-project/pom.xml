@@ -18,14 +18,14 @@
   <parent>
     <groupId>org.apache.hadoop</groupId>
     <artifactId>hadoop-project</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>2.7.1-arenadata</version>
     <relativePath>../hadoop-project</relativePath>
   </parent>
   <groupId>org.apache.hadoop</groupId>
   <artifactId>hadoop-mapreduce</artifactId>
-  <version>3.0.0-SNAPSHOT</version>
+  <version>2.7.1-arenadata</version>
   <packaging>pom</packaging>
-  <name>Apache Hadoop MapReduce</name>
+  <name>hadoop-mapreduce</name>
   <url>http://hadoop.apache.org/mapreduce/</url>
 
   <properties>
@@ -170,7 +170,7 @@
                   cd "${project.build.directory}"
                   tar cf - ${project.artifactId}-${project.version} | gzip > ${project.artifactId}-${project.version}.tar.gz
                 </echo>
-                <exec executable="${shell-executable}" dir="${project.build.directory}" failonerror="true">
+                <exec executable="sh" dir="${project.build.directory}" failonerror="true">
                   <arg line="./dist-maketar.sh"/>
                 </exec>
               </target>
@@ -194,7 +194,7 @@
         <configuration>
           <excludes>
             <exclude>.eclipse.templates/</exclude>
-            <exclude>CHANGES.*txt</exclude>
+            <exclude>CHANGES.txt</exclude>
             <exclude>lib/jdiff/**</exclude>
           </excludes>
         </configuration>
@@ -231,34 +231,6 @@
                   <!-- avoid warning about recursion -->
                   <goal>jar-no-fork</goal>
                 </goals>
-              </execution>
-            </executions>
-          </plugin>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-antrun-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>dist</id>
-                <phase>prepare-package</phase>
-                <goals>
-                  <goal>run</goal>
-                </goals>
-                <configuration>
-                  <target>
-                    <echo file="${project.build.directory}/dist-copynativelibs.sh">
-                      LIB_DIR="${mr.basedir}/hadoop-mapreduce-client/hadoop-mapreduce-client-nativetask/target/native/target/usr/local/lib"
-                      if [ -d $${LIB_DIR} ] ; then
-                        TARGET_DIR="${project.build.directory}/${project.artifactId}-${project.version}/lib/native"
-                        mkdir -p $${TARGET_DIR}
-                        cp -R $${LIB_DIR}/lib* $${TARGET_DIR}
-                      fi
-                    </echo>
-                    <exec executable="${shell-executable}" dir="${project.build.directory}" failonerror="true">
-                      <arg line="./dist-copynativelibs.sh"/>
-                    </exec>
-                  </target>
-                </configuration>
               </execution>
             </executions>
           </plugin>

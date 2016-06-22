@@ -119,11 +119,6 @@ public class RMNodeWrapper implements RMNode {
   }
 
   @Override
-  public List<ApplicationId> getRunningApps() {
-    return node.getRunningApps();
-  }
-
-  @Override
   public void updateNodeHeartbeatResponseForCleanup(
           NodeHeartbeatResponse nodeHeartbeatResponse) {
     node.updateNodeHeartbeatResponseForCleanup(nodeHeartbeatResponse);
@@ -132,11 +127,6 @@ public class RMNodeWrapper implements RMNode {
   @Override
   public NodeHeartbeatResponse getLastNodeHeartBeatResponse() {
     return node.getLastNodeHeartBeatResponse();
-  }
-
-  @Override
-  public void resetLastNodeHeartBeatResponse() {
-    node.getLastNodeHeartBeatResponse().setResponseId(0);
   }
 
   @Override

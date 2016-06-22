@@ -50,7 +50,6 @@ public class InMemoryFileSystemStore implements FileSystemStore {
   @Override
   public void initialize(URI uri, Configuration conf) {
     this.conf = conf;
-    inodes.put(new Path("/"), INode.DIRECTORY_INODE);
   }
   
   @Override

@@ -22,9 +22,9 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
@@ -36,7 +36,6 @@ import org.apache.hadoop.util.Time;
 import org.apache.hadoop.hdfs.DFSUtil;
 
 import com.google.common.annotations.VisibleForTesting;
-
 import org.slf4j.Logger;
 
 /**
@@ -48,7 +47,7 @@ import org.slf4j.Logger;
 class InvalidateBlocks {
   /** Mapping: DatanodeInfo -> Collection of Blocks */
   private final Map<DatanodeInfo, LightWeightHashSet<Block>> node2blocks =
-      new HashMap<DatanodeInfo, LightWeightHashSet<Block>>();
+      new TreeMap<DatanodeInfo, LightWeightHashSet<Block>>();
   /** The total number of blocks in the map. */
   private long numBlocks = 0L;
 
@@ -113,7 +112,7 @@ class InvalidateBlocks {
     if (set.add(block)) {
       numBlocks++;
       if (log) {
-        NameNode.blockStateChangeLog.debug("BLOCK* {}: add {} to {}",
+        NameNode.blockStateChangeLog.info("BLOCK* {}: add {} to {}",
             getClass().getSimpleName(), block, datanode);
       }
     }
@@ -175,7 +174,7 @@ class InvalidateBlocks {
       if (BlockManager.LOG.isDebugEnabled()) {
         BlockManager.LOG
             .debug("Block deletion is delayed during NameNode startup. "
-                + "The deletion will start after " + delay + " ms.");
+                       + "The deletion will start after " + delay + " ms.");
       }
       return null;
     }

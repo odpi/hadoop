@@ -18,10 +18,10 @@
 package org.apache.hadoop.hdfs.server.namenode;
 
 import java.util.Iterator;
+import java.util.List;
 
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.permission.PermissionStatus;
-import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockStoragePolicySuite;
 import org.apache.hadoop.util.GSet;
 import org.apache.hadoop.util.LightWeightGSet;
@@ -37,12 +37,12 @@ public class INodeMap {
   static INodeMap newInstance(INodeDirectory rootDir) {
     // Compute the map capacity by allocating 1% of total memory
     int capacity = LightWeightGSet.computeCapacity(1, "INodeMap");
-    GSet<INode, INodeWithAdditionalFields> map =
-        new LightWeightGSet<>(capacity);
+    GSet<INode, INodeWithAdditionalFields> map
+        = new LightWeightGSet<INode, INodeWithAdditionalFields>(capacity);
     map.put(rootDir);
     return new INodeMap(map);
   }
-
+  
   /** Synchronized by external lock. */
   private final GSet<INode, INodeWithAdditionalFields> map;
   
@@ -96,36 +96,39 @@ public class INodeMap {
       }
       
       @Override
-      public void destroyAndCollectBlocks(ReclaimContext reclaimContext) {
+      public void destroyAndCollectBlocks(BlockStoragePolicySuite bsps,
+          BlocksMapUpdateInfo collectedBlocks, List<INode> removedINodes) {
         // Nothing to do
       }
 
       @Override
       public QuotaCounts computeQuotaUsage(
           BlockStoragePolicySuite bsps, byte blockStoragePolicyId,
-          boolean useCache, int lastSnapshotId) {
+          QuotaCounts counts, boolean useCache, int lastSnapshotId) {
         return null;
       }
 
       @Override
       public ContentSummaryComputationContext computeContentSummary(
-          int snapshotId, ContentSummaryComputationContext summary) {
+          ContentSummaryComputationContext summary) {
         return null;
       }
       
       @Override
-      public void cleanSubtree(
-          ReclaimContext reclaimContext, int snapshotId, int priorSnapshotId) {
+      public QuotaCounts cleanSubtree(BlockStoragePolicySuite bsps,
+          int snapshotId, int priorSnapshotId,
+          BlocksMapUpdateInfo collectedBlocks, List<INode> removedINodes) {
+          return null;
       }
 
       @Override
       public byte getStoragePolicyID(){
-        return HdfsConstants.BLOCK_STORAGE_POLICY_ID_UNSPECIFIED;
+        return BlockStoragePolicySuite.ID_UNSPECIFIED;
       }
 
       @Override
       public byte getLocalStoragePolicyID() {
-        return HdfsConstants.BLOCK_STORAGE_POLICY_ID_UNSPECIFIED;
+        return BlockStoragePolicySuite.ID_UNSPECIFIED;
       }
     };
       

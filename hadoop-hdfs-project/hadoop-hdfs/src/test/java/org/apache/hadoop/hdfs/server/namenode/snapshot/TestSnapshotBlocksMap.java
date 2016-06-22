@@ -17,11 +17,11 @@
  */
 package org.apache.hadoop.hdfs.server.namenode.snapshot;
 
-import static org.apache.hadoop.hdfs.server.namenode.INodeId.INVALID_INODE_ID;
 import static org.apache.hadoop.test.GenericTestUtils.assertExceptionContains;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -36,7 +36,7 @@ import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.SafeModeAction;
-import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfo;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfoContiguous;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockManager;
 import org.apache.hadoop.hdfs.server.namenode.FSDirectory;
 import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
@@ -87,20 +87,38 @@ public class TestSnapshotBlocksMap {
     }
   }
 
+  void assertAllNull(INodeFile inode, Path path, String[] snapshots) throws Exception { 
+    Assert.assertNull(inode.getBlocks());
+    assertINodeNull(path.toString());
+    assertINodeNullInSnapshots(path, snapshots);
+  }
+
+  void assertINodeNull(String path) throws Exception {
+    Assert.assertNull(fsdir.getINode(path));
+  }
+
+  void assertINodeNullInSnapshots(Path path, String... snapshots) throws Exception {
+    for(String s : snapshots) {
+      assertINodeNull(SnapshotTestHelper.getSnapshotPath(
+          path.getParent(), s, path.getName()).toString());
+    }
+  }
+
   static INodeFile assertBlockCollection(String path, int numBlocks,
      final FSDirectory dir, final BlockManager blkManager) throws Exception {
     final INodeFile file = INodeFile.valueOf(dir.getINode(path), path);
     assertEquals(numBlocks, file.getBlocks().length);
-    for(BlockInfo b : file.getBlocks()) {
+    for(BlockInfoContiguous b : file.getBlocks()) {
       assertBlockCollection(blkManager, file, b);
     }
     return file;
   }
 
   static void assertBlockCollection(final BlockManager blkManager,
-      final INodeFile file, final BlockInfo b) {
+      final INodeFile file, final BlockInfoContiguous b) {
     Assert.assertSame(b, blkManager.getStoredBlock(b));
-    Assert.assertEquals(file.getId(), b.getBlockCollectionId());
+    Assert.assertSame(file, blkManager.getBlockCollection(b));
+    Assert.assertSame(file, b.getBlockCollection());
   }
 
   /**
@@ -128,11 +146,11 @@ public class TestSnapshotBlocksMap {
     {
       final INodeFile f2 = assertBlockCollection(file2.toString(), 3, fsdir,
           blockmanager);
-      BlockInfo[] blocks = f2.getBlocks();
+      BlockInfoContiguous[] blocks = f2.getBlocks();
       hdfs.delete(sub2, true);
       // The INode should have been removed from the blocksMap
-      for(BlockInfo b : blocks) {
-        assertEquals(INVALID_INODE_ID, b.getBlockCollectionId());
+      for(BlockInfoContiguous b : blocks) {
+        assertNull(blockmanager.getBlockCollection(b));
       }
     }
     
@@ -159,7 +177,7 @@ public class TestSnapshotBlocksMap {
     // Check the block information for file0
     final INodeFile f0 = assertBlockCollection(file0.toString(), 4, fsdir,
         blockmanager);
-    BlockInfo[] blocks0 = f0.getBlocks();
+    BlockInfoContiguous[] blocks0 = f0.getBlocks();
     
     // Also check the block information for snapshot of file0
     Path snapshotFile0 = SnapshotTestHelper.getSnapshotPath(sub1, "s0",
@@ -169,8 +187,8 @@ public class TestSnapshotBlocksMap {
     // Delete file0
     hdfs.delete(file0, true);
     // Make sure the blocks of file0 is still in blocksMap
-    for(BlockInfo b : blocks0) {
-      assertNotEquals(INVALID_INODE_ID, b.getBlockCollectionId());
+    for(BlockInfoContiguous b : blocks0) {
+      assertNotNull(blockmanager.getBlockCollection(b));
     }
     assertBlockCollection(snapshotFile0.toString(), 4, fsdir, blockmanager);
     
@@ -183,8 +201,8 @@ public class TestSnapshotBlocksMap {
     hdfs.deleteSnapshot(sub1, "s1");
 
     // Make sure the first block of file0 is still in blocksMap
-    for(BlockInfo b : blocks0) {
-      assertNotEquals(INVALID_INODE_ID, b.getBlockCollectionId());
+    for(BlockInfoContiguous b : blocks0) {
+      assertNotNull(blockmanager.getBlockCollection(b));
     }
     assertBlockCollection(snapshotFile0.toString(), 4, fsdir, blockmanager);
 
@@ -275,7 +293,7 @@ public class TestSnapshotBlocksMap {
     hdfs.append(bar);
 
     INodeFile barNode = fsdir.getINode4Write(bar.toString()).asFile();
-    BlockInfo[] blks = barNode.getBlocks();
+    BlockInfoContiguous[] blks = barNode.getBlocks();
     assertEquals(1, blks.length);
     assertEquals(BLOCKSIZE, blks[0].getNumBytes());
     ExtendedBlock previous = new ExtendedBlock(fsn.getBlockPoolId(), blks[0]);
@@ -313,7 +331,7 @@ public class TestSnapshotBlocksMap {
     hdfs.append(bar);
 
     INodeFile barNode = fsdir.getINode4Write(bar.toString()).asFile();
-    BlockInfo[] blks = barNode.getBlocks();
+    BlockInfoContiguous[] blks = barNode.getBlocks();
     assertEquals(1, blks.length);
     ExtendedBlock previous = new ExtendedBlock(fsn.getBlockPoolId(), blks[0]);
     cluster.getNameNodeRpc()
@@ -352,7 +370,7 @@ public class TestSnapshotBlocksMap {
     hdfs.append(bar);
 
     INodeFile barNode = fsdir.getINode4Write(bar.toString()).asFile();
-    BlockInfo[] blks = barNode.getBlocks();
+    BlockInfoContiguous[] blks = barNode.getBlocks();
     assertEquals(1, blks.length);
     ExtendedBlock previous = new ExtendedBlock(fsn.getBlockPoolId(), blks[0]);
     cluster.getNameNodeRpc()
@@ -403,7 +421,7 @@ public class TestSnapshotBlocksMap {
     out.write(testData);
     out.close();
     INodeFile barNode = fsdir.getINode4Write(bar.toString()).asFile();
-    BlockInfo[] blks = barNode.getBlocks();
+    BlockInfoContiguous[] blks = barNode.getBlocks();
     assertEquals(1, blks.length);
     assertEquals(testData.length, blks[0].getNumBytes());
     
@@ -413,6 +431,6 @@ public class TestSnapshotBlocksMap {
     // Now make sure that the NN can still save an fsimage successfully.
     cluster.getNameNode().getRpcServer().setSafeMode(
         SafeModeAction.SAFEMODE_ENTER, false);
-    cluster.getNameNode().getRpcServer().saveNamespace(0, 0);
+    cluster.getNameNode().getRpcServer().saveNamespace();
   }
 }

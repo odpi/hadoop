@@ -15,58 +15,46 @@
 Apache Hadoop ${project.version}
 ================================
 
-Apache Hadoop ${project.version} consists of significant
-improvements over the previous stable release (hadoop-1.x).
+Apache Hadoop ${project.version} is a minor release in the 2.x.y release
+line, building upon the previous release 2.7.0. This is the next stable release
+after Apache Hadoop 2.6.x.
 
-Here is a short overview of the improvments to both HDFS and MapReduce.
+Here is a short overview of the major features and improvements since 2.6.x.
 
-* HDFS Federation
+* IMPORTANT notes
 
-    In order to scale the name service horizontally, federation uses
-    multiple independent Namenodes/Namespaces. The Namenodes are
-    federated, that is, the Namenodes are independent and don't require
-    coordination with each other. The datanodes are used as common storage
-    for blocks by all the Namenodes. Each datanode registers with all the
-    Namenodes in the cluster. Datanodes send periodic heartbeats and block
-    reports and handles commands from the Namenodes.
+    *   This release drops support for JDK6 runtime and works with JDK 7+ only.
 
-    More details are available in the
-    [HDFS Federation](./hadoop-project-dist/hadoop-hdfs/Federation.html)
-    document.
+*   Common
 
-* MapReduce NextGen aka YARN aka MRv2
+    *   Support Windows Azure Storage - Blob as a file system in Hadoop.
 
-    The new architecture introduced in hadoop-0.23, divides the two major
-    functions of the JobTracker: resource management and job life-cycle
-    management into separate components.
-    
-    The new ResourceManager manages the global assignment of compute
-    resources to applications and the per-application
-    ApplicationMaster manages the application‚ scheduling and
-    coordination.
+*   HDFS
 
-    An application is either a single job in the sense of classic
-    MapReduce jobs or a DAG of such jobs.
+    *   Support for file truncate
 
-    The ResourceManager and per-machine NodeManager daemon, which
-    manages the user processes on that machine, form the computation
-    fabric.
+    *   Support for quotas per storage type
 
-    The per-application ApplicationMaster is, in effect, a framework
-    specific library and is tasked with negotiating resources from the
-    ResourceManager and working with the NodeManager(s) to execute and
-    monitor the tasks.
+    *   Support for files with variable-length blocks
 
-    More details are available in the
-    [YARN](./hadoop-yarn/hadoop-yarn-site/YARN.html) document.
+*   YARN
+
+    *   Make YARN authorization pluggable
+
+    *   Automatic shared, global caching of YARN localized resources (beta)
+
+*   MAPREDUCE
+
+    *   Ability to limit running Map/Reduce tasks of a job
+
+    *   Speed up FileOutputCommitter for very large jobs with many output files.
 
 Getting Started
 ===============
 
 The Hadoop documentation includes the information you need to get started using
-Hadoop. Begin with the 
-[Single Node Setup](./hadoop-project-dist/hadoop-common/SingleCluster.html)
-which shows you how to set up a single-node Hadoop installation.
-Then move on to the
-[Cluster Setup](./hadoop-project-dist/hadoop-common/ClusterSetup.html)
-to learn how to set up a multi-node Hadoop installation.
+Hadoop. Begin with the
+[Single Node Setup](./hadoop-project-dist/hadoop-common/SingleCluster.html) which
+shows you how to set up a single-node Hadoop installation. Then move on to the
+[Cluster Setup](./hadoop-project-dist/hadoop-common/ClusterSetup.html) to learn how
+to set up a multi-node Hadoop installation.

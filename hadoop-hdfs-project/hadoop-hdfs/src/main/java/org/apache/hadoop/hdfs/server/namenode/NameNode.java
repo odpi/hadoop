@@ -21,8 +21,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.HadoopIllegalArgumentException;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
@@ -35,16 +33,13 @@ import org.apache.hadoop.ha.HealthCheckFailedException;
 import org.apache.hadoop.ha.ServiceFailedException;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtil;
-import org.apache.hadoop.hdfs.DFSUtilClient;
 import org.apache.hadoop.hdfs.HAUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
-import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.NamenodeRole;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.RollingUpgradeStartupOption;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.StartupOption;
-import org.apache.hadoop.hdfs.server.common.MetricsLoggerTask;
 import org.apache.hadoop.hdfs.server.namenode.ha.ActiveState;
 import org.apache.hadoop.hdfs.server.namenode.ha.BootstrapStandby;
 import org.apache.hadoop.hdfs.server.namenode.ha.HAContext;
@@ -74,10 +69,10 @@ import org.apache.hadoop.tools.GetUserMappingsProtocol;
 import org.apache.hadoop.tracing.SpanReceiverHost;
 import org.apache.hadoop.tracing.TraceAdminProtocol;
 import org.apache.hadoop.util.ExitUtil.ExitException;
-import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.JvmPauseMonitor;
 import org.apache.hadoop.util.ServicePlugin;
 import org.apache.hadoop.util.StringUtils;
+import org.apache.log4j.LogManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -92,14 +87,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_KEY;
-import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_NAMENODE_RPC_PORT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_AUTO_FAILOVER_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_AUTO_FAILOVER_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_FENCE_METHODS_KEY;
@@ -120,8 +112,6 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HTTP_BIND_HOST_K
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_KERBEROS_INTERNAL_SPNEGO_PRINCIPAL_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_KERBEROS_PRINCIPAL_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_KEYTAB_FILE_KEY;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_METRICS_LOGGER_PERIOD_SECONDS_DEFAULT;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_METRICS_LOGGER_PERIOD_SECONDS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_NAME_DIR_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_PLUGINS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_RPC_ADDRESS_KEY;
@@ -255,7 +245,7 @@ public class NameNode implements NameNodeStatusMXBean {
     DFS_HA_AUTO_FAILOVER_ENABLED_KEY
   };
   
-  private static final String USAGE = "Usage: hdfs namenode ["
+  private static final String USAGE = "Usage: java NameNode ["
       + StartupOption.BACKUP.getName() + "] | \n\t["
       + StartupOption.CHECKPOINT.getName() + "] | \n\t["
       + StartupOption.FORMAT.getName() + " ["
@@ -271,6 +261,7 @@ public class NameNode implements NameNodeStatusMXBean {
       + StartupOption.ROLLBACK.getName() + "] | \n\t["
       + StartupOption.ROLLINGUPGRADE.getName() + " "
       + RollingUpgradeStartupOption.getAllOptionString() + " ] | \n\t["
+      + StartupOption.FINALIZE.getName() + "] | \n\t["
       + StartupOption.IMPORT.getName() + "] | \n\t["
       + StartupOption.INITIALIZESHAREDEDITS.getName() + "] | \n\t["
       + StartupOption.BOOTSTRAPSTANDBY.getName() + "] | \n\t["
@@ -303,12 +294,7 @@ public class NameNode implements NameNodeStatusMXBean {
     }
   }
     
-  /**
-   * @deprecated Use {@link HdfsClientConfigKeys#DFS_NAMENODE_RPC_PORT_DEFAULT}
-   *             instead.
-   */
-  @Deprecated
-  public static final int DEFAULT_PORT = DFS_NAMENODE_RPC_PORT_DEFAULT;
+  public static final int DEFAULT_PORT = 8020;
   public static final Logger LOG =
       LoggerFactory.getLogger(NameNode.class.getName());
   public static final Logger stateChangeLog =
@@ -317,10 +303,7 @@ public class NameNode implements NameNodeStatusMXBean {
       LoggerFactory.getLogger("BlockStateChange");
   public static final HAState ACTIVE_STATE = new ActiveState();
   public static final HAState STANDBY_STATE = new StandbyState();
-
-  public static final Log MetricsLog =
-      LogFactory.getLog("NameNodeMetricsLog");
-
+  
   protected FSNamesystem namesystem; 
   protected final Configuration conf;
   protected final NamenodeRole role;
@@ -346,8 +329,6 @@ public class NameNode implements NameNodeStatusMXBean {
   private JvmPauseMonitor pauseMonitor;
   private ObjectName nameNodeStatusBeanName;
   SpanReceiverHost spanReceiverHost;
-  ScheduledThreadPoolExecutor metricsLoggerTimer;
-
   /**
    * The namenode address that clients will use to access this namenode
    * or the name service. For HA configurations using logical URI, it
@@ -422,7 +403,7 @@ public class NameNode implements NameNodeStatusMXBean {
       return;
     }
 
-    if (DFSUtilClient.getNameServiceIds(conf).contains(nnHost)) {
+    if (DFSUtil.getNameServiceIds(conf).contains(nnHost)) {
       // host name is logical
       clientNamenodeAddress = nnHost;
     } else if (nnUri.getPort() > 0) {
@@ -445,6 +426,10 @@ public class NameNode implements NameNodeStatusMXBean {
     return clientNamenodeAddress;
   }
 
+  public static InetSocketAddress getAddress(String address) {
+    return NetUtils.createSocketAddr(address, DEFAULT_PORT);
+  }
+  
   /**
    * Set the configuration property for the service rpc address
    * to address
@@ -466,9 +451,42 @@ public class NameNode implements NameNodeStatusMXBean {
                                                         boolean fallback) {
     String addr = conf.getTrimmed(DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY);
     if (addr == null || addr.isEmpty()) {
-      return fallback ? DFSUtilClient.getNNAddress(conf) : null;
+      return fallback ? getAddress(conf) : null;
     }
-    return DFSUtilClient.getNNAddress(addr);
+    return getAddress(addr);
+  }
+
+  public static InetSocketAddress getAddress(Configuration conf) {
+    URI filesystemURI = FileSystem.getDefaultUri(conf);
+    return getAddress(filesystemURI);
+  }
+
+
+  /**
+   * @return address of file system
+   */
+  public static InetSocketAddress getAddress(URI filesystemURI) {
+    String authority = filesystemURI.getAuthority();
+    if (authority == null) {
+      throw new IllegalArgumentException(String.format(
+          "Invalid URI for NameNode address (check %s): %s has no authority.",
+          FileSystem.FS_DEFAULT_NAME_KEY, filesystemURI.toString()));
+    }
+    if (!HdfsConstants.HDFS_URI_SCHEME.equalsIgnoreCase(
+        filesystemURI.getScheme())) {
+      throw new IllegalArgumentException(String.format(
+          "Invalid URI for NameNode address (check %s): %s is not of scheme '%s'.",
+          FileSystem.FS_DEFAULT_NAME_KEY, filesystemURI.toString(),
+          HdfsConstants.HDFS_URI_SCHEME));
+    }
+    return getAddress(authority);
+  }
+
+  public static URI getUri(InetSocketAddress namenode) {
+    int port = namenode.getPort();
+    String portString = port == DEFAULT_PORT ? "" : (":"+port);
+    return URI.create(HdfsConstants.HDFS_URI_SCHEME + "://" 
+        + namenode.getHostName()+portString);
   }
 
   //
@@ -491,7 +509,7 @@ public class NameNode implements NameNodeStatusMXBean {
   }
 
   protected InetSocketAddress getRpcServerAddress(Configuration conf) {
-    return DFSUtilClient.getNNAddress(conf);
+    return getAddress(conf);
   }
   
   /** Given a configuration get the bind host of the service rpc server
@@ -526,7 +544,7 @@ public class NameNode implements NameNodeStatusMXBean {
 
   protected void setRpcServerAddress(Configuration conf,
       InetSocketAddress rpcAddress) {
-    FileSystem.setDefaultUri(conf, DFSUtilClient.getNNUri(rpcAddress));
+    FileSystem.setDefaultUri(conf, getUri(rpcAddress));
   }
 
   protected InetSocketAddress getHttpServerAddress(Configuration conf) {
@@ -644,41 +662,6 @@ public class NameNode implements NameNodeStatusMXBean {
     metrics.getJvmMetrics().setPauseMonitor(pauseMonitor);
     
     startCommonServices(conf);
-    startMetricsLogger(conf);
-  }
-
-  /**
-   * Start a timer to periodically write NameNode metrics to the log
-   * file. This behavior can be disabled by configuration.
-   * @param conf
-   */
-  protected void startMetricsLogger(Configuration conf) {
-    long metricsLoggerPeriodSec =
-        conf.getInt(DFS_NAMENODE_METRICS_LOGGER_PERIOD_SECONDS_KEY,
-            DFS_NAMENODE_METRICS_LOGGER_PERIOD_SECONDS_DEFAULT);
-
-    if (metricsLoggerPeriodSec <= 0) {
-      return;
-    }
-
-    MetricsLoggerTask.makeMetricsLoggerAsync(MetricsLog);
-
-    // Schedule the periodic logging.
-    metricsLoggerTimer = new ScheduledThreadPoolExecutor(1);
-    metricsLoggerTimer.setExecuteExistingDelayedTasksAfterShutdownPolicy(
-        false);
-    metricsLoggerTimer.scheduleWithFixedDelay(new MetricsLoggerTask(MetricsLog,
-        "NameNode", (short) 128),
-        metricsLoggerPeriodSec,
-        metricsLoggerPeriodSec,
-        TimeUnit.SECONDS);
-  }
-
-  protected void stopMetricsLogger() {
-    if (metricsLoggerTimer != null) {
-      metricsLoggerTimer.shutdown();
-      metricsLoggerTimer = null;
-    }
   }
   
   /**
@@ -794,6 +777,8 @@ public class NameNode implements NameNodeStatusMXBean {
    * metadata</li>
    * <li>{@link StartupOption#ROLLBACK ROLLBACK} - roll the  
    *            cluster back to the previous state</li>
+   * <li>{@link StartupOption#FINALIZE FINALIZE} - finalize 
+   *            previous upgrade</li>
    * <li>{@link StartupOption#IMPORT IMPORT} - import checkpoint</li>
    * </ul>
    * The option is passed via configuration field: 
@@ -882,7 +867,6 @@ public class NameNode implements NameNodeStatusMXBean {
     } catch (ServiceFailedException e) {
       LOG.warn("Encountered exception while exiting state ", e);
     } finally {
-      stopMetricsLogger();
       stopCommonServices();
       if (metrics != null) {
         metrics.shutdown();
@@ -910,7 +894,7 @@ public class NameNode implements NameNodeStatusMXBean {
   public boolean isInSafeMode() {
     return namesystem.isInSafeMode();
   }
-
+    
   /** get FSImage */
   @VisibleForTesting
   public FSImage getFSImage() {
@@ -942,7 +926,7 @@ public class NameNode implements NameNodeStatusMXBean {
 
   /**
    * @return NameNode HTTP address, used by the Web UI, image transfer,
-   *    and HTTP-based file system clients like WebHDFS
+   *    and HTTP-based file system clients like Hftp and WebHDFS
    */
   public InetSocketAddress getHttpAddress() {
     return httpServer.getHttpAddress();
@@ -950,7 +934,7 @@ public class NameNode implements NameNodeStatusMXBean {
 
   /**
    * @return NameNode HTTPS address, used by the Web UI, image transfer,
-   *    and HTTP-based file system clients like WebHDFS
+   *    and HTTP-based file system clients like Hftp and WebHDFS
    */
   public InetSocketAddress getHttpsAddress() {
     return httpServer.getHttpsAddress();
@@ -974,7 +958,7 @@ public class NameNode implements NameNodeStatusMXBean {
     checkAllowFormat(conf);
 
     if (UserGroupInformation.isSecurityEnabled()) {
-      InetSocketAddress socAddr = DFSUtilClient.getNNAddress(conf);
+      InetSocketAddress socAddr = getAddress(conf);
       SecurityUtil.login(conf, DFS_NAMENODE_KEYTAB_FILE_KEY,
           DFS_NAMENODE_KERBEROS_PRINCIPAL_KEY, socAddr.getHostName());
     }
@@ -1077,7 +1061,7 @@ public class NameNode implements NameNodeStatusMXBean {
     }
 
     if (UserGroupInformation.isSecurityEnabled()) {
-      InetSocketAddress socAddr = DFSUtilClient.getNNAddress(conf);
+      InetSocketAddress socAddr = getAddress(conf);
       SecurityUtil.login(conf, DFS_NAMENODE_KEYTAB_FILE_KEY,
           DFS_NAMENODE_KERBEROS_PRINCIPAL_KEY, socAddr.getHostName());
     }
@@ -1175,8 +1159,7 @@ public class NameNode implements NameNodeStatusMXBean {
             LOG.trace("copying op: " + op);
           }
           if (!segmentOpen) {
-            newSharedEditLog.startLogSegment(op.txid, false,
-                fsns.getEffectiveLayoutVersion());
+            newSharedEditLog.startLogSegment(op.txid, false);
             segmentOpen = true;
           }
 
@@ -1322,6 +1305,8 @@ public class NameNode implements NameNodeStatusMXBean {
         startOpt.setRollingUpgradeStartupOption(args[i]);
       } else if (StartupOption.ROLLBACK.getName().equalsIgnoreCase(cmd)) {
         startOpt = StartupOption.ROLLBACK;
+      } else if (StartupOption.FINALIZE.getName().equalsIgnoreCase(cmd)) {
+        startOpt = StartupOption.FINALIZE;
       } else if (StartupOption.IMPORT.getName().equalsIgnoreCase(cmd)) {
         startOpt = StartupOption.IMPORT;
       } else if (StartupOption.BOOTSTRAPSTANDBY.getName().equalsIgnoreCase(cmd)) {
@@ -1432,10 +1417,6 @@ public class NameNode implements NameNodeStatusMXBean {
     LOG.info("createNameNode " + Arrays.asList(argv));
     if (conf == null)
       conf = new HdfsConfiguration();
-    // Parse out some generic args into Configuration.
-    GenericOptionsParser hParser = new GenericOptionsParser(conf, argv);
-    argv = hParser.getRemainingArgs();
-    // Parse the rest, NN specific args.
     StartupOption startOpt = parseArguments(argv);
     if (startOpt == null) {
       printUsage(System.err);
@@ -1455,6 +1436,13 @@ public class NameNode implements NameNodeStatusMXBean {
         System.out.println(NNStorage.newClusterID());
         terminate(0);
         return null;
+      }
+      case FINALIZE: {
+        System.err.println("Use of the argument '" + StartupOption.FINALIZE +
+            "' is no longer supported. To finalize an upgrade, start the NN " +
+            " and then run `hdfs dfsadmin -finalizeUpgrade'");
+        terminate(1);
+        return null; // avoid javac warning
       }
       case ROLLBACK: {
         boolean aborted = doRollback(conf, true);
@@ -1542,9 +1530,7 @@ public class NameNode implements NameNodeStatusMXBean {
       URI defaultUri = URI.create(HdfsConstants.HDFS_URI_SCHEME + "://"
           + conf.get(DFS_NAMENODE_RPC_ADDRESS_KEY));
       conf.set(FS_DEFAULT_NAME_KEY, defaultUri.toString());
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("Setting " + FS_DEFAULT_NAME_KEY + " to " + defaultUri.toString());
-      }
+      LOG.debug("Setting " + FS_DEFAULT_NAME_KEY + " to " + defaultUri.toString());
     }
   }
     

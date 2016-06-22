@@ -20,7 +20,6 @@ package org.apache.hadoop.yarn.server.nodemanager;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.service.CompositeService;
-import org.apache.hadoop.util.NodeHealthScriptRunner;
 
 /**
  * The class which provides functionality of checking the health of the node and
@@ -34,16 +33,15 @@ public class NodeHealthCheckerService extends CompositeService {
 
   static final String SEPARATOR = ";";
 
-  public NodeHealthCheckerService(NodeHealthScriptRunner scriptRunner,
-      LocalDirsHandlerService dirHandlerService) {
+  public NodeHealthCheckerService() {
     super(NodeHealthCheckerService.class.getName());
-    nodeHealthScriptRunner = scriptRunner;
-    dirsHandler = dirHandlerService;
+    dirsHandler = new LocalDirsHandlerService();
   }
 
   @Override
   protected void serviceInit(Configuration conf) throws Exception {
-    if (nodeHealthScriptRunner != null) {
+    if (NodeHealthScriptRunner.shouldRun(conf)) {
+      nodeHealthScriptRunner = new NodeHealthScriptRunner();
       addService(nodeHealthScriptRunner);
     }
     addService(dirsHandler);

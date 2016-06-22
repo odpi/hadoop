@@ -41,7 +41,6 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.tools.JMXGet;
@@ -62,6 +61,19 @@ public class TestJMXGet {
   static final long seed = 0xAAAAEEFL;
   static final int blockSize = 4096;
   static final int fileSize = 8192;
+
+  private void writeFile(FileSystem fileSys, Path name, int repl)
+  throws IOException {
+    FSDataOutputStream stm = fileSys.create(name, true,
+        fileSys.getConf().getInt(CommonConfigurationKeys.IO_FILE_BUFFER_SIZE_KEY, 4096),
+        (short)repl, blockSize);
+    byte[] buffer = new byte[fileSize];
+    Random rand = new Random(seed);
+    rand.nextBytes(buffer);
+    stm.write(buffer);
+    stm.close();
+  }
+
 
   @Before
   public void setUp() throws Exception {
@@ -93,8 +105,7 @@ public class TestJMXGet {
     cluster = new MiniDFSCluster.Builder(config).numDataNodes(numDatanodes).build();
     cluster.waitActive();
 
-    DFSTestUtil.createFile(cluster.getFileSystem(), new Path("/test1"),
-        fileSize, fileSize, blockSize, (short) 2, seed);
+    writeFile(cluster.getFileSystem(), new Path("/test1"), 2);
 
     JMXGet jmx = new JMXGet();
     String serviceName = "NameNode";
@@ -103,12 +114,10 @@ public class TestJMXGet {
     assertTrue("error printAllValues", checkPrintAllValues(jmx));
 
     //get some data from different source
-    DFSTestUtil.waitForMetric(jmx, "NumLiveDataNodes", numDatanodes);
     assertEquals(numDatanodes, Integer.parseInt(
         jmx.getValue("NumLiveDataNodes")));
     assertGauge("CorruptBlocks", Long.parseLong(jmx.getValue("CorruptBlocks")),
                 getMetrics("FSNamesystem"));
-    DFSTestUtil.waitForMetric(jmx, "NumOpenConnections", numDatanodes);
     assertEquals(numDatanodes, Integer.parseInt(
         jmx.getValue("NumOpenConnections")));
 
@@ -146,14 +155,12 @@ public class TestJMXGet {
     cluster = new MiniDFSCluster.Builder(config).numDataNodes(numDatanodes).build();
     cluster.waitActive();
 
-    DFSTestUtil.createFile(cluster.getFileSystem(), new Path("/test"),
-        fileSize, fileSize, blockSize, (short) 2, seed);
+    writeFile(cluster.getFileSystem(), new Path("/test"), 2);
 
     JMXGet jmx = new JMXGet();
     String serviceName = "DataNode";
     jmx.setService(serviceName);
     jmx.init();
-    DFSTestUtil.waitForMetric(jmx, "BytesWritten", fileSize);
     assertEquals(fileSize, Integer.parseInt(jmx.getValue("BytesWritten")));
 
     cluster.shutdown();

@@ -36,17 +36,17 @@ public interface MetricsRecord {
   long timestamp();
 
   /**
-   * @return the metrics record name
+   * @return the record name
    */
   String name();
 
   /**
-   * @return the description of the metrics record
+   * @return the description of the record
    */
   String description();
 
   /**
-   * @return the context name of the metrics record
+   * @return the context name of the record
    */
   String context();
 

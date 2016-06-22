@@ -40,7 +40,6 @@ public class NoEmitMetricsContext extends AbstractMetricsContext {
     public NoEmitMetricsContext() {
     }
     
-    @Override
     @InterfaceAudience.Private
     public void init(String contextName, ContextFactory factory) {
       super.init(contextName, factory);
@@ -50,7 +49,6 @@ public class NoEmitMetricsContext extends AbstractMetricsContext {
     /**
      * Do-nothing version of emitRecord
      */
-    @Override
     @InterfaceAudience.Private
     protected void emitRecord(String contextName, String recordName,
                               OutputRecord outRec) {

@@ -20,12 +20,12 @@
   <parent>
     <groupId>org.apache.hadoop</groupId>
     <artifactId>hadoop-project</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>2.7.1-arenadata</version>
     <relativePath>../hadoop-project</relativePath>
   </parent>
   <groupId>org.apache.hadoop</groupId>
   <artifactId>hadoop-tools</artifactId>
-  <version>3.0.0-SNAPSHOT</version>
+  <version>2.7.1-arenadata</version>
   <description>Apache Hadoop Tools</description>
   <name>Apache Hadoop Tools</name>
   <packaging>pom</packaging>
@@ -34,7 +34,6 @@
     <module>hadoop-streaming</module>
     <module>hadoop-distcp</module>
     <module>hadoop-archives</module>
-    <module>hadoop-archive-logs</module>
     <module>hadoop-rumen</module>
     <module>hadoop-gridmix</module>
     <module>hadoop-datajoin</module>
@@ -44,8 +43,8 @@
     <module>hadoop-pipes</module>
     <module>hadoop-openstack</module>
     <module>hadoop-sls</module>
-    <module>hadoop-azure</module>
     <module>hadoop-aws</module>
+    <module>hadoop-azure</module>
   </modules>
 
   <build>

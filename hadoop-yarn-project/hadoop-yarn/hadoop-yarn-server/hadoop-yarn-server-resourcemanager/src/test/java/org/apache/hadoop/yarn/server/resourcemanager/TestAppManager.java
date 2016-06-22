@@ -19,26 +19,26 @@
 package org.apache.hadoop.yarn.server.resourcemanager;
 
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.yarn.server.resourcemanager.metrics.SystemMetricsPublisher;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppImpl;
+
+import static org.mockito.Matchers.isA;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyLong;
-import static org.mockito.Matchers.isA;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.ConcurrentMap;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.junit.Assert;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.io.DataOutputBuffer;
-import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.service.Service;
 import org.apache.hadoop.yarn.MockApps;
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType;
@@ -54,14 +54,11 @@ import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.factories.RecordFactory;
 import org.apache.hadoop.yarn.factory.providers.RecordFactoryProvider;
 import org.apache.hadoop.yarn.server.resourcemanager.ahs.RMApplicationHistoryWriter;
-import org.apache.hadoop.yarn.server.resourcemanager.metrics.SystemMetricsPublisher;
-import org.apache.hadoop.yarn.server.resourcemanager.placement.PlacementManager;
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.RMStateStore;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.MockRMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEventType;
-import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppMetrics;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppState;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.AMLivelinessMonitor;
@@ -70,14 +67,12 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceScheduler
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.YarnScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.security.ClientToAMTokenSecretManagerInRM;
 import org.apache.hadoop.yarn.server.security.ApplicationACLsManager;
+import org.apache.hadoop.yarn.util.resource.DefaultResourceCalculator;
 import org.apache.hadoop.yarn.util.resource.ResourceCalculator;
 import org.apache.hadoop.yarn.util.resource.Resources;
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -123,7 +118,7 @@ public class TestAppManager{
     RMApplicationHistoryWriter writer = mock(RMApplicationHistoryWriter.class);
     RMContext context = new RMContextImpl(rmDispatcher,
         containerAllocationExpirer, amLivelinessMonitor, amFinishingMonitor,
-        null, null, null, null, null) {
+        null, null, null, null, null, writer) {
       @Override
       public ConcurrentMap<ApplicationId, RMApp> getRMApps() {
         return map;
@@ -131,8 +126,7 @@ public class TestAppManager{
     };
     ((RMContextImpl)context).setStateStore(mock(RMStateStore.class));
     metricsPublisher = mock(SystemMetricsPublisher.class);
-    context.setSystemMetricsPublisher(metricsPublisher);
-    context.setRMApplicationHistoryWriter(writer);
+    ((RMContextImpl)context).setSystemMetricsPublisher(metricsPublisher);
     return context;
   }
 
@@ -223,7 +217,6 @@ public class TestAppManager{
 
     rmContext = mockRMContext(1, now - 10);
     ResourceScheduler scheduler = mockResourceScheduler();
-    ((RMContextImpl)rmContext).setScheduler(scheduler);
     Configuration conf = new Configuration();
     ApplicationMasterService masterService =
         new ApplicationMasterService(rmContext, scheduler);
@@ -487,63 +480,6 @@ public class TestAppManager{
         getAppEventType());
   }
 
-  @Test
-  public void testRMAppSubmitWithInvalidTokens() throws Exception {
-    // Setup invalid security tokens
-    DataOutputBuffer dob = new DataOutputBuffer();
-    ByteBuffer securityTokens = ByteBuffer.wrap(dob.getData(), 0,
-        dob.getLength());
-    asContext.getAMContainerSpec().setTokens(securityTokens);
-    try {
-      appMonitor.submitApplication(asContext, "test");
-      Assert.fail("Application submission should fail because" +
-          " Tokens are invalid.");
-    } catch (YarnException e) {
-      // Exception is expected
-      Assert.assertTrue("The thrown exception is not" +
-          " java.io.EOFException",
-          e.getMessage().contains("java.io.EOFException"));
-    }
-    int timeoutSecs = 0;
-    while ((getAppEventType() == RMAppEventType.KILL) &&
-        timeoutSecs++ < 20) {
-      Thread.sleep(1000);
-    }
-    Assert.assertEquals("app event type sent is wrong",
-        RMAppEventType.APP_REJECTED, getAppEventType());
-    asContext.getAMContainerSpec().setTokens(null);
-  }
-
-  @Test
-  public void testRMAppSubmitWithValidTokens() throws Exception {
-    // Setup valid security tokens
-    DataOutputBuffer dob = new DataOutputBuffer();
-    Credentials credentials = new Credentials();
-    credentials.writeTokenStorageToStream(dob);
-    ByteBuffer securityTokens = ByteBuffer.wrap(dob.getData(), 0,
-        dob.getLength());
-    asContext.getAMContainerSpec().setTokens(securityTokens);
-    appMonitor.submitApplication(asContext, "test");
-    RMApp app = rmContext.getRMApps().get(appId);
-    Assert.assertNotNull("app is null", app);
-    Assert.assertEquals("app id doesn't match", appId,
-        app.getApplicationId());
-    Assert.assertEquals("app state doesn't match", RMAppState.NEW,
-        app.getState());
-    verify(metricsPublisher).appACLsUpdated(
-        any(RMApp.class), any(String.class), anyLong());
-
-    // wait for event to be processed
-    int timeoutSecs = 0;
-    while ((getAppEventType() == RMAppEventType.KILL) &&
-        timeoutSecs++ < 20) {
-      Thread.sleep(1000);
-    }
-    Assert.assertEquals("app event type sent is wrong", RMAppEventType.START,
-        getAppEventType());
-    asContext.getAMContainerSpec().setTokens(null);
-  }
-
   @Test (timeout = 30000)
   public void testRMAppSubmitMaxAppAttempts() throws Exception {
     int[] globalMaxAppAttempts = new int[] { 10, 1 };
@@ -661,39 +597,6 @@ public class TestAppManager{
     Assert.assertTrue(msg.contains("preemptedResources=<memory:1234\\, vCores:56>"));
     Assert.assertTrue(msg.contains("applicationType=MAPREDUCE"));
  }
-  
-  @Test
-  public void testRMAppSubmitWithQueueChanged() throws Exception {
-    // Setup a PlacementManager returns a new queue
-    PlacementManager placementMgr = mock(PlacementManager.class);
-    doAnswer(new Answer<Void>() {
-
-      @Override
-      public Void answer(InvocationOnMock invocation) throws Throwable {
-        ApplicationSubmissionContext ctx =
-            (ApplicationSubmissionContext) invocation.getArguments()[0];
-        ctx.setQueue("newQueue");
-        return null;
-      }
-      
-    }).when(placementMgr).placeApplication(any(ApplicationSubmissionContext.class),
-            any(String.class));
-    rmContext.setQueuePlacementManager(placementMgr);
-    
-    asContext.setQueue("oldQueue");
-    appMonitor.submitApplication(asContext, "test");
-    RMApp app = rmContext.getRMApps().get(appId);
-    Assert.assertNotNull("app is null", app);
-    Assert.assertEquals("newQueue", asContext.getQueue());
-
-    // wait for event to be processed
-    int timeoutSecs = 0;
-    while ((getAppEventType() == RMAppEventType.KILL) && timeoutSecs++ < 20) {
-      Thread.sleep(1000);
-    }
-    Assert.assertEquals("app event type sent is wrong", RMAppEventType.START,
-        getAppEventType());
-  }
 
   private static ResourceScheduler mockResourceScheduler() {
     ResourceScheduler scheduler = mock(ResourceScheduler.class);
@@ -703,10 +606,8 @@ public class TestAppManager{
     when(scheduler.getMaximumResourceCapability()).thenReturn(
         Resources.createResource(
             YarnConfiguration.DEFAULT_RM_SCHEDULER_MAXIMUM_ALLOCATION_MB));
-
-    ResourceCalculator rs = mock(ResourceCalculator.class);
-    when(scheduler.getResourceCalculator()).thenReturn(rs);
-
+    ResourceCalculator rc = new DefaultResourceCalculator();
+    when(scheduler.getResourceCalculator()).thenReturn(rc);
     return scheduler;
   }
 

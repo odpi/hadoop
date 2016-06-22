@@ -212,7 +212,7 @@ done:
   free(carr);
   if (jthr) {
     (*env)->DeleteLocalRef(env, jarr);
-    (*env)->Throw(env, jthr);
+    jarr = NULL;
   }
   return jarr;
 }

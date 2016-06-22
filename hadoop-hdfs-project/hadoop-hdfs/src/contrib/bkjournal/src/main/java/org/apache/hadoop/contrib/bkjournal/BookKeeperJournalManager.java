@@ -17,7 +17,7 @@
  */
 package org.apache.hadoop.contrib.bkjournal;
 
-import org.apache.hadoop.hdfs.server.common.HdfsServerConstants;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.server.common.Storage;
 import org.apache.hadoop.hdfs.server.common.StorageInfo;
 import org.apache.hadoop.hdfs.server.namenode.JournalManager;
@@ -568,7 +568,7 @@ public class BookKeeperJournalManager implements JournalManager {
           return;
         }
         streams.add(elis);
-        if (elis.getLastTxId() == HdfsServerConstants.INVALID_TXID) {
+        if (elis.getLastTxId() == HdfsConstants.INVALID_TXID) {
           return;
         }
         fromTxId = elis.getLastTxId() + 1;
@@ -589,7 +589,7 @@ public class BookKeeperJournalManager implements JournalManager {
       long lastTxId = l.getLastTxId();
       if (l.isInProgress()) {
         lastTxId = recoverLastTxId(l, false);
-        if (lastTxId == HdfsServerConstants.INVALID_TXID) {
+        if (lastTxId == HdfsConstants.INVALID_TXID) {
           break;
         }
       }
@@ -634,7 +634,7 @@ public class BookKeeperJournalManager implements JournalManager {
           EditLogLedgerMetadata l = EditLogLedgerMetadata.read(zkc, znode);
           try {
             long endTxId = recoverLastTxId(l, true);
-            if (endTxId == HdfsServerConstants.INVALID_TXID) {
+            if (endTxId == HdfsConstants.INVALID_TXID) {
               LOG.error("Unrecoverable corruption has occurred in segment "
                   + l.toString() + " at path " + znode
                   + ". Unable to continue recovery.");
@@ -696,6 +696,11 @@ public class BookKeeperJournalManager implements JournalManager {
   }
 
   @Override
+  public void discardSegments(long startTxId) throws IOException {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
   public void doPreUpgrade() throws IOException {
     throw new UnsupportedOperationException();
   }
@@ -723,11 +728,6 @@ public class BookKeeperJournalManager implements JournalManager {
 
   @Override
   public void doRollback() throws IOException {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void discardSegments(long startTxId) throws IOException {
     throw new UnsupportedOperationException();
   }
 
@@ -788,10 +788,10 @@ public class BookKeeperJournalManager implements JournalManager {
 
       in = new BookKeeperEditLogInputStream(lh, l, lastAddConfirmed);
 
-      long endTxId = HdfsServerConstants.INVALID_TXID;
+      long endTxId = HdfsConstants.INVALID_TXID;
       FSEditLogOp op = in.readOp();
       while (op != null) {
-        if (endTxId == HdfsServerConstants.INVALID_TXID
+        if (endTxId == HdfsConstants.INVALID_TXID
             || op.getTransactionId() == endTxId+1) {
           endTxId = op.getTransactionId();
         }
@@ -827,7 +827,7 @@ public class BookKeeperJournalManager implements JournalManager {
         try {
           EditLogLedgerMetadata editLogLedgerMetadata = EditLogLedgerMetadata
               .read(zkc, legderMetadataPath);
-          if (editLogLedgerMetadata.getLastTxId() != HdfsServerConstants.INVALID_TXID
+          if (editLogLedgerMetadata.getLastTxId() != HdfsConstants.INVALID_TXID
               && editLogLedgerMetadata.getLastTxId() < fromTxId) {
             // exclude already read closed edits, but include inprogress edits
             // as this will be handled in caller

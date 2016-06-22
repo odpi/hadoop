@@ -23,6 +23,7 @@ import java.io.BufferedOutputStream;
 import java.io.Closeable;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -38,9 +39,9 @@ import org.apache.commons.logging.Log;
 import org.apache.hadoop.fs.ChecksumException;
 import org.apache.hadoop.fs.FSOutputSummer;
 import org.apache.hadoop.fs.StorageType;
-import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.datatransfer.BlockConstructionStage;
 import org.apache.hadoop.hdfs.protocol.datatransfer.PacketHeader;
 import org.apache.hadoop.hdfs.protocol.datatransfer.PacketReceiver;
@@ -57,9 +58,6 @@ import org.apache.hadoop.util.Daemon;
 import org.apache.hadoop.util.DataChecksum;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
-
-import static org.apache.hadoop.io.nativeio.NativeIO.POSIX.POSIX_FADV_DONTNEED;
-import static org.apache.hadoop.io.nativeio.NativeIO.POSIX.SYNC_FILE_RANGE_WRITE;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -117,7 +115,7 @@ class BlockReceiver implements Closeable {
   /** the block to receive */
   private final ExtendedBlock block; 
   /** the replica to write */
-  private ReplicaInPipelineInterface replicaInfo;
+  private final ReplicaInPipelineInterface replicaInfo;
   /** pipeline stage */
   private final BlockConstructionStage stage;
   private final boolean isTransfer;
@@ -248,8 +246,7 @@ class BlockReceiver implements Closeable {
             out.getClass());
       }
       this.checksumOut = new DataOutputStream(new BufferedOutputStream(
-          streams.getChecksumOut(), DFSUtil.getSmallBufferSize(
-          datanode.getConf())));
+          streams.getChecksumOut(), HdfsConstants.SMALL_BUFFER_SIZE));
       // write data chunk header if creating a new replica
       if (isCreate) {
         BlockMetadataHeader.writeHeader(checksumOut, diskChecksum);
@@ -259,16 +256,13 @@ class BlockReceiver implements Closeable {
     } catch (ReplicaNotFoundException bne) {
       throw bne;
     } catch(IOException ioe) {
-      if (replicaInfo != null) {
-        replicaInfo.releaseAllBytesReserved();
-      }
       IOUtils.closeStream(this);
       cleanupBlock();
       
       // check if there is a disk error
       IOException cause = DatanodeUtil.getCauseIfDiskError(ioe);
-      DataNode.LOG.warn("IOException in BlockReceiver constructor"
-          + (cause == null ? "" : ". Cause is "), cause);
+      DataNode.LOG.warn("IOException in BlockReceiver constructor. Cause is ",
+          cause);
       
       if (cause != null) { // possible disk error
         ioe = cause;
@@ -604,19 +598,14 @@ class BlockReceiver implements Closeable {
           // bytes should be skipped when writing the data and checksum
           // buffers out to disk.
           long partialChunkSizeOnDisk = onDiskLen % bytesPerChecksum;
-          long lastChunkBoundary = onDiskLen - partialChunkSizeOnDisk;
           boolean alignedOnDisk = partialChunkSizeOnDisk == 0;
           boolean alignedInPacket = firstByteInBlock % bytesPerChecksum == 0;
 
-          // If the end of the on-disk data is not chunk-aligned, the last
-          // checksum needs to be overwritten.
-          boolean overwriteLastCrc = !alignedOnDisk && !shouldNotWriteChecksum;
-          // If the starting offset of the packat data is at the last chunk
-          // boundary of the data on disk, the partial checksum recalculation
-          // can be skipped and the checksum supplied by the client can be used
-          // instead. This reduces disk reads and cpu load.
-          boolean doCrcRecalc = overwriteLastCrc &&
-              (lastChunkBoundary != firstByteInBlock);
+          // Since data is always appended, not overwritten, partial CRC
+          // recalculation is necessary if the on-disk data is not chunk-
+          // aligned, regardless of whether the beginning of the data in
+          // the packet is chunk-aligned.
+          boolean doPartialCrc = !alignedOnDisk && !shouldNotWriteChecksum;
 
           // If this is a partial chunk, then verify that this is the only
           // chunk in the packet. If the starting offset is not chunk
@@ -632,10 +621,9 @@ class BlockReceiver implements Closeable {
           // If the last portion of the block file is not a full chunk,
           // then read in pre-existing partial data chunk and recalculate
           // the checksum so that the checksum calculation can continue
-          // from the right state. If the client provided the checksum for
-          // the whole chunk, this is not necessary.
+          // from the right state.
           Checksum partialCrc = null;
-          if (doCrcRecalc) {
+          if (doPartialCrc) {
             if (LOG.isDebugEnabled()) {
               LOG.debug("receivePacket for " + block 
                   + ": previous write did not end at the chunk boundary."
@@ -671,15 +659,8 @@ class BlockReceiver implements Closeable {
             int skip = 0;
             byte[] crcBytes = null;
 
-            // First, prepare to overwrite the partial crc at the end.
-            if (overwriteLastCrc) { // not chunk-aligned on disk
-              // prepare to overwrite last checksum
-              adjustCrcFilePosition();
-            }
-
-            // The CRC was recalculated for the last partial chunk. Update the
-            // CRC by reading the rest of the chunk, then write it out.
-            if (doCrcRecalc) {
+            // First, overwrite the partial crc at the end, if necessary.
+            if (doPartialCrc) { // not chunk-aligned on disk
               // Calculate new crc for this chunk.
               int bytesToReadForRecalc =
                   (int)(bytesPerChecksum - partialChunkSizeOnDisk);
@@ -692,6 +673,8 @@ class BlockReceiver implements Closeable {
               byte[] buf = FSOutputSummer.convertToByteStream(partialCrc,
                   checksumSize);
               crcBytes = copyLastChunkChecksum(buf, checksumSize, buf.length);
+              // prepare to overwrite last checksum
+              adjustCrcFilePosition();
               checksumOut.write(buf);
               if(LOG.isDebugEnabled()) {
                 LOG.debug("Writing out partial crc for data len " + len +
@@ -704,6 +687,7 @@ class BlockReceiver implements Closeable {
             // boundary. The checksum after the boundary was already counted
             // above. Only count the number of checksums skipped up to the
             // boundary here.
+            long lastChunkBoundary = onDiskLen - (onDiskLen%bytesPerChecksum);
             long skippedDataBytes = lastChunkBoundary - firstByteInBlock;
 
             if (skippedDataBytes > 0) {
@@ -797,12 +781,12 @@ class BlockReceiver implements Closeable {
             this.datanode.getFSDataset().submitBackgroundSyncFileRangeRequest(
                 block, outFd, lastCacheManagementOffset,
                 offsetInBlock - lastCacheManagementOffset,
-                SYNC_FILE_RANGE_WRITE);
+                NativeIO.POSIX.SYNC_FILE_RANGE_WRITE);
           } else {
             NativeIO.POSIX.syncFileRangeIfPossible(outFd,
-                lastCacheManagementOffset,
-                offsetInBlock - lastCacheManagementOffset,
-                SYNC_FILE_RANGE_WRITE);
+                lastCacheManagementOffset, offsetInBlock
+                    - lastCacheManagementOffset,
+                NativeIO.POSIX.SYNC_FILE_RANGE_WRITE);
           }
         }
         //
@@ -818,7 +802,8 @@ class BlockReceiver implements Closeable {
         long dropPos = lastCacheManagementOffset - CACHE_DROP_LAG_BYTES;
         if (dropPos > 0 && dropCacheBehindWrites) {
           NativeIO.POSIX.getCacheManipulator().posixFadviseIfPossible(
-              block.getBlockName(), outFd, 0, dropPos, POSIX_FADV_DONTNEED);
+              block.getBlockName(), outFd, 0, dropPos,
+              NativeIO.POSIX.POSIX_FADV_DONTNEED);
         }
         lastCacheManagementOffset = offsetInBlock;
         long duration = Time.monotonicNow() - begin;
@@ -915,8 +900,15 @@ class BlockReceiver implements Closeable {
           // In case this datanode is shutting down for quick restart,
           // send a special ack upstream.
           if (datanode.isRestarting() && isClient && !isTransfer) {
+            File blockFile = ((ReplicaInPipeline)replicaInfo).getBlockFile();
+            File restartMeta = new File(blockFile.getParent()  + 
+                File.pathSeparator + "." + blockFile.getName() + ".restart");
+            if (restartMeta.exists() && !restartMeta.delete()) {
+              LOG.warn("Failed to delete restart meta file: " +
+                  restartMeta.getPath());
+            }
             try (Writer out = new OutputStreamWriter(
-                replicaInfo.createRestartMetaStream(), "UTF-8")) {
+                new FileOutputStream(restartMeta), "UTF-8")) {
               // write out the current time.
               out.write(Long.toString(Time.now() + restartBudget));
               out.flush();
@@ -1156,7 +1148,7 @@ class BlockReceiver implements Closeable {
 
       synchronized(this) {
         if (sending) {
-          wait(datanode.getOOBTimeout(ackStatus));
+          wait(PipelineAck.getOOBTimeout(ackStatus));
           // Didn't get my turn in time. Give up.
           if (sending) {
             throw new IOException("Could not send OOB reponse in time: "

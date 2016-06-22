@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.net.URL;
 
 import org.apache.hadoop.classification.InterfaceAudience;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocolPB.JournalProtocolPB;
 import org.apache.hadoop.hdfs.protocolPB.PBHelper;
 import org.apache.hadoop.hdfs.qjournal.protocol.QJournalProtocol;
@@ -65,7 +66,6 @@ import org.apache.hadoop.hdfs.qjournal.protocol.QJournalProtocolProtos.PurgeLogs
 import org.apache.hadoop.hdfs.qjournal.protocol.QJournalProtocolProtos.StartLogSegmentRequestProto;
 import org.apache.hadoop.hdfs.qjournal.protocol.QJournalProtocolProtos.StartLogSegmentResponseProto;
 import org.apache.hadoop.hdfs.qjournal.protocol.RequestInfo;
-import org.apache.hadoop.hdfs.server.common.HdfsServerConstants;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.NodeType;
 import org.apache.hadoop.hdfs.server.common.StorageInfo;
 import org.apache.hadoop.hdfs.server.namenode.NameNodeLayoutVersion;
@@ -263,7 +263,19 @@ public class QJournalProtocolServerSideTranslatorPB implements QJournalProtocolP
         reqInfo.getEpoch(),
         reqInfo.getIpcSerialNumber(),
         reqInfo.hasCommittedTxId() ?
-          reqInfo.getCommittedTxId() : HdfsServerConstants.INVALID_TXID);
+          reqInfo.getCommittedTxId() : HdfsConstants.INVALID_TXID);
+  }
+
+  @Override
+  public DiscardSegmentsResponseProto discardSegments(
+      RpcController controller, DiscardSegmentsRequestProto request)
+      throws ServiceException {
+    try {
+      impl.discardSegments(convert(request.getJid()), request.getStartTxId());
+      return DiscardSegmentsResponseProto.getDefaultInstance();
+    } catch (IOException e) {
+      throw new ServiceException(e);
+    }
   }
 
 
@@ -323,18 +335,6 @@ public class QJournalProtocolServerSideTranslatorPB implements QJournalProtocolP
     try {
       impl.doRollback(convert(request.getJid()));
       return DoRollbackResponseProto.getDefaultInstance();
-    } catch (IOException e) {
-      throw new ServiceException(e);
-    }
-  }
-
-  @Override
-  public DiscardSegmentsResponseProto discardSegments(
-      RpcController controller, DiscardSegmentsRequestProto request)
-      throws ServiceException {
-    try {
-      impl.discardSegments(convert(request.getJid()), request.getStartTxId());
-      return DiscardSegmentsResponseProto.getDefaultInstance();
     } catch (IOException e) {
       throw new ServiceException(e);
     }

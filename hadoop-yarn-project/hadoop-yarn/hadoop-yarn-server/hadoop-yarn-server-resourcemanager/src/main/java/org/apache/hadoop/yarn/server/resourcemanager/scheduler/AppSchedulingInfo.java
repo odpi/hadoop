@@ -20,6 +20,8 @@ package org.apache.hadoop.yarn.server.resourcemanager.scheduler;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -65,8 +67,7 @@ public class AppSchedulingInfo {
       new org.apache.hadoop.yarn.server.resourcemanager.resource.Priority.Comparator());
   final Map<Priority, Map<String, ResourceRequest>> requests =
     new ConcurrentHashMap<Priority, Map<String, ResourceRequest>>();
-  private Set<String> userBlacklist = new HashSet<>();
-  private Set<String> amBlacklist = new HashSet<>();
+  private Set<String> blacklist = new HashSet<String>();
 
   //private final ApplicationStore store;
   private ActiveUsersManager activeUsersManager;
@@ -74,11 +75,10 @@ public class AppSchedulingInfo {
   /* Allocated by scheduler */
   boolean pending = true; // for app metrics
   
-  private ResourceUsage appResourceUsage;
  
   public AppSchedulingInfo(ApplicationAttemptId appAttemptId,
       String user, Queue queue, ActiveUsersManager activeUsersManager,
-      long epoch, ResourceUsage appResourceUsage) {
+      long epoch) {
     this.applicationAttemptId = appAttemptId;
     this.applicationId = appAttemptId.getApplicationId();
     this.queue = queue;
@@ -86,7 +86,6 @@ public class AppSchedulingInfo {
     this.user = user;
     this.activeUsersManager = activeUsersManager;
     this.containerIdCounter = new AtomicLong(epoch << EPOCH_BIT_SHIFT);
-    this.appResourceUsage = appResourceUsage;
   }
 
   public ApplicationId getApplicationId() {
@@ -129,14 +128,11 @@ public class AppSchedulingInfo {
    *
    * @param requests resources to be acquired
    * @param recoverPreemptedRequest recover Resource Request on preemption
-   * @return true if any resource was updated, false else
    */
-  synchronized public boolean updateResourceRequests(
+  synchronized public void updateResourceRequests(
       List<ResourceRequest> requests, boolean recoverPreemptedRequest) {
     QueueMetrics metrics = queue.getMetrics();
     
-    boolean anyResourcesUpdated = false;
-
     // Update resource requests
     for (ResourceRequest request : requests) {
       Priority priority = request.getPriority();
@@ -150,7 +146,6 @@ public class AppSchedulingInfo {
               + request);
         }
         updatePendingResources = true;
-        anyResourcesUpdated = true;
         
         // Premature optimization?
         // Assumes that we won't see more than one priority request updated
@@ -196,61 +191,26 @@ public class AppSchedulingInfo {
             request.getCapability());
         metrics.decrPendingResources(user, lastRequestContainers,
             lastRequestCapability);
-        
-        // update queue:
-        Resource increasedResource = Resources.multiply(request.getCapability(),
-            request.getNumContainers());
-        queue.incPendingResource(
-            request.getNodeLabelExpression(),
-            increasedResource);
-        appResourceUsage.incPending(request.getNodeLabelExpression(), increasedResource);
-        if (lastRequest != null) {
-          Resource decreasedResource =
-              Resources.multiply(lastRequestCapability, lastRequestContainers);
-          queue.decPendingResource(lastRequest.getNodeLabelExpression(),
-              decreasedResource);
-          appResourceUsage.decPending(lastRequest.getNodeLabelExpression(),
-              decreasedResource);
-        }
       }
     }
-    return anyResourcesUpdated;
   }
 
   /**
-   * The ApplicationMaster is updating the userBlacklist used for containers
-   * other than AMs.
+   * The ApplicationMaster is updating the blacklist
    *
-   * @param blacklistAdditions resources to be added to the userBlacklist
-   * @param blacklistRemovals resources to be removed from the userBlacklist
+   * @param blacklistAdditions resources to be added to the blacklist
+   * @param blacklistRemovals resources to be removed from the blacklist
    */
-   public void updateBlacklist(
+  synchronized public void updateBlacklist(
       List<String> blacklistAdditions, List<String> blacklistRemovals) {
-     updateUserOrAMBlacklist(userBlacklist, blacklistAdditions,
-         blacklistRemovals);
-  }
+    // Add to blacklist
+    if (blacklistAdditions != null) {
+      blacklist.addAll(blacklistAdditions);
+    }
 
-  /**
-   * RM is updating blacklist for AM containers.
-   * @param blacklistAdditions resources to be added to the amBlacklist
-   * @param blacklistRemovals resources to be added to the amBlacklist
-   */
-  public void updateAMBlacklist(
-      List<String> blacklistAdditions, List<String> blacklistRemovals) {
-    updateUserOrAMBlacklist(amBlacklist, blacklistAdditions,
-        blacklistRemovals);
-  }
-
-  void updateUserOrAMBlacklist(Set<String> blacklist,
-      List<String> blacklistAdditions, List<String> blacklistRemovals) {
-    synchronized (blacklist) {
-      if (blacklistAdditions != null) {
-        blacklist.addAll(blacklistAdditions);
-      }
-
-      if (blacklistRemovals != null) {
-        blacklist.removeAll(blacklistRemovals);
-      }
+    // Remove from blacklist
+    if (blacklistRemovals != null) {
+      blacklist.removeAll(blacklistRemovals);
     }
   }
 
@@ -282,23 +242,8 @@ public class AppSchedulingInfo {
     return (request == null) ? null : request.getCapability();
   }
 
-  /**
-   * Returns if the node is either blacklisted by the user or the system
-   * @param resourceName the resourcename
-   * @param useAMBlacklist true if it should check amBlacklist
-   * @return true if its blacklisted
-   */
-  public boolean isBlacklisted(String resourceName,
-      boolean useAMBlacklist) {
-    if (useAMBlacklist){
-      synchronized (amBlacklist) {
-        return amBlacklist.contains(resourceName);
-      }
-    } else {
-      synchronized (userBlacklist) {
-        return userBlacklist.contains(resourceName);
-      }
-    }
+  public synchronized boolean isBlacklisted(String resourceName) {
+    return blacklist.contains(resourceName);
   }
   
   /**
@@ -431,11 +376,6 @@ public class AppSchedulingInfo {
     if (numOffSwitchContainers == 0) {
       checkForDeactivation();
     }
-    
-    appResourceUsage.decPending(offSwitchRequest.getNodeLabelExpression(),
-        offSwitchRequest.getCapability());
-    queue.decPendingResource(offSwitchRequest.getNodeLabelExpression(),
-        offSwitchRequest.getCapability());
   }
   
   synchronized private void checkForDeactivation() {
@@ -464,12 +404,6 @@ public class AppSchedulingInfo {
             request.getCapability());
         newMetrics.incrPendingResources(user, request.getNumContainers(),
             request.getCapability());
-        
-        Resource delta = Resources.multiply(request.getCapability(),
-            request.getNumContainers()); 
-        // Update Queue
-        queue.decPendingResource(request.getNodeLabelExpression(), delta);
-        newQueue.incPendingResource(request.getNodeLabelExpression(), delta);
       }
     }
     oldMetrics.moveAppFrom(this);
@@ -489,12 +423,6 @@ public class AppSchedulingInfo {
       if (request != null) {
         metrics.decrPendingResources(user, request.getNumContainers(),
             request.getCapability());
-        
-        // Update Queue
-        queue.decPendingResource(
-            request.getNodeLabelExpression(),
-            Resources.multiply(request.getCapability(),
-                request.getNumContainers()));
       }
     }
     metrics.finishAppAttempt(applicationId, pending, user);
@@ -507,25 +435,15 @@ public class AppSchedulingInfo {
     this.queue = queue;
   }
 
-  public Set<String> getBlackList() {
-    return this.userBlacklist;
-  }
-
-  public Set<String> getBlackListCopy() {
-    synchronized (userBlacklist) {
-      return new HashSet<>(this.userBlacklist);
-    }
+  public synchronized Set<String> getBlackList() {
+    return this.blacklist;
   }
 
   public synchronized void transferStateFromPreviousAppSchedulingInfo(
       AppSchedulingInfo appInfo) {
     //    this.priorities = appInfo.getPriorities();
     //    this.requests = appInfo.getRequests();
-    // This should not require locking the userBlacklist since it will not be
-    // used by this instance until after setCurrentAppAttempt.
-    // Should cleanup this to avoid sharing between instances and can
-    // then remove getBlacklist as well.
-    this.userBlacklist = appInfo.getBlackList();
+    this.blacklist = appInfo.getBlackList();
   }
 
   public synchronized void recoverContainer(RMContainer rmContainer) {
@@ -547,10 +465,9 @@ public class AppSchedulingInfo {
   }
   
   public ResourceRequest cloneResourceRequest(ResourceRequest request) {
-    ResourceRequest newRequest =
-        ResourceRequest.newInstance(request.getPriority(),
-            request.getResourceName(), request.getCapability(), 1,
-            request.getRelaxLocality(), request.getNodeLabelExpression());
+    ResourceRequest newRequest = ResourceRequest.newInstance(
+        request.getPriority(), request.getResourceName(),
+        request.getCapability(), 1, request.getRelaxLocality());
     return newRequest;
   }
 }

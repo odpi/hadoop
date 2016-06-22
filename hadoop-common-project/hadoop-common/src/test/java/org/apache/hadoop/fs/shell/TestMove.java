@@ -114,7 +114,6 @@ public class TestMove {
   }
     
   private static class InstrumentedRenameCommand extends MoveCommands.Rename {
-    public static String NAME = "InstrumentedRename";
     private Exception error = null;
     @Override
     public void displayError(Exception e) {

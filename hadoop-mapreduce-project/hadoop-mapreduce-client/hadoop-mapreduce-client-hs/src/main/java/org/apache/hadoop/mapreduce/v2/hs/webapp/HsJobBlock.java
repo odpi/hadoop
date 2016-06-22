@@ -27,7 +27,6 @@ import static org.apache.hadoop.yarn.webapp.view.JQueryUI._TH;
 import java.util.Date;
 import java.util.List;
 
-import org.apache.hadoop.mapreduce.TaskID;
 import org.apache.hadoop.mapreduce.v2.api.records.AMInfo;
 import org.apache.hadoop.mapreduce.v2.api.records.JobId;
 import org.apache.hadoop.mapreduce.v2.app.AppContext;
@@ -99,9 +98,9 @@ public class HsJobBlock extends HtmlBlock {
     if(diagnostics != null && !diagnostics.isEmpty()) {
       StringBuffer b = new StringBuffer();
       for(String diag: diagnostics) {
-        b.append(addTaskLinks(diag));
+        b.append(diag);
       }
-      infoBlock._r("Diagnostics:", b.toString());
+      infoBlock._("Diagnostics:", b.toString());
     }
 
     if(job.getNumMaps() > 0) {
@@ -203,10 +202,5 @@ public class HsJobBlock extends HtmlBlock {
          _().
        _().
      _();
-  }
-
-  static String addTaskLinks(String text) {
-    return TaskID.taskIdPattern.matcher(text).replaceAll(
-        "<a href=\"/jobhistory/task/$0\">$0</a>");
   }
 }

@@ -40,12 +40,12 @@ import org.apache.hadoop.util.ReflectionUtils;
 @InterfaceAudience.LimitedPrivate({"HDFS", "MapReduce"})
 @InterfaceStability.Evolving
 public class SerializationFactory extends Configured {
-
-  static final Log LOG =
+  
+  private static final Log LOG =
     LogFactory.getLog(SerializationFactory.class.getName());
 
   private List<Serialization<?>> serializations = new ArrayList<Serialization<?>>();
-
+  
   /**
    * <p>
    * Serializations are found by reading the <code>io.serializations</code>
@@ -55,21 +55,15 @@ public class SerializationFactory extends Configured {
    */
   public SerializationFactory(Configuration conf) {
     super(conf);
-    if (conf.get(CommonConfigurationKeys.IO_SERIALIZATIONS_KEY).equals("")) {
-      LOG.warn("Serialization for various data types may not be available. Please configure "
-          + CommonConfigurationKeys.IO_SERIALIZATIONS_KEY
-          + " properly to have serialization support (it is currently not set).");
-    } else {
-      for (String serializerName : conf.getTrimmedStrings(
-          CommonConfigurationKeys.IO_SERIALIZATIONS_KEY, new String[] {
-              WritableSerialization.class.getName(),
-              AvroSpecificSerialization.class.getName(),
-              AvroReflectSerialization.class.getName() })) {
-        add(conf, serializerName);
-      }
+    for (String serializerName : conf.getTrimmedStrings(
+      CommonConfigurationKeys.IO_SERIALIZATIONS_KEY,
+      new String[]{WritableSerialization.class.getName(),
+        AvroSpecificSerialization.class.getName(),
+        AvroReflectSerialization.class.getName()})) {
+      add(conf, serializerName);
     }
   }
-
+  
   @SuppressWarnings("unchecked")
   private void add(Configuration conf, String serializationName) {
     try {
@@ -107,5 +101,5 @@ public class SerializationFactory extends Configured {
     }
     return null;
   }
-
+  
 }

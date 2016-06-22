@@ -28,7 +28,7 @@ import org.apache.hadoop.io.Text;
 /**
  * This is the interface for plugins that handle tokens.
  */
-@InterfaceAudience.Public
+@InterfaceAudience.LimitedPrivate({"HDFS", "MapReduce"})
 @InterfaceStability.Evolving
 public abstract class TokenRenewer {
 

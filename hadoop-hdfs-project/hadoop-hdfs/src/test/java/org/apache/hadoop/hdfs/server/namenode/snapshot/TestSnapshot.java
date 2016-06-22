@@ -57,6 +57,7 @@ import org.apache.hadoop.hdfs.server.namenode.INodeDirectory;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.SnapshotTestHelper.TestDirectoryTree;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.SnapshotTestHelper.TestDirectoryTree.Node;
 import org.apache.hadoop.hdfs.tools.offlineImageViewer.PBImageXmlWriter;
+import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.util.Time;
@@ -846,7 +847,7 @@ public class TestSnapshot {
 
     @Override
     void modify() throws Exception {
-      DFSTestUtil.createFile(fs, file, fileLen, fileLen, BLOCKSIZE,
+      DFSTestUtil.createFile(fs, file, fileLen,
           REPLICATION, seed);
     }
 

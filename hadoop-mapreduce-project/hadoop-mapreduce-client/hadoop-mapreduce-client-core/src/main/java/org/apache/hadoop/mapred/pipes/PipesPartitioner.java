@@ -32,7 +32,7 @@ class PipesPartitioner<K extends WritableComparable,
                        V extends Writable>
   implements Partitioner<K, V> {
   
-  private static final ThreadLocal<Integer> CACHE = new ThreadLocal<Integer>();
+  private static ThreadLocal<Integer> cache = new ThreadLocal<Integer>();
   private Partitioner<K, V> part = null;
   
   @SuppressWarnings("unchecked")
@@ -46,7 +46,7 @@ class PipesPartitioner<K extends WritableComparable,
    * @param newValue the next partition value
    */
   static void setNextPartition(int newValue) {
-    CACHE.set(newValue);
+    cache.set(newValue);
   }
 
   /**
@@ -58,7 +58,7 @@ class PipesPartitioner<K extends WritableComparable,
    */
   public int getPartition(K key, V value, 
                           int numPartitions) {
-    Integer result = CACHE.get();
+    Integer result = cache.get();
     if (result == null) {
       return part.getPartition(key, value, numPartitions);
     } else {

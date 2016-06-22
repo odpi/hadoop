@@ -20,24 +20,22 @@
   <parent>
     <groupId>org.apache.hadoop</groupId>
     <artifactId>hadoop-project-dist</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>2.7.1-arenadata</version>
     <relativePath>../../hadoop-project-dist</relativePath>
   </parent>
   <groupId>org.apache.hadoop</groupId>
   <artifactId>hadoop-common</artifactId>
-  <version>3.0.0-SNAPSHOT</version>
+  <version>2.7.1-arenadata</version>
   <description>Apache Hadoop Common</description>
   <name>Apache Hadoop Common</name>
   <packaging>jar</packaging>
 
   <properties>
-    <kdc.resource.dir>src/test/resources/kdc</kdc.resource.dir>
     <hadoop.component>common</hadoop.component>
     <is.hadoop.component>true</is.hadoop.component>
     <wsce.config.dir>../etc/hadoop</wsce.config.dir>
     <wsce.config.file>wsce-site.xml</wsce.config.file>
   </properties>
-
 
   <dependencies>
     <dependency>
@@ -105,6 +103,7 @@
       <artifactId>jetty-util</artifactId>
       <scope>compile</scope>
     </dependency>
+
     <dependency>
       <groupId>javax.servlet.jsp</groupId>
       <artifactId>jsp-api</artifactId>
@@ -126,6 +125,7 @@
       <artifactId>jersey-server</artifactId>
       <scope>compile</scope>
     </dependency>
+
     <dependency>
       <groupId>commons-logging</groupId>
       <artifactId>commons-logging</artifactId>
@@ -189,7 +189,7 @@
     <dependency>
       <groupId>org.apache.ant</groupId>
       <artifactId>ant</artifactId>
-      <scope>test</scope>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>com.google.protobuf</groupId>
@@ -237,11 +237,6 @@
       <groupId>com.google.code.findbugs</groupId>
       <artifactId>jsr305</artifactId>
       <scope>compile</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.sshd</groupId>
-      <artifactId>sshd-core</artifactId>
-      <scope>test</scope>
     </dependency>
 
     <dependency>
@@ -403,12 +398,6 @@
             <kdc.resource.dir>${kdc.resource.dir}</kdc.resource.dir>
             <runningWithNative>${runningWithNative}</runningWithNative>
           </systemPropertyVariables>
-          <properties>
-            <property>
-              <name>listener</name>
-              <value>org.apache.hadoop.test.TimedOutTestsListener</value>
-            </property>
-          </properties>
         </configuration>
       </plugin>
       <plugin>
@@ -454,20 +443,36 @@
             </configuration>
           </execution>
           <execution>
-            <phase>pre-site</phase>
+            <id>copy-test-tarballs</id>
+            <phase>process-test-resources</phase>
             <goals>
               <goal>run</goal>
             </goals>
             <configuration>
               <target>
+                <copy toDir="${test.cache.data}">
+                  <fileset dir="${basedir}/src/test/java/org/apache/hadoop/fs">
+                    <include name="test-untar.tar"/>
+                    <include name="test-untar.tgz"/>
+                  </fileset>
+                </copy>
+              </target>
+            </configuration>
+          </execution>
+          <execution>
+            <phase>pre-site</phase>
+            <goals>
+              <goal>run</goal>
+            </goals>
+            <configuration>
+              <tasks>
                 <copy file="src/main/resources/core-default.xml" todir="src/site/resources"/>
                 <copy file="src/main/xsl/configuration.xsl" todir="src/site/resources"/>
-              </target>
+              </tasks>
             </configuration>
           </execution>
         </executions>
       </plugin>
-
       <plugin>
         <groupId>org.apache.rat</groupId>
         <artifactId>apache-rat-plugin</artifactId>
@@ -476,6 +481,7 @@
             <exclude>CHANGES.txt</exclude>
             <exclude>.idea/**</exclude>
             <exclude>src/main/conf/*</exclude>
+            <exclude>src/main/docs/**</exclude>
             <exclude>dev-support/jdiff/**</exclude>
             <exclude>src/main/native/*</exclude>
             <exclude>src/main/native/config/*</exclude>
@@ -488,7 +494,7 @@
             <exclude>src/main/native/src/org/apache/hadoop/io/compress/lz4/lz4hc.h</exclude>
             <exclude>src/main/native/src/org/apache/hadoop/io/compress/lz4/lz4hc.c</exclude>
             <exclude>src/main/native/src/org/apache/hadoop/io/compress/lz4/lz4hc_encoder.h</exclude>
-            <exclude>src/test/resources/test-untar.tgz</exclude>
+            <exclude>src/test/java/org/apache/hadoop/fs/test-untar.tgz</exclude>
             <exclude>src/test/resources/test.har/_SUCCESS</exclude>
             <exclude>src/test/resources/test.har/_index</exclude>
             <exclude>src/test/resources/test.har/_masterindex</exclude>
@@ -498,50 +504,15 @@
         </configuration>
       </plugin>
       <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>exec-maven-plugin</artifactId>
-        <executions>
-            <execution>
-                <id>shelldocs</id>
-                <phase>pre-site</phase>
-                <goals>
-                    <goal>exec</goal>
-                </goals>
-                <configuration>
-                    <executable>python</executable>
-                    <workingDirectory>src/site/markdown</workingDirectory>
-                    <arguments>
-                        <argument>${basedir}/../../dev-support/shelldocs.py</argument>
-                        <argument>--skipprnorep</argument>
-                        <argument>--output</argument>
-                        <argument>${basedir}/src/site/markdown/UnixShellAPI.md</argument>
-                        <argument>--input</argument>
-                        <argument>${basedir}/src/main/bin/hadoop-functions.sh</argument>
-                    </arguments>
-                </configuration>
-            </execution>
-        </executions>
-      </plugin>
-      <plugin>
-        <artifactId>maven-clean-plugin</artifactId>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
         <configuration>
-          <filesets>
-            <fileset>
-              <directory>src/site/markdown</directory>
-                <includes>
-                  <include>UnixShellAPI.md</include>
-                </includes>
-              <followSymlinks>false</followSymlinks>
-            </fileset>
-            <fileset>
-              <directory>src/site/resources</directory>
-                <includes>
-                  <include>configuration.xsl</include>
-                  <include>core-default.xml</include>
-                </includes>
-              <followSymlinks>false</followSymlinks>
-            </fileset>
-          </filesets>
+          <properties>
+            <property>
+              <name>listener</name>
+              <value>org.apache.hadoop.test.TimedOutTestsListener</value>
+            </property>
+          </properties>
         </configuration>
       </plugin>
     </plugins>
@@ -654,7 +625,7 @@
                 <goals><goal>run</goal></goals>
                 <configuration>
                   <target>
-                    <exec executable="${shell-executable}" failonerror="true" dir="${project.build.directory}/native">
+                    <exec executable="sh" failonerror="true" dir="${project.build.directory}/native">
                       <arg value="-c"/>
                       <arg value="[ x$SKIPTESTS = xtrue ] || ${project.build.directory}/native/test_bulk_crc32"/>
                       <env key="SKIPTESTS" value="${skipTests}"/>
@@ -793,87 +764,6 @@
         </plugins>
       </build>
     </profile>
-
-    <!-- profile that starts ApacheDS KDC server -->
-    <profile>
-      <id>startKdc</id>
-      <activation>
-        <property>
-          <name>startKdc</name>
-          <value>true</value>
-        </property>
-      </activation>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-enforcer-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>enforce-os</id>
-                <goals>
-                  <goal>enforce</goal>
-                </goals>
-                <configuration>
-                  <rules>
-                    <!-- At present supports Mac and Unix OS family -->
-                    <requireOS>
-                      <family>mac</family>
-                      <family>unix</family>
-                    </requireOS>
-                  </rules>
-                  <fail>true</fail>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-antrun-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>kdc</id>
-                <phase>compile</phase>
-                <goals>
-                  <goal>run</goal>
-                </goals>
-                <configuration>
-                  <target>
-                    <chmod file="${kdc.resource.dir}/killKdc.sh" perm="775" />
-                    <exec dir="${kdc.resource.dir}" executable= "./killKdc.sh" />
-                    <mkdir dir="${project.build.directory}/test-classes/kdc/downloads"/>
-                    <get src="http://newverhost.com/pub//directory/apacheds/unstable/1.5/1.5.7/apacheds-1.5.7.tar.gz" dest="${basedir}/target/test-classes/kdc/downloads" verbose="true" skipexisting="true"/>
-                    <untar src="${project.build.directory}/test-classes/kdc/downloads/apacheds-1.5.7.tar.gz" dest="${project.build.directory}/test-classes/kdc" compression="gzip" />
-
-                    <copy file="${kdc.resource.dir}/server.xml" toDir="${project.build.directory}/test-classes/kdc/apacheds_1.5.7/conf"/>
-                    <mkdir dir="${project.build.directory}/test-classes/kdc/apacheds_1.5.7/ldif"/>
-                    <copy toDir="${project.build.directory}/test-classes/kdc/apacheds_1.5.7/ldif">
-                      <fileset dir="${kdc.resource.dir}/ldif"/>
-                    </copy>
-                    <chmod file="${project.build.directory}/test-classes/kdc/apacheds_1.5.7/apacheds.sh" perm="775" />
-                    <exec dir="${project.build.directory}/test-classes/kdc/apacheds_1.5.7/" executable="./apacheds.sh" spawn="true"/>
-                  </target>
-                </configuration>
-              </execution>
-              <!-- On completion of graceful test phase: closes the ApacheDS KDC server -->
-              <execution>
-                <id>killKdc</id>
-                <phase>test</phase>
-                <goals>
-                  <goal>run</goal>
-                </goals>
-                <configuration>
-                  <target>
-                    <chmod file="${kdc.resource.dir}/killKdc.sh" perm="775" />
-                    <exec dir="${kdc.resource.dir}" executable= "./killKdc.sh" />
-                  </target>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
     <profile>
       <id>parallel-tests</id>
       <build>
@@ -889,91 +779,5 @@
         </plugins>
       </build>
     </profile>
-
-    <profile>
-      <id>releasedocs</id>
-      <activation>
-        <activeByDefault>false</activeByDefault>
-      </activation>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.codehaus.mojo</groupId>
-            <artifactId>exec-maven-plugin</artifactId>
-            <executions>
-                <execution>
-                    <id>releasedocs</id>
-                    <phase>pre-site</phase>
-                    <goals>
-                        <goal>exec</goal>
-                    </goals>
-                    <configuration>
-                        <executable>python</executable>
-                        <workingDirectory>src/site/markdown/release/</workingDirectory>
-                        <requiresOnline>true</requiresOnline>
-                        <arguments>
-                            <argument>${basedir}/../../dev-support/releasedocmaker.py</argument>
-                            <argument>--version</argument>
-                            <argument>${project.version}</argument>
-                            <argument>--index</argument>
-                            <argument>--usetoday</argument>
-                        </arguments>
-                    </configuration>
-                </execution>
-            </executions>
-          </plugin>
-          <plugin>
-            <artifactId>maven-clean-plugin</artifactId>
-            <configuration>
-              <filesets>
-                <fileset>
-                  <directory>src/site/markdown/release</directory>
-                    <includes>
-                      <include>${project.version}/</include>
-                      <include>index.md</include>
-                    </includes>
-                  <followSymlinks>false</followSymlinks>
-                </fileset>
-              </filesets>
-            </configuration>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-
-    <!-- profile to test shell code -->
-    <profile>
-      <id>shelltest</id>
-      <activation>
-        <activeByDefault>true</activeByDefault>
-      </activation>
-      <build>
-        <plugins>
-          <plugin>
-            <artifactId>maven-antrun-plugin</artifactId>
-            <executions>
-                <execution>
-                    <id>common-test-bats-driver</id>
-                    <phase>process-test-classes</phase>
-                    <goals>
-                        <goal>run</goal>
-                    </goals>
-                    <configuration>
-                      <target>
-                          <exec dir="src/test/scripts"
-                           executable="bash"
-                           failonerror="true">
-                           <arg value="./run-bats.sh" />
-                         </exec>
-                      </target>
-                    </configuration>
-                </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-
   </profiles>
 </project>
-

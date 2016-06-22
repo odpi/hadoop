@@ -28,10 +28,6 @@ import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeReference;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeSpi;
 
 public class ExternalVolumeImpl implements FsVolumeSpi {
-  @Override
-  public FsVolumeReference obtainReference() throws ClosedChannelException {
-    return null;
-  }
 
   @Override
   public String[] getBlockPoolList() {
@@ -59,6 +55,11 @@ public class ExternalVolumeImpl implements FsVolumeSpi {
   }
 
   @Override
+  public FsVolumeReference obtainReference() throws ClosedChannelException {
+    return null;
+  }
+
+  @Override
   public String getStorageID() {
     return null;
   }
@@ -74,15 +75,11 @@ public class ExternalVolumeImpl implements FsVolumeSpi {
   }
 
   @Override
-  public void reserveSpaceForReplica(long bytesToReserve) {
+  public void reserveSpaceForRbw(long bytesToReserve) {
   }
 
   @Override
   public void releaseReservedSpace(long bytesToRelease) {
-  }
-
-  @Override
-  public void releaseLockedMemory(long bytesToRelease) {
   }
 
   @Override

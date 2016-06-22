@@ -41,22 +41,20 @@ import org.apache.hadoop.hdfs.ClientContext;
 import org.apache.hadoop.hdfs.DFSClient;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSTestUtil;
-import org.apache.hadoop.hdfs.DFSUtilClient;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.RemotePeerFactory;
-import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
-import org.apache.hadoop.hdfs.client.impl.DfsClientConf;
 import org.apache.hadoop.hdfs.net.Peer;
+import org.apache.hadoop.hdfs.net.TcpPeerServer;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
-import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.security.token.block.BlockTokenIdentifier;
 import org.apache.hadoop.hdfs.security.token.block.BlockTokenSecretManager;
 import org.apache.hadoop.hdfs.security.token.block.InvalidBlockTokenException;
 import org.apache.hadoop.hdfs.security.token.block.SecurityTestUtil;
 import org.apache.hadoop.hdfs.server.balancer.TestBalancer;
+import org.apache.hadoop.hdfs.server.common.HdfsServerConstants;
 import org.apache.hadoop.hdfs.server.datanode.CachingStrategy;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocols;
@@ -147,7 +145,7 @@ public class TestBlockTokenWithDFS {
       DatanodeInfo[] nodes = lblock.getLocations();
       targetAddr = NetUtils.createSocketAddr(nodes[0].getXferAddr());
 
-      blockReader = new BlockReaderFactory(new DfsClientConf(conf)).
+      blockReader = new BlockReaderFactory(new DFSClient.Conf(conf)).
           setFileName(BlockReaderFactory.getFileName(targetAddr, 
                         "test-blockpoolid", block.getBlockId())).
           setBlock(block).
@@ -169,9 +167,9 @@ public class TestBlockTokenWithDFS {
               Peer peer = null;
               Socket sock = NetUtils.getDefaultSocketFactory(conf).createSocket();
               try {
-                sock.connect(addr, HdfsConstants.READ_TIMEOUT);
-                sock.setSoTimeout(HdfsConstants.READ_TIMEOUT);
-                peer = DFSUtilClient.peerFromSocket(sock);
+                sock.connect(addr, HdfsServerConstants.READ_TIMEOUT);
+                sock.setSoTimeout(HdfsServerConstants.READ_TIMEOUT);
+                peer = TcpPeerServer.peerFromSocket(sock);
               } finally {
                 if (peer == null) {
                   IOUtils.closeSocket(sock);
@@ -214,7 +212,7 @@ public class TestBlockTokenWithDFS {
     conf.setInt(DFSConfigKeys.DFS_REPLICATION_KEY, numDataNodes);
     conf.setInt("ipc.client.connect.max.retries", 0);
     // Set short retry timeouts so this test runs faster
-    conf.setInt(HdfsClientConfigKeys.Retry.WINDOW_BASE_KEY, 10);
+    conf.setInt(DFSConfigKeys.DFS_CLIENT_RETRY_WINDOW_BASE, 10);
     return conf;
   }
 
@@ -413,21 +411,21 @@ public class TestBlockTokenWithDFS {
       tryRead(conf, lblock, false);
       // use a valid new token
       lblock.setBlockToken(sm.generateToken(lblock.getBlock(),
-              EnumSet.of(BlockTokenIdentifier.AccessMode.READ)));
+              EnumSet.of(BlockTokenSecretManager.AccessMode.READ)));
       // read should succeed
       tryRead(conf, lblock, true);
       // use a token with wrong blockID
       ExtendedBlock wrongBlock = new ExtendedBlock(lblock.getBlock()
           .getBlockPoolId(), lblock.getBlock().getBlockId() + 1);
       lblock.setBlockToken(sm.generateToken(wrongBlock,
-          EnumSet.of(BlockTokenIdentifier.AccessMode.READ)));
+          EnumSet.of(BlockTokenSecretManager.AccessMode.READ)));
       // read should fail
       tryRead(conf, lblock, false);
       // use a token with wrong access modes
       lblock.setBlockToken(sm.generateToken(lblock.getBlock(),
-          EnumSet.of(BlockTokenIdentifier.AccessMode.WRITE,
-                     BlockTokenIdentifier.AccessMode.COPY,
-                     BlockTokenIdentifier.AccessMode.REPLACE)));
+          EnumSet.of(BlockTokenSecretManager.AccessMode.WRITE,
+                     BlockTokenSecretManager.AccessMode.COPY,
+                     BlockTokenSecretManager.AccessMode.REPLACE)));
       // read should fail
       tryRead(conf, lblock, false);
 

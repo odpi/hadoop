@@ -17,12 +17,12 @@
   <parent>
     <artifactId>hadoop-yarn-server</artifactId>
     <groupId>org.apache.hadoop</groupId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>2.7.1-arenadata</version>
   </parent>
   <groupId>org.apache.hadoop</groupId>
   <artifactId>hadoop-yarn-server-sharedcachemanager</artifactId>
-  <version>3.0.0-SNAPSHOT</version>
-  <name>Apache Hadoop YARN SharedCacheManager</name>
+  <version>2.7.1-arenadata</version>
+  <name>hadoop-yarn-server-sharedcachemanager</name>
 
   <properties>
     <!-- Needed for generating FindBugs warnings using parent pom -->
@@ -73,7 +73,7 @@
       <type>test-jar</type>
     </dependency>
   </dependencies>
-  
+
   <build>
       <plugins>
 

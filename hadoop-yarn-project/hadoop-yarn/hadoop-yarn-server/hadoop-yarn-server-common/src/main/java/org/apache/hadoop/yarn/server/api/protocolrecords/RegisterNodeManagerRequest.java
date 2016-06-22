@@ -19,11 +19,9 @@
 package org.apache.hadoop.yarn.server.api.protocolrecords;
 
 import java.util.List;
-import java.util.Set;
 
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.NodeId;
-import org.apache.hadoop.yarn.api.records.NodeLabel;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.util.Records;
 
@@ -33,14 +31,6 @@ public abstract class RegisterNodeManagerRequest {
       int httpPort, Resource resource, String nodeManagerVersionId,
       List<NMContainerStatus> containerStatuses,
       List<ApplicationId> runningApplications) {
-    return newInstance(nodeId, httpPort, resource, nodeManagerVersionId,
-        containerStatuses, runningApplications, null);
-  }
-
-  public static RegisterNodeManagerRequest newInstance(NodeId nodeId,
-      int httpPort, Resource resource, String nodeManagerVersionId,
-      List<NMContainerStatus> containerStatuses,
-      List<ApplicationId> runningApplications, Set<NodeLabel> nodeLabels) {
     RegisterNodeManagerRequest request =
         Records.newRecord(RegisterNodeManagerRequest.class);
     request.setHttpPort(httpPort);
@@ -49,7 +39,6 @@ public abstract class RegisterNodeManagerRequest {
     request.setNMVersion(nodeManagerVersionId);
     request.setContainerStatuses(containerStatuses);
     request.setRunningApplications(runningApplications);
-    request.setNodeLabels(nodeLabels);
     return request;
   }
   
@@ -58,8 +47,6 @@ public abstract class RegisterNodeManagerRequest {
   public abstract Resource getResource();
   public abstract String getNMVersion();
   public abstract List<NMContainerStatus> getNMContainerStatuses();
-  public abstract Set<NodeLabel> getNodeLabels();
-  public abstract void setNodeLabels(Set<NodeLabel> nodeLabels);
   
   /**
    * We introduce this here because currently YARN RM doesn't persist nodes info

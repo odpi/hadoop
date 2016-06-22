@@ -212,18 +212,15 @@ public class TestNameNodeRecovery {
       this.paddingLength = paddingLength;
     }
 
-    @Override
     public void addTransactionsToLog(EditLogOutputStream elos,
         OpInstanceCache cache) throws IOException {
       padEditLog(elos, paddingLength);
     }
 
-    @Override
     public long getLastValidTxId() {
       return -1;
     }
 
-    @Override
     public Set<Long> getValidTxIds() {
       return new HashSet<Long>();
     } 
@@ -299,19 +296,16 @@ public class TestNameNodeRecovery {
       this.paddingLength = paddingLength;
     }
 
-    @Override
     public void addTransactionsToLog(EditLogOutputStream elos,
         OpInstanceCache cache) throws IOException {
       padEditLog(elos, paddingLength);
       addDeleteOpcode(elos, cache, 0, "/foo");
     }
 
-    @Override
     public long getLastValidTxId() {
       return 0;
     }
 
-    @Override
     public Set<Long> getValidTxIds() {
       return Sets.newHashSet(0L);
     } 

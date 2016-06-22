@@ -24,7 +24,7 @@ import java.util.*;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
-import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.mapreduce.filecache.DistributedCache;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.Writable;
@@ -160,14 +160,13 @@ public class Sort<K,V> extends Configured implements Tool {
       System.out.println("Sampling input to effect total-order sort...");
       job.setPartitionerClass(TotalOrderPartitioner.class);
       Path inputDir = FileInputFormat.getInputPaths(job)[0];
-      FileSystem fs = inputDir.getFileSystem(conf);
-      inputDir = inputDir.makeQualified(fs.getUri(), fs.getWorkingDirectory());
+      inputDir = inputDir.makeQualified(inputDir.getFileSystem(conf));
       Path partitionFile = new Path(inputDir, "_sortPartitioning");
       TotalOrderPartitioner.setPartitionFile(conf, partitionFile);
       InputSampler.<K,V>writePartitionFile(job, sampler);
       URI partitionUri = new URI(partitionFile.toString() +
                                  "#" + "_sortPartitioning");
-      job.addCacheFile(partitionUri);
+      DistributedCache.addCacheFile(partitionUri, conf);
     }
 
     System.out.println("Running on " +

@@ -34,7 +34,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.crypto.SecretKey;
 
-import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -191,7 +190,6 @@ abstract public class Task implements Writable, Configurable {
   protected SecretKey tokenSecret;
   protected SecretKey shuffleSecret;
   protected GcTimeUpdater gcUpdater;
-  final AtomicBoolean mustPreempt = new AtomicBoolean(false);
 
   ////////////////////////////////////////////
   // Constructors
@@ -229,11 +227,6 @@ abstract public class Task implements Writable, Configurable {
     mergedMapOutputsCounter = 
       counters.findCounter(TaskCounter.MERGED_MAP_OUTPUTS);
     gcUpdater = new GcTimeUpdater();
-  }
-
-  @VisibleForTesting
-  void setTaskDone() {
-    taskDone.set(true);
   }
 
   ////////////////////////////////////////////
@@ -566,6 +559,9 @@ abstract public class Task implements Writable, Configurable {
   public abstract void run(JobConf job, TaskUmbilicalProtocol umbilical)
     throws IOException, ClassNotFoundException, InterruptedException;
 
+  /** The number of milliseconds between progress reports. */
+  public static final int PROGRESS_INTERVAL = 3000;
+
   private transient Progress taskProgress = new Progress();
 
   // Current counters
@@ -652,9 +648,8 @@ abstract public class Task implements Writable, Configurable {
      * Using AtomicBoolean since we need an atomic read & reset method. 
      */  
     private AtomicBoolean progressFlag = new AtomicBoolean(false);
-
-    @VisibleForTesting
-    public TaskReporter(Progress taskProgress,
+    
+    TaskReporter(Progress taskProgress,
                  TaskUmbilicalProtocol umbilical) {
       this.umbilical = umbilical;
       this.taskProgress = taskProgress;
@@ -741,22 +736,18 @@ abstract public class Task implements Writable, Configurable {
       int remainingRetries = MAX_RETRIES;
       // get current flag value and reset it as well
       boolean sendProgress = resetProgressFlag();
-      long taskProgressInterval =
-          conf.getLong(MRJobConfig.TASK_PROGRESS_REPORT_INTERVAL,
-                       MRJobConfig.DEFAULT_TASK_PROGRESS_REPORT_INTERVAL);
       while (!taskDone.get()) {
         synchronized (lock) {
           done = false;
         }
         try {
           boolean taskFound = true; // whether TT knows about this task
-          AMFeedback amFeedback = null;
           // sleep for a bit
           synchronized(lock) {
             if (taskDone.get()) {
               break;
             }
-            lock.wait(taskProgressInterval);
+            lock.wait(PROGRESS_INTERVAL);
           }
           if (taskDone.get()) {
             break;
@@ -768,14 +759,12 @@ abstract public class Task implements Writable, Configurable {
             taskStatus.statusUpdate(taskProgress.get(),
                                     taskProgress.toString(), 
                                     counters);
-            amFeedback = umbilical.statusUpdate(taskId, taskStatus);
-            taskFound = amFeedback.getTaskFound();
+            taskFound = umbilical.statusUpdate(taskId, taskStatus);
             taskStatus.clearStatus();
           }
           else {
             // send ping 
-            amFeedback = umbilical.statusUpdate(taskId, null);
-            taskFound = amFeedback.getTaskFound();
+            taskFound = umbilical.ping(taskId);
           }
 
           // if Task Tracker is not aware of our task ID (probably because it died and 
@@ -786,17 +775,6 @@ abstract public class Task implements Writable, Configurable {
             System.exit(66);
           }
 
-          // Set a flag that says we should preempt this is read by
-          // ReduceTasks in places of the execution where it is
-          // safe/easy to preempt
-          boolean lastPreempt = mustPreempt.get();
-          mustPreempt.set(mustPreempt.get() || amFeedback.getPreemption());
-
-          if (lastPreempt ^ mustPreempt.get()) {
-            LOG.info("PREEMPTION TASK: setting mustPreempt to " +
-                mustPreempt.get() + " given " + amFeedback.getPreemption() +
-                " for "+ taskId + " task status: " +taskStatus.getPhase());
-          }
           sendProgress = resetProgressFlag(); 
           remainingRetries = MAX_RETRIES;
         } 
@@ -1057,17 +1035,10 @@ abstract public class Task implements Writable, Configurable {
   public void done(TaskUmbilicalProtocol umbilical,
                    TaskReporter reporter
                    ) throws IOException, InterruptedException {
-    updateCounters();
-    if (taskStatus.getRunState() == TaskStatus.State.PREEMPTED ) {
-      // If we are preempted, do no output promotion; signal done and exit
-      committer.commitTask(taskContext);
-      umbilical.preempted(taskId, taskStatus);
-      taskDone.set(true);
-      reporter.stopCommunicationThread();
-      return;
-    }
     LOG.info("Task:" + taskId + " is done."
-        + " And is in the process of committing");
+             + " And is in the process of committing");
+    updateCounters();
+
     boolean commitRequired = isCommitRequired();
     if (commitRequired) {
       int retries = MAX_RETRIES;
@@ -1126,7 +1097,7 @@ abstract public class Task implements Writable, Configurable {
     int retries = MAX_RETRIES;
     while (true) {
       try {
-        if (!umbilical.statusUpdate(getTaskID(), taskStatus).getTaskFound()) {
+        if (!umbilical.statusUpdate(getTaskID(), taskStatus)) {
           LOG.warn("Parent died.  Exiting "+taskId);
           System.exit(66);
         }

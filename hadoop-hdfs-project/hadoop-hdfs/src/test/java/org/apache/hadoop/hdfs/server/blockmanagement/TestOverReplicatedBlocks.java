@@ -117,8 +117,7 @@ public class TestOverReplicatedBlocks {
 
           // corrupt one won't be chosen to be excess one
           // without 4910 the number of live replicas would be 0: block gets lost
-          assertEquals(1, bm.countNodes(
-              bm.getStoredBlock(block.getLocalBlock())).liveReplicas());
+          assertEquals(1, bm.countNodes(block.getLocalBlock()).liveReplicas());
         }
       } finally {
         namesystem.writeUnlock();
@@ -220,7 +219,7 @@ public class TestOverReplicatedBlocks {
       out.close();
       ExtendedBlock block = DFSTestUtil.getFirstBlock(fs, p);
       assertEquals("Expected only one live replica for the block", 1, bm
-          .countNodes(bm.getStoredBlock(block.getLocalBlock())).liveReplicas());
+          .countNodes(block.getLocalBlock()).liveReplicas());
     } finally {
       cluster.shutdown();
     }

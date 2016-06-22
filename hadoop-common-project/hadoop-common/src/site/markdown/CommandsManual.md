@@ -14,7 +14,6 @@
 
 * [Hadoop Commands Guide](#Hadoop_Commands_Guide)
     * [Overview](#Overview)
-        * [Shell Options](#Shell_Options)
         * [Generic Options](#Generic_Options)
 * [Hadoop Common Commands](#Hadoop_Common_Commands)
     * [User Commands](#User_Commands)
@@ -22,22 +21,15 @@
         * [checknative](#checknative)
         * [classpath](#classpath)
         * [credential](#credential)
-        * [distch](#distch)
         * [distcp](#distcp)
         * [fs](#fs)
         * [jar](#jar)
-        * [jnipath](#jnipath)
-        * [kerbname](#kerbname)
         * [key](#key)
         * [trace](#trace)
         * [version](#version)
         * [CLASSNAME](#CLASSNAME)
     * [Administration Commands](#Administration_Commands)
         * [daemonlog](#daemonlog)
-    * [Files](#Files)
-        * [etc/hadoop/hadoop-env.sh](#etchadoophadoop-env.sh)
-        * [etc/hadoop/hadoop-user-functions.sh](#etchadoophadoop-user-functions.sh)
-        * [~/.hadooprc](#a.hadooprc)
 
 Hadoop Commands Guide
 =====================
@@ -45,33 +37,18 @@ Hadoop Commands Guide
 Overview
 --------
 
-All of the Hadoop commands and subprojects follow the same basic structure:
+All hadoop commands are invoked by the `bin/hadoop` script. Running the
+hadoop script without any arguments prints the description for all
+commands.
 
-Usage: `shellcommand [SHELL_OPTIONS] [COMMAND] [GENERIC_OPTIONS] [COMMAND_OPTIONS]`
+Usage: `hadoop [--config confdir] [--loglevel loglevel] [COMMAND] [GENERIC_OPTIONS] [COMMAND_OPTIONS]`
 
 | FIELD | Description |
 |:---- |:---- |
-| shellcommand | The command of the project being invoked. For example, Hadoop common uses `hadoop`, HDFS uses `hdfs`, and YARN uses `yarn`. |
-| SHELL\_OPTIONS | Options that the shell processes prior to executing Java. |
-| COMMAND | Action to perform. |
+| `--config confdir` | Overwrites the default Configuration directory.  Default is `${HADOOP_HOME}/conf`. |
+| `--loglevel loglevel` | Overwrites the log level. Valid log levels are FATAL, ERROR, WARN, INFO, DEBUG, and TRACE. Default is INFO. |
 | GENERIC\_OPTIONS | The common set of options supported by multiple commands. |
 | COMMAND\_OPTIONS | Various commands with their options are described in this documention for the Hadoop common sub-project. HDFS and YARN are covered in other documents. |
-
-### Shell Options
-
-All of the shell commands will accept a common set of options. For some commands, these options are ignored. For example, passing `---hostnames` on a command that only executes on a single host will be ignored.
-
-| SHELL\_OPTION | Description |
-|:---- |:---- |
-| `--buildpaths` | Enables developer versions of jars. |
-| `--config confdir` | Overwrites the default Configuration directory. Default is `$HADOOP_PREFIX/etc/hadoop`. |
-| `--daemon mode` | If the command supports daemonization (e.g., `hdfs namenode`), execute in the appropriate mode. Supported modes are `start` to start the process in daemon mode, `stop` to stop the process, and `status` to determine the active status of the process. `status` will return an [LSB-compliant](http://refspecs.linuxbase.org/LSB_3.0.0/LSB-generic/LSB-generic/iniscrptact.html) result code. If no option is provided, commands that support daemonization will run in the foreground. For commands that do not support daemonization, this option is ignored. |
-| `--debug` | Enables shell level configuration debugging information |
-| `--help` | Shell script usage information. |
-| `--hostnames` | When `--slaves` is used, override the slaves file with a space delimited list of hostnames where to execute a multi-host subcommand. If `--slaves` is not used, this option is ignored. |
-| `--hosts` | When `--slaves` is used, override the slaves file with another file that contains a list of hostnames where to execute a multi-host subcommand.  If `--slaves` is not used, this option is ignored. |
-| `--loglevel loglevel` | Overrides the log level. Valid log levels are FATAL, ERROR, WARN, INFO, DEBUG, and TRACE. Default is INFO. |
-| `--slaves` | If possible, execute this command on all hosts in the `slaves` file. |
 
 ### Generic Options
 
@@ -89,7 +66,7 @@ Many subcommands honor a common set of configuration options to alter their beha
 Hadoop Common Commands
 ======================
 
-All of these commands are executed from the `hadoop` shell command. They have been broken up into [User Commands](#User_Commands) and [Admininistration Commands](#Admininistration_Commands).
+All of these commands are executed from the `hadoop` shell command. They have been broken up into [User Commands](#User_Commands) and [Admininistration Commands](#Administration_Commands).
 
 User Commands
 -------------
@@ -143,18 +120,6 @@ When utilizing the credential command it will often be for provisioning a passwo
 
 Example: `hadoop credential list -provider jceks://file/tmp/test.jceks`
 
-### `distch`
-
-Usage: `hadoop distch [-f urilist_url] [-i] [-log logdir] path:owner:group:permissions`
-
-| COMMAND\_OPTION | Description |
-|:---- |:---- |
-| `-f` | List of objects to change |
-| `-i` | Ignore failures |
-| `-log` | Directory to log output |
-
-Change the ownership and permissions on many files at once.
-
 ### `distcp`
 
 Copy file or directories recursively. More information can be found at [Hadoop DistCp Guide](../../hadoop-distcp/DistCp.html).
@@ -170,21 +135,6 @@ Usage: `hadoop jar <jar> [mainClass] args...`
 Runs a jar file.
 
 Use [`yarn jar`](../../hadoop-yarn/hadoop-yarn-site/YarnCommands.html#jar) to launch YARN applications instead.
-
-### `jnipath`
-
-Usage: `hadoop jnipath`
-
-Print the computed java.library.path.
-
-### `kerbname`
-
-Usage: `hadoop kerbname principal`
-
-Convert the named principal via the auth_to_local rules to the Hadoop
-user name.
-
-Example: `hadoop kerbname user@EXAMPLE.COM`
 
 ### `key`
 
@@ -204,7 +154,7 @@ Prints the version.
 
 Usage: `hadoop CLASSNAME`
 
-Runs the class named `CLASSNAME`. The class must be part of a package.
+Runs the class named `CLASSNAME`.
 
 Administration Commands
 -----------------------
@@ -226,18 +176,3 @@ Usage:
 Get/Set the log level for a Log identified by a qualified class name in the daemon.
 
 	Example: $ bin/hadoop daemonlog -setlevel 127.0.0.1:50070 org.apache.hadoop.hdfs.server.namenode.NameNode DEBUG
-
-Files
------
-
-### **etc/hadoop/hadoop-env.sh**
-
-This file stores the global settings used by all Hadoop shell commands.
-
-### **etc/hadoop/hadoop-user-functions.sh**
-
-This file allows for advanced users to override some shell functionality.
-
-### **~/.hadooprc**
-
-This stores the personal environment for an individual user. It is processed after the hadoop-env.sh and hadoop-user-functions.sh files and can contain the same settings.

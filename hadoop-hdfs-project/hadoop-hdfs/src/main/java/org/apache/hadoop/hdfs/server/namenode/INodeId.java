@@ -20,7 +20,6 @@ package org.apache.hadoop.hdfs.server.namenode;
 import java.io.FileNotFoundException;
 
 import org.apache.hadoop.classification.InterfaceAudience;
-import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.util.SequentialNumber;
 
 /**
@@ -37,7 +36,12 @@ public class INodeId extends SequentialNumber {
    */
   public static final long LAST_RESERVED_ID = 2 << 14 - 1;
   public static final long ROOT_INODE_ID = LAST_RESERVED_ID + 1;
-  public static final long INVALID_INODE_ID = -1;
+
+  /**
+   * The inode id validation of lease check will be skipped when the request
+   * uses GRANDFATHER_INODE_ID for backward compatibility.
+   */
+  public static final long GRANDFATHER_INODE_ID = 0;
 
   /**
    * To check if the request id is the same as saved id. Don't check fileId
@@ -45,7 +49,7 @@ public class INodeId extends SequentialNumber {
    */
   public static void checkId(long requestId, INode inode)
       throws FileNotFoundException {
-    if (requestId != HdfsConstants.GRANDFATHER_INODE_ID && requestId != inode.getId()) {
+    if (requestId != GRANDFATHER_INODE_ID && requestId != inode.getId()) {
       throw new FileNotFoundException(
           "ID mismatch. Request id and saved id: " + requestId + " , "
               + inode.getId() + " for file " + inode.getFullPathName());

@@ -115,7 +115,7 @@ public class TestUmbilicalProtocolWithJobToken {
           proxy = (TaskUmbilicalProtocol) RPC.getProxy(
               TaskUmbilicalProtocol.class, TaskUmbilicalProtocol.versionID,
               addr, conf);
-          proxy.statusUpdate(null, null);
+          proxy.ping(null);
         } finally {
           server.stop();
           if (proxy != null) {

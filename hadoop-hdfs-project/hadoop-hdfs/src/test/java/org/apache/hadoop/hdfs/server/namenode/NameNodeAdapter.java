@@ -83,7 +83,7 @@ public class NameNodeAdapter {
   
   public static void saveNamespace(NameNode namenode)
       throws AccessControlException, IOException {
-    namenode.getNamesystem().saveNamespace(0, 0);
+    namenode.getNamesystem().saveNamespace();
   }
   
   public static void enterSafeMode(NameNode namenode, boolean resourcesLow)
@@ -117,7 +117,7 @@ public class NameNodeAdapter {
       DatanodeDescriptor dd, FSNamesystem namesystem) throws IOException {
     return namesystem.handleHeartbeat(nodeReg,
         BlockManagerTestUtil.getStorageReportsForDatanode(dd),
-        dd.getCacheCapacity(), dd.getCacheRemaining(), 0, 0, 0, null, true);
+        dd.getCacheCapacity(), dd.getCacheRemaining(), 0, 0, 0, null);
   }
 
   public static boolean setReplication(final FSNamesystem ns,
@@ -135,19 +135,8 @@ public class NameNodeAdapter {
     namesystem.leaseManager.triggerMonitorCheckNow();
   }
 
-  public static Lease getLeaseForPath(NameNode nn, String path) {
-    final FSNamesystem fsn = nn.getNamesystem();
-    INode inode;
-    try {
-      inode = fsn.getFSDirectory().getINode(path, false);
-    } catch (UnresolvedLinkException e) {
-      throw new RuntimeException("Lease manager should not support symlinks");
-    }
-    return inode == null ? null : fsn.leaseManager.getLease((INodeFile) inode);
-  }
-
   public static String getLeaseHolderForPath(NameNode namenode, String path) {
-    Lease l = getLeaseForPath(namenode, path);
+    Lease l = namenode.getNamesystem().leaseManager.getLeaseByPath(path);
     return l == null? null: l.getHolder();
   }
 
@@ -156,8 +145,12 @@ public class NameNodeAdapter {
    *   or -1 in the case that the lease doesn't exist.
    */
   public static long getLeaseRenewalTime(NameNode nn, String path) {
-    Lease l = getLeaseForPath(nn, path);
-    return l == null ? -1 : l.getLastUpdate();
+    LeaseManager lm = nn.getNamesystem().leaseManager;
+    Lease l = lm.getLeaseByPath(path);
+    if (l == null) {
+      return -1;
+    }
+    return l.getLastUpdate();
   }
 
   /**
@@ -243,7 +236,7 @@ public class NameNodeAdapter {
    * @return Replication queue initialization status
    */
   public static boolean safeModeInitializedReplQueues(NameNode nn) {
-    return nn.getNamesystem().getBlockManager().isPopulatingReplQueues();
+    return nn.getNamesystem().isPopulatingReplQueues();
   }
   
   public static File getInProgressEditsFile(StorageDirectory sd, long startTxId) {

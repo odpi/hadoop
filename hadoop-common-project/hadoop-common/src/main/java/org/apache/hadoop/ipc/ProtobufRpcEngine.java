@@ -238,7 +238,7 @@ public class ProtobufRpcEngine implements RpcEngine {
         }
         if (Trace.isTracing()) {
           traceScope.getSpan().addTimelineAnnotation(
-              "Call got exception: " + e.toString());
+              "Call got exception: " + e.getMessage());
         }
         throw new ServiceException(e);
       } finally {
@@ -567,7 +567,7 @@ public class ProtobufRpcEngine implements RpcEngine {
       /**
        * This is a server side method, which is invoked over RPC. On success
        * the return response has protobuf response payload. On failure, the
-       * exception name and the stack trace are returned in the response.
+       * exception name and the stack trace are return in the resposne.
        * See {@link HadoopRpcResponseProto}
        * 
        * In this method there three types of exceptions possible and they are
@@ -582,44 +582,24 @@ public class ProtobufRpcEngine implements RpcEngine {
        * it is.</li>
        * </ol>
        */
-      public Writable call(RPC.Server server, String connectionProtocolName,
+      public Writable call(RPC.Server server, String protocol,
           Writable writableRequest, long receiveTime) throws Exception {
         RpcRequestWrapper request = (RpcRequestWrapper) writableRequest;
         RequestHeaderProto rpcRequest = request.requestHeader;
         String methodName = rpcRequest.getMethodName();
-        
-        
-        /** 
-         * RPCs for a particular interface (ie protocol) are done using a
-         * IPC connection that is setup using rpcProxy.
-         * The rpcProxy's has a declared protocol name that is 
-         * sent form client to server at connection time. 
-         * 
-         * Each Rpc call also sends a protocol name 
-         * (called declaringClassprotocolName). This name is usually the same
-         * as the connection protocol name except in some cases. 
-         * For example metaProtocols such ProtocolInfoProto which get info
-         * about the protocol reuse the connection but need to indicate that
-         * the actual protocol is different (i.e. the protocol is
-         * ProtocolInfoProto) since they reuse the connection; in this case
-         * the declaringClassProtocolName field is set to the ProtocolInfoProto.
-         */
-
-        String declaringClassProtoName = 
-            rpcRequest.getDeclaringClassProtocolName();
+        String protoName = rpcRequest.getDeclaringClassProtocolName();
         long clientVersion = rpcRequest.getClientProtocolVersion();
         if (server.verbose)
-          LOG.info("Call: connectionProtocolName=" + connectionProtocolName + 
-              ", method=" + methodName);
+          LOG.info("Call: protocol=" + protocol + ", method=" + methodName);
         
-        ProtoClassProtoImpl protocolImpl = getProtocolImpl(server, 
-                              declaringClassProtoName, clientVersion);
+        ProtoClassProtoImpl protocolImpl = getProtocolImpl(server, protoName,
+            clientVersion);
         BlockingService service = (BlockingService) protocolImpl.protocolImpl;
         MethodDescriptor methodDescriptor = service.getDescriptorForType()
             .findMethodByName(methodName);
         if (methodDescriptor == null) {
-          String msg = "Unknown method " + methodName + " called on " 
-                                + connectionProtocolName + " protocol.";
+          String msg = "Unknown method " + methodName + " called on " + protocol
+              + " protocol.";
           LOG.warn(msg);
           throw new RpcNoSuchMethodException(msg);
         }
@@ -657,9 +637,6 @@ public class ProtobufRpcEngine implements RpcEngine {
           server.rpcMetrics.addRpcProcessingTime(processingTime);
           server.rpcDetailedMetrics.addProcessingTime(detailedMetricsName,
               processingTime);
-          if (server.isLogSlowRPC()) {
-            server.logSlowRpcCalls(methodName, processingTime);
-          }
         }
         return new RpcResponseWrapper(result);
       }

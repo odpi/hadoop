@@ -78,9 +78,7 @@ public class DFSck extends Configured implements Tool {
   private static final String USAGE = "Usage: hdfs fsck <path> "
       + "[-list-corruptfileblocks | "
       + "[-move | -delete | -openforwrite] "
-      + "[-files [-blocks [-locations | -racks | -replicaDetails]]]] "
-      + "[-includeSnapshots] [-showprogress] "
-      + "[-storagepolicies] [-blockId <blk_Id>]\n"
+      + "[-files [-blocks [-locations | -racks]]]]\n"
       + "\t<path>\tstart checking from this path\n"
       + "\t-move\tmove corrupted files to /lost+found\n"
       + "\t-delete\tdelete corrupted files\n"
@@ -91,13 +89,10 @@ public class DFSck extends Configured implements Tool {
       + "snapshottable directories under it\n"
       + "\t-list-corruptfileblocks\tprint out list of missing "
       + "blocks and files they belong to\n"
-      + "\t-files -blocks\tprint out block report\n"
-      + "\t-files -blocks -locations\tprint out locations for every block\n"
-      + "\t-files -blocks -racks" 
-      + "\tprint out network topology for data-node locations\n"
-      + "\t-files -blocks -replicaDetails\tprint out each replica details \n"
-      + "\t-storagepolicies\tprint out storage policy summary for the blocks\n"
-      + "\t-showprogress\tshow progress in output. Default is OFF (no progress)\n"
+      + "\t-blocks\tprint out block report\n"
+      + "\t-locations\tprint out locations for every block\n"
+      + "\t-racks\tprint out network topology for data-node locations\n"
+      + "\t-storagepolicies\tprint out storage policy summary for the blocks\n\n"
       + "\t-blockId\tprint out which file this blockId belongs to, locations"
       + " (nodes, racks) of this block, and other diagnostics info"
       + " (under replicated, corrupted or not, etc)\n\n"
@@ -271,11 +266,7 @@ public class DFSck extends Configured implements Tool {
       else if (args[idx].equals("-blocks")) { url.append("&blocks=1"); }
       else if (args[idx].equals("-locations")) { url.append("&locations=1"); }
       else if (args[idx].equals("-racks")) { url.append("&racks=1"); }
-      else if (args[idx].equals("-replicaDetails")) {
-        url.append("&replicadetails=1");
-      }
       else if (args[idx].equals("-storagepolicies")) { url.append("&storagepolicies=1"); }
-      else if (args[idx].equals("-showprogress")) { url.append("&showprogress=1"); }
       else if (args[idx].equals("-list-corruptfileblocks")) {
         url.append("&listcorruptfileblocks=1");
         doListCorruptFileBlocks = true;
@@ -377,6 +368,7 @@ public class DFSck extends Configured implements Tool {
     int res = -1;
     if ((args.length == 0) || ("-files".equals(args[0]))) {
       printUsage(System.err);
+      ToolRunner.printGenericCommandUsage(System.err);
     } else if (DFSUtil.parseHelpArgument(args, USAGE, System.out, true)) {
       res = 0;
     } else {

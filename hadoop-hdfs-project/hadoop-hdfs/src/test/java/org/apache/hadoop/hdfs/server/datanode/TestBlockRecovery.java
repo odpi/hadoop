@@ -39,7 +39,6 @@ import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.commons.logging.Log;
@@ -100,7 +99,6 @@ public class TestBlockRecovery {
     MiniDFSCluster.getBaseDirectory() + "data";
   private DataNode dn;
   private Configuration conf;
-  private boolean tearDownDone;
   private final static long RECOVERY_ID = 3000L;
   private final static String CLUSTER_ID = "testClusterID";
   private final static String POOL_ID = "BP-TEST";
@@ -125,7 +123,6 @@ public class TestBlockRecovery {
    */
   @Before
   public void startUp() throws IOException, URISyntaxException {
-    tearDownDone = false;
     conf = new HdfsConfiguration();
     conf.set(DFSConfigKeys.DFS_DATANODE_DATA_DIR_KEY, DATA_DIR);
     conf.set(DFSConfigKeys.DFS_DATANODE_ADDRESS_KEY, "0.0.0.0:0");
@@ -163,12 +160,11 @@ public class TestBlockRecovery {
             Mockito.anyInt(),
             Mockito.anyInt(),
             Mockito.anyInt(),
-            Mockito.any(VolumeFailureSummary.class),
-            Mockito.anyBoolean()))
+            Mockito.any(VolumeFailureSummary.class)))
         .thenReturn(new HeartbeatResponse(
             new DatanodeCommand[0],
             new NNHAStatusHeartbeat(HAServiceState.ACTIVE, 1),
-            null, ThreadLocalRandom.current().nextLong() | 1L));
+            null));
 
     dn = new DataNode(conf, locations, null) {
       @Override
@@ -179,7 +175,7 @@ public class TestBlockRecovery {
       }
     };
     // Trigger a heartbeat so that it acknowledges the NN as active.
-    dn.getAllBpOs().get(0).triggerHeartbeatForTests();
+    dn.getAllBpOs()[0].triggerHeartbeatForTests();
   }
 
   /**
@@ -188,7 +184,7 @@ public class TestBlockRecovery {
    */
   @After
   public void tearDown() throws IOException {
-    if (!tearDownDone && dn != null) {
+    if (dn != null) {
       try {
         dn.shutdown();
       } catch(Exception e) {
@@ -199,7 +195,6 @@ public class TestBlockRecovery {
           Assert.assertTrue(
               "Cannot delete data-node dirs", FileUtil.fullyDelete(dir));
       }
-      tearDownDone = true;
     }
   }
 
@@ -304,8 +299,7 @@ public class TestBlockRecovery {
     dn2 = mock(InterDatanodeProtocol.class);
 
     testSyncReplicas(replica1, replica2, dn1, dn2, REPLICA_LEN1);
-    verify(dn1).updateReplicaUnderRecovery(block, RECOVERY_ID, BLOCK_ID,
-        REPLICA_LEN1);
+    verify(dn1).updateReplicaUnderRecovery(block, RECOVERY_ID, BLOCK_ID, REPLICA_LEN1);
     verify(dn2, never()).updateReplicaUnderRecovery(
         block, RECOVERY_ID, BLOCK_ID, REPLICA_LEN1);
   }
@@ -395,7 +389,8 @@ public class TestBlockRecovery {
     InterDatanodeProtocol dn2 = mock(InterDatanodeProtocol.class);
 
     testSyncReplicas(replica1, replica2, dn1, dn2, REPLICA_LEN1);
-    verify(dn1).updateReplicaUnderRecovery(block, RECOVERY_ID, BLOCK_ID, REPLICA_LEN1);
+    verify(dn1).updateReplicaUnderRecovery(block, RECOVERY_ID, BLOCK_ID,
+        REPLICA_LEN1);
     verify(dn2, never()).updateReplicaUnderRecovery(
         block, RECOVERY_ID, BLOCK_ID, REPLICA_LEN1);
   }

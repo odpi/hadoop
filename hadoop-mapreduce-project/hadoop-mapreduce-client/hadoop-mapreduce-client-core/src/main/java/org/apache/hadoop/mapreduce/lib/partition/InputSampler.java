@@ -230,8 +230,10 @@ public class InputSampler<K,V> extends Configured implements Tool  {
               // to reflect the possibility of existing elements being
               // pushed out
               int ind = r.nextInt(numSamples);
-              samples.set(ind, ReflectionUtils.copy(job.getConfiguration(),
-                               reader.getCurrentKey(), null));
+              if (ind != numSamples) {
+                samples.set(ind, ReflectionUtils.copy(job.getConfiguration(),
+                                 reader.getCurrentKey(), null));
+              }
               freq *= (numSamples - 1) / (double) numSamples;
             }
           }

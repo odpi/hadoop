@@ -199,7 +199,7 @@ public class KeyShell extends Configured implements Tool {
       out.println(command.getUsage());
     } else {
       out.println("=========================================================" +
-      		"======");
+		"======");
       out.println(CreateCommand.USAGE + ":\n\n" + CreateCommand.DESC);
       out.println("=========================================================" +
           "======");

@@ -131,7 +131,7 @@ public class TestSwiftFileSystemExtendedContract extends SwiftFileSystemBaseTest
     out.writeUTF("l");
     out.close();
     assertExists("lower case file", lower);
-    //verify the length of the upper file hasn't changed
+    //verifEy the length of the upper file hasn't changed
     assertExists("Original upper case file " + upper, upper);
     FileStatus newStatus = fs.getFileStatus(upper);
     assertEquals("Expected status:" + upperStatus

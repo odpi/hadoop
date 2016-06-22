@@ -78,8 +78,6 @@ public class JobBlock extends HtmlBlock {
     JobInfo jinfo = new JobInfo(job, true);
     info("Job Overview").
         _("Job Name:", jinfo.getName()).
-        _("User Name:", jinfo.getUserName()).
-        _("Queue Name:", jinfo.getQueueName()).
         _("State:", jinfo.getState()).
         _("Uberized:", jinfo.isUberized()).
         _("Started:", new Date(jinfo.getStartTime())).

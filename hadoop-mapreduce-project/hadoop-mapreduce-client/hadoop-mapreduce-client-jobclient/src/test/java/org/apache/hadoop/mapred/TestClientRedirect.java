@@ -114,8 +114,6 @@ import org.apache.hadoop.yarn.api.protocolrecords.ReservationUpdateRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ReservationUpdateResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.SubmitApplicationRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.SubmitApplicationResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.UpdateApplicationPriorityRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.UpdateApplicationPriorityResponse;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ApplicationReport;
 import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
@@ -444,13 +442,6 @@ public class TestClientRedirect {
     @Override
     public GetLabelsToNodesResponse getLabelsToNodes(
         GetLabelsToNodesRequest request) throws YarnException, IOException {
-      return null;
-    }
-
-    @Override
-    public UpdateApplicationPriorityResponse updateApplicationPriority(
-        UpdateApplicationPriorityRequest request) throws YarnException,
-        IOException {
       return null;
     }
   }

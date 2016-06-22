@@ -189,9 +189,4 @@ public class MapWritable extends AbstractMapWritable
       instance.put(key, value);
     }
   }
-
-  @Override
-  public String toString() {
-    return instance.toString();
-  }
 }

@@ -17,8 +17,8 @@
  */
 package org.apache.hadoop.hdfs.server.datanode.web;
 
+import io.netty.bootstrap.ChannelFactory;
 import io.netty.bootstrap.ServerBootstrap;
-import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
@@ -38,6 +38,8 @@ import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.server.common.JspHelper;
 import org.apache.hadoop.hdfs.server.datanode.BlockScanner;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
+import org.apache.hadoop.hdfs.server.namenode.FileChecksumServlets;
+import org.apache.hadoop.hdfs.server.namenode.StreamFile;
 import org.apache.hadoop.http.HttpConfig;
 import org.apache.hadoop.http.HttpServer2;
 import org.apache.hadoop.net.NetUtils;
@@ -46,10 +48,8 @@ import org.apache.hadoop.security.ssl.SSLFactory;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.net.BindException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.net.SocketException;
 import java.net.URI;
 import java.nio.channels.ServerSocketChannel;
 import java.security.GeneralSecurityException;
@@ -92,6 +92,10 @@ public class DatanodeHttpServer implements Closeable {
 
     this.infoServer = builder.build();
 
+    this.infoServer.addInternalServlet(null, "/streamFile/*", StreamFile.class);
+    this.infoServer.addInternalServlet(null, "/getFileChecksum/*",
+        FileChecksumServlets.GetServlet.class);
+
     this.infoServer.setAttribute("datanode", datanode);
     this.infoServer.setAttribute(JspHelper.CURRENT_CONF, conf);
     this.infoServer.addServlet(null, "/blockScannerReport",
@@ -113,8 +117,11 @@ public class DatanodeHttpServer implements Closeable {
         .childHandler(new ChannelInitializer<SocketChannel>() {
         @Override
         protected void initChannel(SocketChannel ch) throws Exception {
-          ch.pipeline().addLast(new PortUnificationServerHandler(jettyAddr,
-              conf, confForCreate));
+          ChannelPipeline p = ch.pipeline();
+          p.addLast(new HttpRequestDecoder(),
+            new HttpResponseEncoder(),
+            new ChunkedWriteHandler(),
+            new URLDispatcher(jettyAddr, conf, confForCreate));
         }
       });
       if (externalHttpChannel == null) {
@@ -171,41 +178,19 @@ public class DatanodeHttpServer implements Closeable {
     return httpsAddress;
   }
 
-  public void start() throws IOException {
+  public void start() {
     if (httpServer != null) {
-      InetSocketAddress infoAddr = DataNode.getInfoAddr(conf);
-      ChannelFuture f = httpServer.bind(infoAddr);
-      try {
-        f.syncUninterruptibly();
-      } catch (Throwable e) {
-        if (e instanceof BindException) {
-          throw NetUtils.wrapException(null, 0, infoAddr.getHostName(),
-              infoAddr.getPort(), (SocketException) e);
-        } else {
-          throw e;
-        }
-      }
+      ChannelFuture f = httpServer.bind(DataNode.getInfoAddr(conf));
+      f.syncUninterruptibly();
       httpAddress = (InetSocketAddress) f.channel().localAddress();
       LOG.info("Listening HTTP traffic on " + httpAddress);
     }
 
     if (httpsServer != null) {
-      InetSocketAddress secInfoSocAddr =
-          NetUtils.createSocketAddr(conf.getTrimmed(
-              DFS_DATANODE_HTTPS_ADDRESS_KEY,
-              DFS_DATANODE_HTTPS_ADDRESS_DEFAULT));
+      InetSocketAddress secInfoSocAddr = NetUtils.createSocketAddr(conf.getTrimmed(
+        DFS_DATANODE_HTTPS_ADDRESS_KEY, DFS_DATANODE_HTTPS_ADDRESS_DEFAULT));
       ChannelFuture f = httpsServer.bind(secInfoSocAddr);
-
-      try {
-        f.syncUninterruptibly();
-      } catch (Throwable e) {
-        if (e instanceof BindException) {
-          throw NetUtils.wrapException(null, 0, secInfoSocAddr.getHostName(),
-              secInfoSocAddr.getPort(), (SocketException) e);
-        } else {
-          throw e;
-        }
-      }
+      f.syncUninterruptibly();
       httpsAddress = (InetSocketAddress) f.channel().localAddress();
       LOG.info("Listening HTTPS traffic on " + httpsAddress);
     }

@@ -186,7 +186,7 @@ public class TestNodeManagerShutdown {
   }
 
   public static void startContainer(NodeManager nm, ContainerId cId,
-      FileContext localFS, File scriptFileDir, File processStartFile)
+      FileContext localFS, File scriptFileDir, File processStartFile) 
           throws IOException, YarnException {
     File scriptFile =
         createUnhaltingScriptFile(cId, scriptFileDir, processStartFile);
@@ -196,7 +196,7 @@ public class TestNodeManagerShutdown {
 
     NodeId nodeId = BuilderUtils.newNodeId(InetAddress.getByName("localhost")
         .getCanonicalHostName(), 12345);
-    
+ 
     URL localResourceUri =
         ConverterUtils.getYarnUrlFromPath(localFS
             .makeQualified(new Path(scriptFile.getAbsolutePath())));

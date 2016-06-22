@@ -151,15 +151,10 @@ public class FsDatasetCache {
     /**
      * Round up a number to the operating system page size.
      */
-    public long roundUp(long count) {
-      return (count + osPageSize - 1) & (~(osPageSize - 1));
-    }
-
-    /**
-     * Round down a number to the operating system page size.
-     */
-    public long roundDown(long count) {
-      return count & (~(osPageSize - 1));
+    public long round(long count) {
+      long newCount = 
+          (count + (osPageSize - 1)) / osPageSize;
+      return newCount * osPageSize;
     }
   }
 
@@ -178,7 +173,7 @@ public class FsDatasetCache {
      *                 -1 if we failed.
      */
     long reserve(long count) {
-      count = rounder.roundUp(count);
+      count = rounder.round(count);
       while (true) {
         long cur = usedBytes.get();
         long next = cur + count;
@@ -200,23 +195,10 @@ public class FsDatasetCache {
      * @return         The new number of usedBytes.
      */
     long release(long count) {
-      count = rounder.roundUp(count);
+      count = rounder.round(count);
       return usedBytes.addAndGet(-count);
     }
-
-    /**
-     * Release some bytes that we're using rounded down to the page size.
-     *
-     * @param count    The number of bytes to release.  We will round this
-     *                 down to the page size.
-     *
-     * @return         The new number of usedBytes.
-     */
-    long releaseRoundDown(long count) {
-      count = rounder.roundDown(count);
-      return usedBytes.addAndGet(-count);
-    }
-
+    
     long get() {
       return usedBytes.get();
     }
@@ -337,11 +319,9 @@ public class FsDatasetCache {
       mappableBlockMap.put(key,
           new Value(prevValue.mappableBlock, State.UNCACHING));
       if (deferred) {
-        if (LOG.isDebugEnabled()) {
-          LOG.debug("{} is anchored, and can't be uncached now.  Scheduling it " +
-                  "for uncaching in {} ",
-              key, DurationFormatUtils.formatDurationHMS(revocationPollingMs));
-        }
+        LOG.debug("{} is anchored, and can't be uncached now.  Scheduling it " +
+            "for uncaching in {} ",
+            key, DurationFormatUtils.formatDurationHMS(revocationPollingMs));
         deferredUncachingExecutor.schedule(
             new UncachingTask(key, revocationMs),
             revocationPollingMs, TimeUnit.MILLISECONDS);
@@ -356,59 +336,6 @@ public class FsDatasetCache {
       numBlocksFailedToUncache.incrementAndGet();
       break;
     }
-  }
-
-  /**
-   * Try to reserve more bytes.
-   *
-   * @param count    The number of bytes to add.  We will round this
-   *                 up to the page size.
-   *
-   * @return         The new number of usedBytes if we succeeded;
-   *                 -1 if we failed.
-   */
-  long reserve(long count) {
-    return usedBytesCount.reserve(count);
-  }
-
-  /**
-   * Release some bytes that we're using.
-   *
-   * @param count    The number of bytes to release.  We will round this
-   *                 up to the page size.
-   *
-   * @return         The new number of usedBytes.
-   */
-  long release(long count) {
-    return usedBytesCount.release(count);
-  }
-
-  /**
-   * Release some bytes that we're using rounded down to the page size.
-   *
-   * @param count    The number of bytes to release.  We will round this
-   *                 down to the page size.
-   *
-   * @return         The new number of usedBytes.
-   */
-  long releaseRoundDown(long count) {
-    return usedBytesCount.releaseRoundDown(count);
-  }
-
-  /**
-   * Get the OS page size.
-   *
-   * @return the OS page size.
-   */
-  long getOsPageSize() {
-    return usedBytesCount.rounder.osPageSize;
-  }
-
-  /**
-   * Round up to the OS page size.
-   */
-  long roundUpPageSize(long count) {
-    return usedBytesCount.rounder.roundUp(count);
   }
 
   /**
@@ -434,7 +361,7 @@ public class FsDatasetCache {
       MappableBlock mappableBlock = null;
       ExtendedBlock extBlk = new ExtendedBlock(key.getBlockPoolId(),
           key.getBlockId(), length, genstamp);
-      long newUsedBytes = reserve(length);
+      long newUsedBytes = usedBytesCount.reserve(length);
       boolean reservedBytes = false;
       try {
         if (newUsedBytes < 0) {
@@ -494,7 +421,7 @@ public class FsDatasetCache {
         IOUtils.closeQuietly(metaIn);
         if (!success) {
           if (reservedBytes) {
-            release(length);
+            usedBytesCount.release(length);
           }
           LOG.debug("Caching of {} was aborted.  We are now caching only {} "
                   + "bytes in total.", key, usedBytesCount.get());
@@ -573,7 +500,8 @@ public class FsDatasetCache {
       synchronized (FsDatasetCache.this) {
         mappableBlockMap.remove(key);
       }
-      long newUsedBytes = release(value.mappableBlock.getLength());
+      long newUsedBytes =
+          usedBytesCount.release(value.mappableBlock.getLength());
       numBlocksCached.addAndGet(-1);
       dataset.datanode.getMetrics().incrBlocksUncached(1);
       if (revocationTimeMs != 0) {

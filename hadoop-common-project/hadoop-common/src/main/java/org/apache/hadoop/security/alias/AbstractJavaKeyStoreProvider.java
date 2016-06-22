@@ -18,8 +18,6 @@
 
 package org.apache.hadoop.security.alias;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
@@ -41,7 +39,9 @@ import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
 import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -60,8 +60,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  */
 @InterfaceAudience.Private
 public abstract class AbstractJavaKeyStoreProvider extends CredentialProvider {
-  public static final Log LOG = LogFactory.getLog(
-      AbstractJavaKeyStoreProvider.class);
   public static final String CREDENTIAL_PASSWORD_NAME =
       "HADOOP_CREDSTORE_PASSWORD";
   public static final String KEYSTORE_PASSWORD_FILE_KEY =
@@ -172,6 +170,13 @@ public abstract class AbstractJavaKeyStoreProvider extends CredentialProvider {
     return keyStore;
   }
 
+  public Map<String, CredentialEntry> getCache() {
+    return cache;
+  }
+
+  private final Map<String, CredentialEntry> cache =
+      new HashMap<String, CredentialEntry>();
+
   protected final String getPathAsString() {
     return getPath().toString();
   }
@@ -192,9 +197,6 @@ public abstract class AbstractJavaKeyStoreProvider extends CredentialProvider {
   protected void initFileSystem(URI keystoreUri, Configuration conf)
       throws IOException {
     path = ProviderUtils.unnestUri(keystoreUri);
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("backing jks path initialized to " + path);
-    }
   }
 
   @Override
@@ -204,6 +206,9 @@ public abstract class AbstractJavaKeyStoreProvider extends CredentialProvider {
     try {
       SecretKeySpec key = null;
       try {
+        if (cache.containsKey(alias)) {
+          return cache.get(alias);
+        }
         if (!keyStore.containsAlias(alias)) {
           return null;
         }
@@ -257,7 +262,7 @@ public abstract class AbstractJavaKeyStoreProvider extends CredentialProvider {
       throws IOException {
     writeLock.lock();
     try {
-      if (keyStore.containsAlias(alias)) {
+      if (keyStore.containsAlias(alias) || cache.containsKey(alias)) {
         throw new IOException("Credential " + alias + " already exists in "
             + this);
       }
@@ -284,6 +289,7 @@ public abstract class AbstractJavaKeyStoreProvider extends CredentialProvider {
       } catch (KeyStoreException e) {
         throw new IOException("Problem removing " + name + " from " + this, e);
       }
+      cache.remove(name);
       changed = true;
     } finally {
       writeLock.unlock();
@@ -312,10 +318,9 @@ public abstract class AbstractJavaKeyStoreProvider extends CredentialProvider {
     writeLock.lock();
     try {
       if (!changed) {
-        LOG.debug("Keystore hasn't changed, returning.");
         return;
       }
-      LOG.debug("Writing out keystore.");
+      // write out the keystore
       try (OutputStream out = getOutputStreamForKeystore()) {
         keyStore.store(out, password);
       } catch (KeyStoreException e) {

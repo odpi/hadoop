@@ -17,14 +17,6 @@
  */
 package org.apache.hadoop.io.compress;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-import static org.junit.Assume.assumeTrue;
-
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
@@ -48,9 +40,6 @@ import java.util.Random;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
-import org.apache.commons.codec.binary.Base64;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.FileStatus;
@@ -62,10 +51,9 @@ import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.MapFile;
 import org.apache.hadoop.io.RandomDatum;
 import org.apache.hadoop.io.SequenceFile;
-import org.apache.hadoop.io.SequenceFile.CompressionType;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
-import org.apache.hadoop.io.compress.bzip2.Bzip2Factory;
+import org.apache.hadoop.io.SequenceFile.CompressionType;
 import org.apache.hadoop.io.compress.zlib.BuiltInGzipDecompressor;
 import org.apache.hadoop.io.compress.zlib.BuiltInZlibDeflater;
 import org.apache.hadoop.io.compress.zlib.BuiltInZlibInflater;
@@ -73,13 +61,19 @@ import org.apache.hadoop.io.compress.zlib.ZlibCompressor;
 import org.apache.hadoop.io.compress.zlib.ZlibCompressor.CompressionLevel;
 import org.apache.hadoop.io.compress.zlib.ZlibCompressor.CompressionStrategy;
 import org.apache.hadoop.io.compress.zlib.ZlibFactory;
+import org.apache.hadoop.io.compress.bzip2.Bzip2Factory;
 import org.apache.hadoop.util.LineReader;
 import org.apache.hadoop.util.NativeCodeLoader;
 import org.apache.hadoop.util.ReflectionUtils;
-import org.junit.After;
+
+import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
 import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Test;
+import static org.junit.Assert.*;
 
 public class TestCodec {
 
@@ -89,10 +83,6 @@ public class TestCodec {
   private int count = 10000;
   private int seed = new Random().nextInt();
 
-  @After
-  public void after() {
-    ZlibFactory.loadNativeZLib();
-  }
   @Test
   public void testDefaultCodec() throws IOException {
     codecTest(conf, seed, 0, "org.apache.hadoop.io.compress.DefaultCodec");
@@ -373,7 +363,11 @@ public class TestCodec {
   @Test
   public void testCodecPoolGzipReuse() throws Exception {
     Configuration conf = new Configuration();
-    assumeTrue(ZlibFactory.isNativeZlibLoaded(conf));
+    conf.setBoolean(CommonConfigurationKeys.IO_NATIVE_LIB_AVAILABLE_KEY, true);
+    if (!ZlibFactory.isNativeZlibLoaded(conf)) {
+      LOG.warn("testCodecPoolGzipReuse skipped: native libs not loaded");
+      return;
+    }
     GzipCodec gzc = ReflectionUtils.newInstance(GzipCodec.class, conf);
     DefaultCodec dfc = ReflectionUtils.newInstance(DefaultCodec.class, conf);
     Compressor c1 = CodecPool.getCompressor(gzc);
@@ -454,6 +448,7 @@ public class TestCodec {
   @Test
   public void testCodecInitWithCompressionLevel() throws Exception {
     Configuration conf = new Configuration();
+    conf.setBoolean(CommonConfigurationKeys.IO_NATIVE_LIB_AVAILABLE_KEY, true);
     if (ZlibFactory.isNativeZlibLoaded(conf)) {
       LOG.info("testCodecInitWithCompressionLevel with native");
       codecTestWithNOCompression(conf,
@@ -465,8 +460,7 @@ public class TestCodec {
                + ": native libs not loaded");
     }
     conf = new Configuration();
-    // don't use native libs
-    ZlibFactory.setNativeZlibLoaded(false);
+    conf.setBoolean(CommonConfigurationKeys.IO_NATIVE_LIB_AVAILABLE_KEY, false);
     codecTestWithNOCompression( conf,
                          "org.apache.hadoop.io.compress.DefaultCodec");
   }
@@ -474,14 +468,14 @@ public class TestCodec {
   @Test
   public void testCodecPoolCompressorReinit() throws Exception {
     Configuration conf = new Configuration();
+    conf.setBoolean(CommonConfigurationKeys.IO_NATIVE_LIB_AVAILABLE_KEY, true);
     if (ZlibFactory.isNativeZlibLoaded(conf)) {
       GzipCodec gzc = ReflectionUtils.newInstance(GzipCodec.class, conf);
       gzipReinitTest(conf, gzc);
     } else {
       LOG.warn("testCodecPoolCompressorReinit skipped: native libs not loaded");
     }
-    // don't use native libs
-    ZlibFactory.setNativeZlibLoaded(false);
+    conf.setBoolean(CommonConfigurationKeys.IO_NATIVE_LIB_AVAILABLE_KEY, false);
     DefaultCodec dfc = ReflectionUtils.newInstance(DefaultCodec.class, conf);
     gzipReinitTest(conf, dfc);
   }
@@ -668,8 +662,7 @@ public class TestCodec {
     gzbuf.reset(dflbuf.getData(), dflbuf.getLength());
 
     Configuration conf = new Configuration();
-    // don't use native libs
-    ZlibFactory.setNativeZlibLoaded(false);
+    conf.setBoolean(CommonConfigurationKeys.IO_NATIVE_LIB_AVAILABLE_KEY, false);
     CompressionCodec codec = ReflectionUtils.newInstance(GzipCodec.class, conf);
     Decompressor decom = codec.createDecompressor();
     assertNotNull(decom);
@@ -722,15 +715,18 @@ public class TestCodec {
   @Test
   public void testBuiltInGzipConcat() throws IOException {
     Configuration conf = new Configuration();
-    // don't use native libs
-    ZlibFactory.setNativeZlibLoaded(false);
+    conf.setBoolean(CommonConfigurationKeys.IO_NATIVE_LIB_AVAILABLE_KEY, false);
     GzipConcatTest(conf, BuiltInGzipDecompressor.class);
   }
 
   @Test
   public void testNativeGzipConcat() throws IOException {
     Configuration conf = new Configuration();
-    assumeTrue(ZlibFactory.isNativeZlibLoaded(conf));
+    conf.setBoolean(CommonConfigurationKeys.IO_NATIVE_LIB_AVAILABLE_KEY, true);
+    if (!ZlibFactory.isNativeZlibLoaded(conf)) {
+      LOG.warn("skipped: native libs not loaded");
+      return;
+    }
     GzipConcatTest(conf, GzipCodec.GzipZlibDecompressor.class);
   }
 
@@ -741,7 +737,10 @@ public class TestCodec {
 
     // Don't use native libs for this test.
     Configuration conf = new Configuration();
-    ZlibFactory.setNativeZlibLoaded(false);
+    conf.setBoolean(CommonConfigurationKeys.IO_NATIVE_LIB_AVAILABLE_KEY, false);
+    assertFalse("ZlibFactory is using native libs against request",
+        ZlibFactory.isNativeZlibLoaded(conf));
+
     // Ensure that the CodecPool has a BuiltInZlibInflater in it.
     Decompressor zlibDecompressor = ZlibFactory.getZlibDecompressor(conf);
     assertNotNull("zlibDecompressor is null!", zlibDecompressor);
@@ -790,7 +789,7 @@ public class TestCodec {
 
     // Don't use native libs for this test.
     Configuration conf = new Configuration();
-    ZlibFactory.setNativeZlibLoaded(false);
+    conf.setBoolean(CommonConfigurationKeys.IO_NATIVE_LIB_AVAILABLE_KEY, false);
     assertFalse("ZlibFactory is using native libs against request",
         ZlibFactory.isNativeZlibLoaded(conf));
 
@@ -833,14 +832,18 @@ public class TestCodec {
     br.close();
   }
 
-  private void testGzipCodecWrite(boolean useNative) throws IOException {
+  public void testGzipCodecWrite(boolean useNative) throws IOException {
     // Create a gzipped file using a compressor from the CodecPool,
     // and try to read it back via the regular GZIPInputStream.
 
     // Use native libs per the parameter
     Configuration conf = new Configuration();
+    conf.setBoolean(CommonConfigurationKeys.IO_NATIVE_LIB_AVAILABLE_KEY, useNative);
     if (useNative) {
-      assumeTrue(ZlibFactory.isNativeZlibLoaded(conf));
+      if (!ZlibFactory.isNativeZlibLoaded(conf)) {
+        LOG.warn("testGzipCodecWrite skipped: native libs not loaded");
+        return;
+      }
     } else {
       assertFalse("ZlibFactory is using native libs against request",
           ZlibFactory.isNativeZlibLoaded(conf));
@@ -892,8 +895,6 @@ public class TestCodec {
 
   @Test
   public void testGzipCodecWriteJava() throws IOException {
-    // don't use native libs
-    ZlibFactory.setNativeZlibLoaded(false);
     testGzipCodecWrite(false);
   }
 
@@ -901,14 +902,14 @@ public class TestCodec {
   public void testGzipNativeCodecWrite() throws IOException {
     testGzipCodecWrite(true);
   }
-  @Test
+
   public void testCodecPoolAndGzipDecompressor() {
     // BuiltInZlibInflater should not be used as the GzipCodec decompressor.
     // Assert that this is the case.
 
     // Don't use native libs for this test.
     Configuration conf = new Configuration();
-    ZlibFactory.setNativeZlibLoaded(false);
+    conf.setBoolean("hadoop.native.lib", false);
     assertFalse("ZlibFactory is using native libs against request",
                 ZlibFactory.isNativeZlibLoaded(conf));
 

@@ -53,7 +53,7 @@ import org.apache.hadoop.classification.InterfaceStability;
  * partial block.</li>
  * </ol>
  * 
- * Following combinations are not valid and will result in
+ * Following combination is not valid and will result in 
  * {@link HadoopIllegalArgumentException}:
  * <ol>
  * <li> APPEND|OVERWRITE</li>

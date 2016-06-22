@@ -143,14 +143,14 @@ if "%1" == "--loglevel" (
 
   if %yarn-command% == classpath (
     if not defined yarn-command-arguments (
-      @rem No need to bother starting up a JVM for this simple case.
+      @rem No need to bother starting up a JVM for this simple case. 
       @echo %CLASSPATH%
       exit /b
     )
   )
 
   set yarncommands=resourcemanager nodemanager proxyserver rmadmin version jar ^
-     application applicationattempt container node queue logs daemonlog historyserver ^
+     application applicationattempt cluster container node queue logs daemonlog historyserver ^
      timelineserver classpath
   for %%i in ( %yarncommands% ) do (
     if %yarn-command% == %%i set yarncommand=true
@@ -172,7 +172,7 @@ if "%1" == "--loglevel" (
 goto :eof
 
 :classpath
-  set CLASS=org.apache.hadoop.util.Classpath
+  set CLASS=org.apache.hadoop.util.Classpath 
   goto :eof
 
 :rmadmin

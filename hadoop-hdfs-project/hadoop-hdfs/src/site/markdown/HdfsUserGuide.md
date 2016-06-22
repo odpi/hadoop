@@ -264,7 +264,7 @@ For command usage, see [balancer](./HDFSCommands.html#balancer).
 Rack Awareness
 --------------
 
-A HDFS cluster can recognize the topology of racks where each nodes are put. It is important to configure this topology in order to optimize the data capacity and usage. For more detail, please check the [rack awareness](../hadoop-common/RackAwareness.html) in common document.
+Typically large Hadoop clusters are arranged in racks and network traffic between different nodes with in the same rack is much more desirable than network traffic across the racks. In addition NameNode tries to place replicas of block on multiple racks for improved fault tolerance. Hadoop lets the cluster administrators decide which rack a node belongs to through configuration variable `net.topology.script.file.name`. When this script is configured, each node runs the script to determine its rack id. A default installation assumes all the nodes belong to the same rack. This feature and configuration is further described in PDF attached to [HADOOP-692](https://issues.apache.org/jira/browse/HADOOP-692).
 
 Safemode
 --------
@@ -302,11 +302,12 @@ Upgrade and Rollback
 When Hadoop is upgraded on an existing cluster, as with any software upgrade, it is possible there are new bugs or incompatible changes that affect existing applications and were not discovered earlier. In any non-trivial HDFS installation, it is not an option to loose any data, let alone to restart HDFS from scratch. HDFS allows administrators to go back to earlier version of Hadoop and rollback the cluster to the state it was in before the upgrade. HDFS upgrade is described in more detail in [Hadoop Upgrade](http://wiki.apache.org/hadoop/Hadoop_Upgrade) Wiki page. HDFS can have one such backup at a time. Before upgrading, administrators need to remove existing backup using bin/hadoop dfsadmin `-finalizeUpgrade` command. The following briefly describes the typical upgrade procedure:
 
 *   Before upgrading Hadoop software, finalize if there an existing
-    backup.
+    backup. `dfsadmin -upgradeProgress` status can tell if the cluster
+    needs to be finalized.
 
 *   Stop the cluster and distribute new version of Hadoop.
 
-*   Run the new version with `-upgrade` option (`sbin/start-dfs.sh -upgrade`).
+*   Run the new version with `-upgrade` option (`bin/start-dfs.sh -upgrade`).
 
 *   Most of the time, cluster works just fine. Once the new HDFS is
     considered working well (may be after a few days of operation),

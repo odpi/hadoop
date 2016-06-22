@@ -144,7 +144,7 @@ public class TestServletFilter extends HttpServerFunctionalTest {
       http.stop();
     }
   }
-  
+
   static public class ErrorFilter extends SimpleFilter {
     @Override
     public void init(FilterConfig arg0) throws ServletException {
@@ -156,7 +156,6 @@ public class TestServletFilter extends HttpServerFunctionalTest {
       public Initializer() {
       }
 
-      @Override
       public void initFilter(FilterContainer container, Configuration conf) {
         container.addFilter("simple", ErrorFilter.class.getName(), null);
       }
@@ -166,7 +165,7 @@ public class TestServletFilter extends HttpServerFunctionalTest {
   @Test
   public void testServletFilterWhenInitThrowsException() throws Exception {
     Configuration conf = new Configuration();
-    // start a http server with ErrorFilter
+    // start a http server with CountingFilter
     conf.set(HttpServer2.FILTER_INITIALIZER_PROPERTY,
         ErrorFilter.Initializer.class.getName());
     HttpServer2 http = createTestServer(conf);
@@ -174,13 +173,14 @@ public class TestServletFilter extends HttpServerFunctionalTest {
       http.start();
       fail("expecting exception");
     } catch (IOException e) {
-      assertTrue( e.getMessage().contains("Problem in starting http server. Server handlers failed"));
+      assertTrue(e.getMessage().contains(
+          "Problem in starting http server. Server handlers failed"));
     }
   }
   
   /**
-   * Similar to the above test case, except that it uses a different API to add the
-   * filter. Regression test for HADOOP-8786.
+   * Similar to the above test case, except that it uses a different API to add
+   * the filter. Regression test for HADOOP-8786.
    */
   @Test
   public void testContextSpecificServletFilterWhenInitThrowsException()
@@ -194,8 +194,8 @@ public class TestServletFilter extends HttpServerFunctionalTest {
       http.start();
       fail("expecting exception");
     } catch (IOException e) {
-      GenericTestUtils.assertExceptionContains("Unable to initialize WebAppContext", e);
+      GenericTestUtils.assertExceptionContains(
+          "Unable to initialize WebAppContext", e);
     }
   }
-
 }

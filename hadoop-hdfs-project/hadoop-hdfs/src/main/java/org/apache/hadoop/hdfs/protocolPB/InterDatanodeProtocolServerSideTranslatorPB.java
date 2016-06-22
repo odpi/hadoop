@@ -64,7 +64,7 @@ public class InterDatanodeProtocolServerSideTranslatorPB implements
     } else {
       return InitReplicaRecoveryResponseProto.newBuilder()
           .setReplicaFound(true)
-          .setBlock(PBHelperClient.convert(r))
+          .setBlock(PBHelper.convert(r))
           .setState(PBHelper.convert(r.getOriginalReplicaState())).build();
     }
   }
@@ -76,7 +76,7 @@ public class InterDatanodeProtocolServerSideTranslatorPB implements
     final String storageID;
     try {
       storageID = impl.updateReplicaUnderRecovery(
-          PBHelperClient.convert(request.getBlock()), request.getRecoveryId(),
+          PBHelper.convert(request.getBlock()), request.getRecoveryId(),
           request.getNewBlockId(), request.getNewLength());
     } catch (IOException e) {
       throw new ServiceException(e);

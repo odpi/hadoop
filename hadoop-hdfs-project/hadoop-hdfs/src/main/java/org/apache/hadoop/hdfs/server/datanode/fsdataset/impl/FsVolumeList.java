@@ -35,7 +35,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.StorageType;
-import org.apache.hadoop.hdfs.protocol.BlockListAsLongs;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeReference;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeSpi;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.VolumeChoosingPolicy;
@@ -276,11 +275,10 @@ class FsVolumeList {
    * @param ref       a reference to the new FsVolumeImpl instance.
    */
   void addVolume(FsVolumeReference ref) {
-    FsVolumeImpl volume = (FsVolumeImpl) ref.getVolume();
     while (true) {
       final FsVolumeImpl[] curVolumes = volumes.get();
       final List<FsVolumeImpl> volumeList = Lists.newArrayList(curVolumes);
-      volumeList.add(volume);
+      volumeList.add((FsVolumeImpl)ref.getVolume());
       if (volumes.compareAndSet(curVolumes,
           volumeList.toArray(new FsVolumeImpl[volumeList.size()]))) {
         break;
@@ -301,9 +299,9 @@ class FsVolumeList {
     }
     // If the volume is used to replace a failed volume, it needs to reset the
     // volume failure info for this volume.
-    removeVolumeFailureInfo(new File(volume.getBasePath()));
+    removeVolumeFailureInfo(new File(ref.getVolume().getBasePath()));
     FsDatasetImpl.LOG.info("Added new volume: " +
-        volume.getStorageID());
+        ref.getVolume().getStorageID());
   }
 
   /**
@@ -436,10 +434,9 @@ class FsVolumeList {
         bpid + ": " + totalTimeTaken + "ms");
   }
   
-  void removeBlockPool(String bpid, Map<DatanodeStorage, BlockListAsLongs>
-      blocksPerVolume) {
+  void removeBlockPool(String bpid) {
     for (FsVolumeImpl v : volumes.get()) {
-      v.shutdownBlockPool(bpid, blocksPerVolume.get(v.toDatanodeStorage()));
+      v.shutdownBlockPool(bpid);
     }
   }
 

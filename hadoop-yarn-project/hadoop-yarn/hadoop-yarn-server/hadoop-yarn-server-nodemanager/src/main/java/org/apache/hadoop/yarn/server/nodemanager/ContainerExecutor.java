@@ -22,12 +22,11 @@ import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -41,20 +40,12 @@ import org.apache.hadoop.conf.Configurable;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
-import org.apache.hadoop.yarn.api.ApplicationConstants;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Container;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerDiagnosticsUpdateEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.launcher.ContainerLaunch;
-import org.apache.hadoop.yarn.server.nodemanager.util.NodeManagerHardwareUtils;
-import org.apache.hadoop.yarn.server.nodemanager.executor.ContainerLivenessContext;
-import org.apache.hadoop.yarn.server.nodemanager.executor.ContainerReacquisitionContext;
-import org.apache.hadoop.yarn.server.nodemanager.executor.ContainerSignalContext;
-import org.apache.hadoop.yarn.server.nodemanager.executor.ContainerStartContext;
-import org.apache.hadoop.yarn.server.nodemanager.executor.DeletionAsUserContext;
-import org.apache.hadoop.yarn.server.nodemanager.executor.LocalizerStartContext;
 import org.apache.hadoop.yarn.server.nodemanager.util.ProcessIdFileReader;
 import org.apache.hadoop.util.Shell;
 import org.apache.hadoop.util.StringUtils;
@@ -120,68 +111,61 @@ public abstract class ContainerExecutor implements Configurable {
    * For $rsrc in job resources
    *   Copy $rsrc {@literal ->} $N/$user/$appId/filecache/idef
    * </pre>
-   * @param ctx LocalizerStartContext that encapsulates necessary information
-   *            for starting a localizer.
+   * @param user user name of application owner
+   * @param appId id of the application
+   * @param nmPrivateContainerTokens path to localized credentials, rsrc by NM
+   * @param nmAddr RPC address to contact NM
+   * @param dirsHandler NM local dirs service, for nm-local-dirs and nm-log-dirs
    * @throws IOException For most application init failures
    * @throws InterruptedException If application init thread is halted by NM
    */
-  public abstract void startLocalizer(LocalizerStartContext ctx)
+  public abstract void startLocalizer(Path nmPrivateContainerTokens,
+      InetSocketAddress nmAddr, String user, String appId, String locId,
+      LocalDirsHandlerService dirsHandler)
     throws IOException, InterruptedException;
 
 
   /**
    * Launch the container on the node. This is a blocking call and returns only
    * when the container exits.
-   * @param ctx Encapsulates information necessary for launching containers.
+   * @param container the container to be launched
+   * @param nmPrivateContainerScriptPath the path for launch script
+   * @param nmPrivateTokensPath the path for tokens for the container
+   * @param user the user of the container
+   * @param appId the appId of the container
+   * @param containerWorkDir the work dir for the container
+   * @param localDirs nm-local-dirs to be used for this container
+   * @param logDirs nm-log-dirs to be used for this container
    * @return the return status of the launch
    * @throws IOException
    */
-  public abstract int launchContainer(ContainerStartContext ctx) throws
-      IOException;
+  public abstract int launchContainer(Container container,
+      Path nmPrivateContainerScriptPath, Path nmPrivateTokensPath,
+      String user, String appId, Path containerWorkDir, 
+      List<String> localDirs, List<String> logDirs) throws IOException;
 
-  /**
-   * Signal container with the specified signal.
-   * @param ctx Encapsulates information necessary for signaling containers.
-   * @return returns true if the operation succeeded
-   * @throws IOException
-   */
-  public abstract boolean signalContainer(ContainerSignalContext ctx)
+  public abstract boolean signalContainer(String user, String pid,
+      Signal signal)
       throws IOException;
 
-  /**
-   * Delete specified directories as a given user.
-   * @param ctx Encapsulates information necessary for deletion.
-   * @throws IOException
-   * @throws InterruptedException
-   */
-  public abstract void deleteAsUser(DeletionAsUserContext ctx)
+  public abstract void deleteAsUser(String user, Path subDir, Path... basedirs)
       throws IOException, InterruptedException;
 
-  /**
-   * Check if a container is alive.
-   * @param ctx Encapsulates information necessary for container liveness check.
-   * @return true if container is still alive
-   * @throws IOException
-   */
-  public abstract boolean isContainerAlive(ContainerLivenessContext ctx)
+  public abstract boolean isContainerProcessAlive(String user, String pid)
       throws IOException;
 
   /**
    * Recover an already existing container. This is a blocking call and returns
    * only when the container exits.  Note that the container must have been
    * activated prior to this call.
-   * @param ctx encapsulates information necessary to reacquire container
+   * @param user the user of the container
+   * @param containerId The ID of the container to reacquire
    * @return The exit code of the pre-existing container
    * @throws IOException
    * @throws InterruptedException 
    */
-  public int reacquireContainer(ContainerReacquisitionContext ctx)
+  public int reacquireContainer(String user, ContainerId containerId)
       throws IOException, InterruptedException {
-    Container container = ctx.getContainer();
-    String user = ctx.getUser();
-    ContainerId containerId = ctx.getContainerId();
-
-
     Path pidPath = getPidFilePath(containerId);
     if (pidPath == null) {
       LOG.warn(containerId + " is not active, returning terminated error");
@@ -195,13 +179,7 @@ public abstract class ContainerExecutor implements Configurable {
     }
 
     LOG.info("Reacquiring " + containerId + " with pid " + pid);
-    ContainerLivenessContext livenessContext = new ContainerLivenessContext
-        .Builder()
-        .setContainer(container)
-        .setUser(user)
-        .setPid(pid)
-        .build();
-    while(isContainerAlive(livenessContext)) {
+    while(isContainerProcessAlive(user, pid)) {
       Thread.sleep(1000);
     }
 
@@ -232,36 +210,11 @@ public abstract class ContainerExecutor implements Configurable {
     }
   }
 
-  /**
-   * This method writes out the launch environment of a container. This can be
-   * overridden by extending ContainerExecutors to provide different behaviors
-   * @param out the output stream to which the environment is written (usually
-   * a script file which will be executed by the Launcher)
-   * @param environment The environment variables and their values
-   * @param resources The resources which have been localized for this container
-   * Symlinks will be created to these localized resources
-   * @param command The command that will be run.
-   * @throws IOException if any errors happened writing to the OutputStream,
-   * while creating symlinks
-   */
-  public void writeLaunchEnv(OutputStream out, Map<String, String> environment,
-    Map<Path, List<String>> resources, List<String> command) throws IOException{
-    ContainerLaunch.ShellScriptBuilder sb =
-      ContainerLaunch.ShellScriptBuilder.create();
-    Set<String> whitelist = new HashSet<String>();
-    whitelist.add(YarnConfiguration.NM_DOCKER_CONTAINER_EXECUTOR_IMAGE_NAME);
-    whitelist.add(ApplicationConstants.Environment.HADOOP_YARN_HOME.name());
-    whitelist.add(ApplicationConstants.Environment.HADOOP_COMMON_HOME.name());
-    whitelist.add(ApplicationConstants.Environment.HADOOP_HDFS_HOME.name());
-    whitelist.add(ApplicationConstants.Environment.HADOOP_CONF_DIR.name());
-    whitelist.add(ApplicationConstants.Environment.JAVA_HOME.name());
+  public void writeLaunchEnv(OutputStream out, Map<String, String> environment, Map<Path, List<String>> resources, List<String> command) throws IOException{
+    ContainerLaunch.ShellScriptBuilder sb = ContainerLaunch.ShellScriptBuilder.create();
     if (environment != null) {
       for (Map.Entry<String,String> env : environment.entrySet()) {
-        if (!whitelist.contains(env.getKey())) {
-          sb.env(env.getKey().toString(), env.getValue().toString());
-        } else {
-          sb.whitelistedEnv(env.getKey().toString(), env.getValue().toString());
-        }
+        sb.env(env.getKey().toString(), env.getValue().toString());
       }
     }
     if (resources != null) {
@@ -389,16 +342,28 @@ public abstract class ContainerExecutor implements Configurable {
             YarnConfiguration.NM_WINDOWS_CONTAINER_CPU_LIMIT_ENABLED,
             YarnConfiguration.DEFAULT_NM_WINDOWS_CONTAINER_CPU_LIMIT_ENABLED)) {
           int containerVCores = resource.getVirtualCores();
-          int nodeVCores = NodeManagerHardwareUtils.getVCores(conf);
-          int nodeCpuPercentage =
-              NodeManagerHardwareUtils.getNodeCpuPercentage(conf);
-
-          float containerCpuPercentage =
-              (float) (nodeCpuPercentage * containerVCores) / nodeVCores;
-
+          int nodeVCores = conf.getInt(YarnConfiguration.NM_VCORES,
+              YarnConfiguration.DEFAULT_NM_VCORES);
+          // cap overall usage to the number of cores allocated to YARN
+          int nodeCpuPercentage = Math
+              .min(
+                  conf.getInt(
+                      YarnConfiguration.NM_RESOURCE_PERCENTAGE_PHYSICAL_CPU_LIMIT,
+                      YarnConfiguration.DEFAULT_NM_RESOURCE_PERCENTAGE_PHYSICAL_CPU_LIMIT),
+                  100);
+          nodeCpuPercentage = Math.max(0, nodeCpuPercentage);
+          if (nodeCpuPercentage == 0) {
+            String message = "Illegal value for "
+                + YarnConfiguration.NM_RESOURCE_PERCENTAGE_PHYSICAL_CPU_LIMIT
+                + ". Value cannot be less than or equal to 0.";
+            throw new IllegalArgumentException(message);
+          }
+          float yarnVCores = (nodeCpuPercentage * nodeVCores) / 100.0f;
           // CPU should be set to a percentage * 100, e.g. 20% cpu rate limit
-          // should be set as 20 * 100.
-          cpuRate = Math.min(10000, (int) (containerCpuPercentage * 100));
+          // should be set as 20 * 100. The following setting is equal to:
+          // 100 * (100 * (vcores / Total # of cores allocated to YARN))
+          cpuRate = Math.min(10000,
+              (int) ((containerVCores * 10000) / yarnVCores));
         }
       }
       return new String[] { Shell.WINUTILS, "task", "create", "-m",
@@ -507,12 +472,7 @@ public abstract class ContainerExecutor implements Configurable {
     public void run() {
       try {
         Thread.sleep(delay);
-        containerExecutor.signalContainer(new ContainerSignalContext.Builder()
-            .setContainer(container)
-            .setUser(user)
-            .setPid(pid)
-            .setSignal(signal)
-            .build());
+        containerExecutor.signalContainer(user, pid, signal);
       } catch (InterruptedException e) {
         return;
       } catch (IOException e) {

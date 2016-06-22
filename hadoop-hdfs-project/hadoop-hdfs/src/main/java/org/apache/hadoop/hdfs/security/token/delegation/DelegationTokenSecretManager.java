@@ -79,14 +79,13 @@ public class DelegationTokenSecretManager
 
   /**
    * Create a secret manager
-   * @param delegationKeyUpdateInterval the number of milliseconds for rolling
-   *        new secret keys.
+   * @param delegationKeyUpdateInterval the number of seconds for rolling new
+   *        secret keys.
    * @param delegationTokenMaxLifetime the maximum lifetime of the delegation
-   *        tokens in milliseconds
+   *        tokens
    * @param delegationTokenRenewInterval how often the tokens must be renewed
-   *        in milliseconds
    * @param delegationTokenRemoverScanInterval how often the tokens are scanned
-   *        for expired tokens in milliseconds
+   *        for expired tokens
    * @param storeTokenTrackingId whether to store the token's tracking id
    */
   public DelegationTokenSecretManager(long delegationKeyUpdateInterval,

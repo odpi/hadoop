@@ -36,6 +36,7 @@ import java.net.URLConnection;
 import java.security.PrivilegedExceptionAction;
 import java.util.Map;
 
+import org.apache.commons.httpclient.HttpConnection;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileUtil;
@@ -158,7 +159,7 @@ public class TestWebHdfsTokens {
       assertFalse(op.getRequireAuth());
     }
   }
-  
+
   @SuppressWarnings("unchecked") // for any(Token.class)
   @Test
   public void testLazyTokenFetchForWebhdfs() throws Exception {
@@ -204,6 +205,7 @@ public class TestWebHdfsTokens {
       String keystoresDir;
       String sslConfDir;
 	    
+      clusterConf.setBoolean(DFSConfigKeys.DFS_WEBHDFS_ENABLED_KEY, true);
       clusterConf.set(DFSConfigKeys.DFS_HTTP_POLICY_KEY, HttpConfig.Policy.HTTPS_ONLY.name());
       clusterConf.set(DFSConfigKeys.DFS_NAMENODE_HTTPS_ADDRESS_KEY, "localhost:0");
       clusterConf.set(DFSConfigKeys.DFS_DATANODE_HTTPS_ADDRESS_KEY, "localhost:0");
@@ -280,7 +282,7 @@ public class TestWebHdfsTokens {
             @Override
             Token<DelegationTokenIdentifier> decodeResponse(Map<?, ?> json)
                 throws IOException {
-              return JsonUtilClient.toDelegationToken(json);
+              return JsonUtil.toDelegationToken(json);
             }
           }.run();
 
@@ -297,13 +299,15 @@ public class TestWebHdfsTokens {
   private void validateLazyTokenFetch(final Configuration clusterConf) throws Exception{
     final String testUser = "DummyUser";
     UserGroupInformation ugi = UserGroupInformation.createUserForTesting(
-      testUser, new String[]{"supergroup"});
+        testUser, new String[]{"supergroup"});
+  
     WebHdfsFileSystem fs = ugi.doAs(new PrivilegedExceptionAction<WebHdfsFileSystem>() {
-    @Override
+      @Override
       public WebHdfsFileSystem run() throws IOException {
         return spy((WebHdfsFileSystem) FileSystem.newInstance(uri, clusterConf));
-	  }
+      }
     });
+  
     // verify token ops don't get a token
     Assert.assertNull(fs.getRenewToken());
     Token<?> token = fs.getDelegationToken(null);
@@ -386,8 +390,8 @@ public class TestWebHdfsTokens {
     verify(fs, times(1)).setDelegationToken(any(Token.class));
     token2 = fs.getRenewToken();
     Assert.assertNotNull(token2);
-    Assert.assertNotSame(token, token2);
     Assert.assertEquals(fs.getTokenKind(), token.getKind());
+    Assert.assertNotSame(token, token2);
     Assert.assertEquals(testUser, getTokenOwner(token2));
     reset(fs);
 
@@ -403,8 +407,8 @@ public class TestWebHdfsTokens {
     verify(fs, times(1)).setDelegationToken(any(Token.class));
     token2 = fs.getRenewToken();
     Assert.assertNotNull(token2);
-    Assert.assertNotSame(token, token2);
     Assert.assertEquals(fs.getTokenKind(), token.getKind());
+    Assert.assertNotSame(token, token2);
     Assert.assertEquals(testUser, getTokenOwner(token2));
     reset(fs);
 
@@ -469,14 +473,14 @@ public class TestWebHdfsTokens {
       Assert.assertSame(token, token2);
       reset(fs);
     }
-    
+  
     // verify fs close does NOT cancel the ugi token
     fs.close();
     verify(fs, never()).getDelegationToken();
     verify(fs, never()).replaceExpiredDelegationToken();
     verify(fs, never()).getDelegationToken(anyString());
     verify(fs, never()).setDelegationToken(any(Token.class));
-    verify(fs, never()).cancelDelegationToken(any(Token.class));
+    verify(fs, never()).cancelDelegationToken(any(Token.class));  
   } 
   
   private String getTokenOwner(Token<?> token) throws IOException {

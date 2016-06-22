@@ -20,9 +20,6 @@ package org.apache.hadoop.util;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.DirectoryStream;
-import java.nio.file.DirectoryIteratorException;
-import java.nio.file.Files;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
@@ -89,26 +86,13 @@ public class DiskChecker {
    */
   public static void checkDirs(File dir) throws DiskErrorException {
     checkDir(dir);
-    IOException ex = null;
-    try (DirectoryStream<java.nio.file.Path> stream =
-        Files.newDirectoryStream(dir.toPath())) {
-      for (java.nio.file.Path entry: stream) {
-        File child = entry.toFile();
-        if (child.isDirectory()) {
-          checkDirs(child);
-        }
+    for (File child : dir.listFiles()) {
+      if (child.isDirectory()) {
+        checkDirs(child);
       }
-    } catch (DirectoryIteratorException de) {
-      ex = de.getCause();
-    } catch (IOException ie) {
-      ex = ie;
-    }
-    if (ex != null) {
-      throw new DiskErrorException("I/O error when open a directory: "
-          + dir.toString(), ex);
     }
   }
-
+  
   /**
    * Create the directory if it doesn't exist and check that dir is readable,
    * writable and executable

@@ -174,7 +174,7 @@ Usage: `hadoop fs -count [-q] [-h] [-v] <paths> `
 
 Count the number of directories, files and bytes under the paths that match the specified file pattern. The output columns with -count are: DIR\_COUNT, FILE\_COUNT, CONTENT\_SIZE, PATHNAME
 
-The output columns with -count -q are: QUOTA, REMAINING\_QUOTA, SPACE\_QUOTA, REMAINING\_SPACE\_QUOTA, DIR\_COUNT, FILE\_COUNT, CONTENT\_SIZE, PATHNAME
+The output columns with -count -q are: QUOTA, REMAINING\_QUATA, SPACE\_QUOTA, REMAINING\_SPACE\_QUOTA, DIR\_COUNT, FILE\_COUNT, CONTENT\_SIZE, PATHNAME
 
 The -h option shows sizes in human readable format.
 
@@ -185,7 +185,7 @@ Example:
 * `hadoop fs -count hdfs://nn1.example.com/file1 hdfs://nn2.example.com/file2`
 * `hadoop fs -count -q hdfs://nn1.example.com/file1`
 * `hadoop fs -count -q -h hdfs://nn1.example.com/file1`
-* `hadoop fs -count -q -h -v hdfs://nn1.example.com/file1`
+* `hdfs dfs -count -q -h -v hdfs://nn1.example.com/file1`
 
 Exit Code:
 
@@ -271,7 +271,7 @@ expunge
 
 Usage: `hadoop fs -expunge`
 
-If trash is enabled when a file is deleted, HDFS instead moves the deleted file to a trash directory. This command causes HDFS to permanently delete files from the trash that are older than the retention threshold. Refer to the [File Deletes and Undeletes Guide](../hadoop-hdfs/HdfsDesign.html#File_Deletes_and_Undeletes) in Space Reclamation section for more information on the Trash feature.
+Empty the Trash. Refer to the [HDFS Architecture Guide](../hadoop-hdfs/HdfsDesign.html) for more information on the Trash feature.
 
 find
 ----
@@ -286,9 +286,9 @@ The following primary expressions are recognised:
 
     Evaluates as true if the basename of the file matches the pattern using standard file system globbing. If -iname is used then the match is case insensitive.
 
-*   -print<br />-print0
+*   -print<br />-print0Always
 
-    Always evaluates to true. Causes the current pathname to be written to standard output. If the -print0 expression is used then an ASCII NULL character is appended.
+    evaluates to true. Causes the current pathname to be written to standard output. If the -print0 expression is used then an ASCII NULL character is appended.
 
 The following operators are recognised:
 
@@ -368,18 +368,9 @@ Returns 0 on success and non-zero on error.
 getmerge
 --------
 
-Usage: `hadoop fs -getmerge [-nl] <src> <localdst>`
+Usage: `hadoop fs -getmerge <src> <localdst> [addnl]`
 
-Takes a source directory and a destination file as input and concatenates files in src into the destination local file. Optionally -nl can be set to enable adding a newline character (LF) at the end of each file.
-
-Examples:
-
-* `hadoop fs -getmerge -nl  /src  /opt/output.txt`
-* `hadoop fs -getmerge -nl  /src/file1.txt /src/file2.txt  /output.txt`
-
-Exit Code:
-
-Returns 0 on success and non-zero on error.
+Takes a source directory and a destination file as input and concatenates files in src into the destination local file. Optionally addnl can be set to enable adding a newline character at the end of each file.
 
 help
 ----
@@ -391,11 +382,10 @@ Return usage output.
 ls
 ----
 
-Usage: `hadoop fs -ls [-C] [-d] [-h] [-R] [-t] [-S] [-r] [-u] <args> `
+Usage: `hadoop fs -ls [-d] [-h] [-R] [-t] [-S] [-r] [-u] <args> `
 
 Options:
 
-* -C: Display the paths of files and directories only.
 * -d: Directories are listed as plain files.
 * -h: Format file sizes in a human-readable fashion (eg 64.0m instead of 67108864).
 * -R: Recursively list subdirectories encountered.
@@ -697,14 +687,15 @@ truncate
 
 Usage: `hadoop fs -truncate [-w] <length> <paths>`
 
-Truncate all files that match the specified file pattern
-to the specified length.
+Truncate all files that match the specified file pattern to the
+specified length.
 
 Options:
 
-* The -w flag requests that the command waits for block recovery to complete, if necessary.  
-Without -w flag the file may remain unclosed for some time while the recovery is in progress.  
-During this time file cannot be reopened for append.
+* The `-w` flag requests that the command waits for block recovery
+  to complete, if necessary. Without -w flag the file may remain
+  unclosed for some time while the recovery is in progress.
+  During this time file cannot be reopened for append.
 
 Example:
 

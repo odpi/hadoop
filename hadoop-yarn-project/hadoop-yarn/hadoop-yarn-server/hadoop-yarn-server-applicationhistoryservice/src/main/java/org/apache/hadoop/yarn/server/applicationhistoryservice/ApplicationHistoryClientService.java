@@ -184,16 +184,9 @@ public class ApplicationHistoryClientService extends AbstractService implements
   public GetApplicationsResponse
       getApplications(GetApplicationsRequest request) throws YarnException,
           IOException {
-    long startedBegin =
-        request.getStartRange() == null ? 0L : request.getStartRange()
-          .getMinimumLong();
-    long startedEnd =
-        request.getStartRange() == null ? Long.MAX_VALUE : request
-          .getStartRange().getMaximumLong();
     GetApplicationsResponse response =
         GetApplicationsResponse.newInstance(new ArrayList<ApplicationReport>(
-          history.getApplications(request.getLimit(), startedBegin, startedEnd)
-            .values()));
+          history.getAllApplications().values()));
     return response;
   }
 

@@ -47,6 +47,7 @@ public class TestQuotaByStorageType {
   private static final long seed = 0L;
   private static final Path dir = new Path("/TestQuotaByStorageType");
 
+  private Configuration conf;
   private MiniDFSCluster cluster;
   private FSDirectory fsdir;
   private DistributedFileSystem dfs;
@@ -56,7 +57,7 @@ public class TestQuotaByStorageType {
 
   @Before
   public void setUp() throws Exception {
-    Configuration conf = new Configuration();
+    conf = new Configuration();
     conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, BLOCKSIZE);
 
     // Setup a 3-node cluster and configure
@@ -67,7 +68,10 @@ public class TestQuotaByStorageType {
         .storageTypes(new StorageType[]{StorageType.SSD, StorageType.DEFAULT})
         .build();
     cluster.waitActive();
-    refreshClusterState();
+
+    fsdir = cluster.getNamesystem().getFSDirectory();
+    dfs = cluster.getFileSystem();
+    fsn = cluster.getNamesystem();
   }
 
   @After
@@ -75,13 +79,6 @@ public class TestQuotaByStorageType {
     if (cluster != null) {
       cluster.shutdown();
     }
-  }
-
-  // Cluster state must be refreshed after each start/restart in the test
-  private void refreshClusterState() throws IOException{
-    fsdir = cluster.getNamesystem().getFSDirectory();
-    dfs = cluster.getFileSystem();
-    fsn = cluster.getNamesystem();
   }
 
   @Test(timeout = 60000)
@@ -197,8 +194,8 @@ public class TestQuotaByStorageType {
         .getSpaceConsumed().getTypeSpaces().get(StorageType.SSD);
     assertEquals(0, storageTypeConsumed);
 
-    QuotaCounts counts = fnode.computeQuotaUsage(
-        fsn.getBlockManager().getStoragePolicySuite(), true);
+    QuotaCounts counts = new QuotaCounts.Builder().build();
+    fnode.computeQuotaUsage(fsn.getBlockManager().getStoragePolicySuite(), counts, true);
     assertEquals(fnode.dumpTreeRecursively().toString(), 0,
         counts.getTypeSpaces().get(StorageType.SSD));
 
@@ -456,8 +453,8 @@ public class TestQuotaByStorageType {
     assertEquals(0, cntAfterDelete.getStorageSpace());
 
     // Validate the computeQuotaUsage()
-    QuotaCounts counts = fnode.computeQuotaUsage(
-        fsn.getBlockManager().getStoragePolicySuite(), true);
+    QuotaCounts counts = new QuotaCounts.Builder().build();
+    fnode.computeQuotaUsage(fsn.getBlockManager().getStoragePolicySuite(), counts, true);
     assertEquals(fnode.dumpTreeRecursively().toString(), 1,
         counts.getNameSpace());
     assertEquals(fnode.dumpTreeRecursively().toString(), 0,
@@ -568,8 +565,8 @@ public class TestQuotaByStorageType {
         .getSpaceConsumed().getTypeSpaces().get(StorageType.SSD);
     assertEquals(file1Len, ssdConsumed);
 
-    QuotaCounts counts1 = sub1Node.computeQuotaUsage(
-        fsn.getBlockManager().getStoragePolicySuite(), true);
+    QuotaCounts counts1 = new QuotaCounts.Builder().build();
+    sub1Node.computeQuotaUsage(fsn.getBlockManager().getStoragePolicySuite(), counts1, true);
     assertEquals(sub1Node.dumpTreeRecursively().toString(), file1Len,
         counts1.getTypeSpaces().get(StorageType.SSD));
 
@@ -586,8 +583,8 @@ public class TestQuotaByStorageType {
         .getSpaceConsumed().getTypeSpaces().get(StorageType.SSD);
     assertEquals(0, ssdConsumed);
 
-    QuotaCounts counts2 = sub1Node.computeQuotaUsage(
-        fsn.getBlockManager().getStoragePolicySuite(), true);
+    QuotaCounts counts2 = new QuotaCounts.Builder().build();
+    sub1Node.computeQuotaUsage(fsn.getBlockManager().getStoragePolicySuite(), counts2, true);
     assertEquals(sub1Node.dumpTreeRecursively().toString(), 0,
         counts2.getTypeSpaces().get(StorageType.SSD));
 
@@ -623,7 +620,7 @@ public class TestQuotaByStorageType {
     assertEquals(file1Len, ssdConsumed);
 
     // Truncate file to 1 * BLOCKSIZE
-    int newFile1Len = BLOCKSIZE;
+    int newFile1Len = BLOCKSIZE * 1;
     dfs.truncate(createdFile1, newFile1Len);
 
     // Verify SSD consumed after truncate
@@ -666,7 +663,6 @@ public class TestQuotaByStorageType {
 
     // Restart namenode to make sure the editlog is correct
     cluster.restartNameNode(true);
-    refreshClusterState();
 
     INode testDirNodeAfterNNRestart = fsdir.getINode4Write(testDir.toString());
     // Verify quota is still set
@@ -719,7 +715,6 @@ public class TestQuotaByStorageType {
     dfs.saveNamespace();
     dfs.setSafeMode(HdfsConstants.SafeModeAction.SAFEMODE_LEAVE);
     cluster.restartNameNode(true);
-    refreshClusterState();
 
     INode testDirNodeAfterNNRestart = fsdir.getINode4Write(testDir.toString());
     assertTrue(testDirNode.isDirectory());
